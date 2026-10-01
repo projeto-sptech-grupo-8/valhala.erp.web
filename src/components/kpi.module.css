@@ -1,0 +1,91 @@
+/*
+ * Semáforo de desempenho — regra de cor:
+ * número e barra ficam NEUTROS; a cor aparece só no selo (ponto + texto).
+ * Assim um painel com vários alertas continua legível em vez de "pintado".
+ */
+.tone-ok      { --tone: var(--green); }
+.tone-warn    { --tone: var(--gold2); }
+.tone-bad     { --tone: var(--red); }
+.tone-neutral { --tone: var(--dim); }
+
+/* card de KPI (Stat) */
+.stat > b {
+  font: 600 26px/1.15 Inter, sans-serif !important;
+  letter-spacing: -.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+/* selo: ponto colorido + texto (o significado não depende só da cor) */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  color: var(--tone);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.badge::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tone);
+}
+.badge.trend::before { display: none; }
+.badge svg { flex: none; }
+.badge.tone-neutral { color: var(--dim); }
+
+/* progresso até a meta — neutro */
+.meter {
+  height: 4px;
+  margin: 4px 0 10px;
+  background: rgb(var(--ink) / .08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.meter > i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: rgb(var(--ink) / .42);
+  transition: width .5s ease;
+}
+
+/* faixa horizontal de KPIs (Financeiro / Movimentações) */
+.strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  padding: 0 !important;
+  margin-bottom: 14px;
+  overflow: hidden;
+}
+.item {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 16px 18px 14px;
+  border-left: 1px solid var(--line);
+}
+.item:first-child { border-left: 0; }
+.itemHead { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.itemHead p { margin: 0; font-size: 12px; color: var(--dim); }
+.item > b {
+  font: 600 20px/1.2 Inter, sans-serif;
+  letter-spacing: -.3px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+}
+.item > span { font-size: 12px; color: var(--dim); }
+.item .meter { margin: 2px 0 0; }

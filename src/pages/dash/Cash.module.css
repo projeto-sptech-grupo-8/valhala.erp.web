@@ -1,0 +1,198 @@
+/* ─── Barra de sessão do caixa ─── */
+.bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  font-size: 13px;
+}
+
+.barInfo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: var(--dim);
+}
+.barInfo b { color: var(--green); }
+
+.dotOn {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 3px rgb(var(--success) / .2);
+}
+
+.barActions { display: flex; gap: 6px; flex-wrap: wrap; }
+.barActions button { padding: 7px 12px; font-size: 13px; }
+
+/* ─── Caixa fechado ─── */
+.closedWrap {
+  display: grid;
+  grid-template-columns: minmax(300px, 420px) minmax(260px, 380px);
+  gap: 14px;
+  justify-content: center;
+  align-items: start;
+  margin-top: 20px;
+}
+
+.closedCard { text-align: center; }
+.closedCard form { display: grid; gap: 12px; margin-top: 16px; text-align: left; }
+.closedCard label { display: grid; gap: 6px; font-size: 12px; color: var(--dim); }
+.closedIcon { color: var(--gold); margin-bottom: 8px; }
+
+.dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 16px;
+  margin: 0;
+  font-size: 13px;
+}
+.dl dt { color: var(--dim); }
+.dl dd { margin: 0; text-align: right; }
+
+.ok { color: var(--green) !important; }
+.bad { color: var(--red) !important; }
+
+/* ─── Carrinho ─── */
+.discount {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--dim);
+}
+.discount > div { display: flex; gap: 6px; width: 150px; }
+.discount select { width: 58px; padding: 8px 6px; font-size: 13px; }
+.discount input { padding: 8px 10px; font-size: 13px; text-align: right; }
+
+.line {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--dim);
+}
+
+.kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid rgb(var(--ink) / .2);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  font: 600 11px/1.4 Inter, sans-serif;
+  color: var(--dim);
+  background: var(--panel);
+}
+.kbd.kbdDark {
+  background: rgb(var(--shadow) / calc(.15 * var(--shadow-k)));
+  border-color: rgb(var(--shadow) / calc(.25 * var(--shadow-k)));
+  color: #161412;
+}
+
+.hints {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--dim);
+}
+
+/* ─── Modais ─── */
+.modalForm { display: grid; gap: 12px; }
+.modalForm label { display: grid; gap: 6px; }
+
+.payMethods {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.payMethod,
+.payMethodActive {
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.payMethodActive {
+  border-color: var(--gold);
+  background: rgb(var(--accent) / .12);
+  color: var(--gold2);
+}
+
+.payAdd {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: end;
+}
+.payAdd input { font-size: 18px; font-weight: 600; text-align: right; }
+.payAdd button { height: 46px; }
+
+.payList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.payList li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--card);
+  border-radius: 7px;
+}
+.payList button { border: 0; padding: 4px; color: var(--dim); }
+
+.payTotals {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 16px;
+  margin: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+}
+.payTotals dt { color: var(--dim); }
+.payTotals dd { margin: 0; text-align: right; font-weight: 600; }
+
+.sumTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.sumTable th { text-align: left; font-weight: 400; color: var(--dim); padding: 6px 0; }
+.sumTable td { text-align: right; padding: 6px 0; }
+.sumTotal th, .sumTotal td { border-top: 1px solid var(--line); font-weight: 700; color: var(--text); padding-top: 9px; }
+
+.warnBox {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 7px;
+  background: var(--warn-bg);
+  color: var(--gold2);
+  font-size: 13px;
+}
+
+.histTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.histTable th { text-align: left; color: var(--dim); font-weight: 600; font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.histTable td { padding: 8px; border-bottom: 1px solid var(--row-line); }
+.histTable td:last-child, .histTable th:last-child { text-align: right; }
+
+@media (max-width: 900px) {
+  .closedWrap { grid-template-columns: 1fr; }
+  .payMethods { grid-template-columns: repeat(2, 1fr); }
+}

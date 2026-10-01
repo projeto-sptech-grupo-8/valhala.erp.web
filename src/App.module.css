@@ -1,0 +1,209 @@
+/*
+ * Tokens de tema. Escuro é o padrão; o claro vale com <html data-theme="light">
+ * (aplicado só no painel — landing e login têm arte própria escura).
+ * Canais RGB (--ink, --accent…) permitem transparências: rgb(var(--ink) / .08)
+ */
+:root {
+  color-scheme: dark;
+  --bg: #161412;
+  --panel: #1b1815;
+  --card: #211e1a;
+  --raised: #24201b;        /* menus, caixas flutuantes, toasts */
+  --th-bg: #1e1b17;         /* cabeçalho de tabela */
+  --input-bg: #171412;
+  --active-bg: #28231d;     /* item selecionado */
+  --row-line: #2c2722;      /* divisória de linhas */
+  --track: #37312a;         /* trilho de barras */
+  --accent-bg: #382f1d;
+  --accent-line: #9c7b1d;
+  --ok-bg: #24301f;
+  --warn-bg: #3a2f16;
+  --bad-bg: #37211d;
+  --line: rgba(201, 162, 39, .17);
+  --gold: #c9a227;
+  --gold2: #e8c660;
+  --text: #e8e4dc;
+  --dim: #9c9890;
+  --faint: #8f8b83;         /* 4.8:1 sobre --card (WCAG AA) */
+  --green: #7fa86b;
+  --red: #d4715e;           /* 4.9:1 sobre --card */
+  --brand-mark: #e8c660;
+  --c-compras: #93b883;
+  --c-operacional: #86a8bd;
+  --c-vendas: #c29a83;
+  --c-administrativo: #a596c9;
+  --ink: 232 228 220;
+  --accent: 201 162 39;
+  --danger: 212 113 94;
+  --success: 127 168 107;
+  --warning: 232 198 96;
+  --shadow: 0 0 0;
+  --shadow-k: 1;
+  --av-bg: 30% 24%;
+  --av-fg: 55% 76%;
+  /* gráficos — validados (validate_palette.js) sobre --card */
+  --series-1: #c9a227;                       /* série única */
+  --cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70; --cat-4: #c98500;   /* categórica: CVD ΔE ≥ 8.4 */
+  --seq-0: #2c2722;                          /* zero (fora da rampa) */
+  --seq-1: #6b561d; --seq-2: #8f711f; --seq-3: #b38f24; --seq-4: #d4ad3a; --seq-5: #ecca69;
+  --grid: #2c2722;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f6f3ee;
+  --panel: #fbf9f5;
+  --card: #ffffff;
+  --raised: #ffffff;
+  --th-bg: #faf7f2;
+  --input-bg: #ffffff;
+  --active-bg: #f4ead0;
+  --row-line: #efe9df;
+  --track: #e9e3d8;
+  --accent-bg: #f1e6c8;
+  --accent-line: #d9c48a;
+  --ok-bg: #e4f0dd;
+  --warn-bg: #f8eccc;
+  --bad-bg: #f8e1dc;
+  --line: #e4dccd;
+  --gold: #b08a1e;
+  --gold2: #7a5c0c;         /* 6.3:1 sobre branco · 5.2:1 sobre --active-bg */
+  --text: #221e19;          /* 16:1 */
+  --dim: #625b51;           /* 6.7:1 */
+  --faint: #6b645a;         /* 5.9:1 sobre branco · 4.9:1 sobre --active-bg */
+  --green: #356a24;         /* 6.5:1 sobre branco · 5.5:1 sobre --ok-bg */
+  --red: #b3402c;           /* 5.6:1 */
+  --brand-mark: #7a5c0c;
+  --c-compras: #47663a;
+  --c-operacional: #3f5d70;
+  --c-vendas: #7a5440;
+  --c-administrativo: #5e4f8a;
+  --ink: 34 30 25;
+  --accent: 176 138 30;
+  --danger: 179 64 44;
+  --success: 63 122 44;
+  --warning: 166 120 10;
+  --shadow: 60 45 20;
+  --shadow-k: .4;
+  --av-bg: 45% 90%;
+  --av-fg: 40% 30%;
+  --series-1: #b08a1e;
+  --cat-1: #2a78d6; --cat-2: #eb6834; --cat-3: #1baf7a; --cat-4: #eda100;   /* aqua/amarelo < 3:1 → legenda + tabela obrigatórias */
+  --seq-0: #f1ece3;
+  --seq-1: #c9a24a; --seq-2: #a8822a; --seq-3: #86651a; --seq-4: #654b0f; --seq-5: #463308;
+  --grid: #ece6db;
+}
+
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  border-radius: 8px;
+  padding: 9px 16px;
+  font-size: 13px;
+  line-height: 1.2;
+  transition: border-color .25s, color .25s, background .25s, transform .25s, box-shadow .25s;
+}
+
+button:hover {
+  border-color: var(--gold);
+  color: var(--gold2);
+}
+
+:global(.gold) {
+  background: linear-gradient(135deg, #d0aa32, #a77e16);
+  color: #161412 !important;
+  border: 0;
+  font-weight: 700;
+}
+
+:global(.gold:hover) {
+  filter: brightness(1.07);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 22px rgb(var(--accent) / .22);
+}
+
+:global(.brand) {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+:global(.brand) > img {
+  height: 36px;
+  width: auto;
+  object-fit: contain;
+}
+
+:global(.brand) b {
+  font: 700 16px Cinzel;
+  letter-spacing: 2px;
+  color: var(--gold2);
+}
+
+:global(.brand) small {
+  display: block;
+  color: var(--faint);
+  font-size: 9px;
+  letter-spacing: 1.3px;
+  margin-top: 3px;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  padding: 12px;
+  background: var(--input-bg);
+  color: var(--text);
+  border: 1px solid rgb(var(--ink) / .14);
+  border-radius: 7px;
+  outline: 0;
+}
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 32px;
+  cursor: pointer;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--gold);
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.6) sepia(0.3) saturate(2) hue-rotate(10deg);
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+:global(.sr-only) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+:global(.booting) {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  color: var(--dim);
+  font-size: 14px;
+}
+
+:global(:root[data-theme='light']) input[type="date"]::-webkit-calendar-picker-indicator { filter: none; opacity: .7; }
