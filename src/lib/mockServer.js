@@ -9,7 +9,7 @@ export const ME_ID = '00000000-0000-4000-8000-000000000001'
 const FUNCIONALIDADES = [
   { codigo: 'VISUALIZAR_ESTOQUE',    nome: 'Visualizar estoque',        descricao: 'Consultar produtos, saldos e movimentações.', modulo: 'ESTOQUE' },
   { codigo: 'MOVIMENTAR_ESTOQUE',    nome: 'Movimentar estoque',        descricao: 'Registrar entradas, saídas e ajustes.', modulo: 'ESTOQUE' },
-  { codigo: 'PRODUTOS_GERENCIAR',    nome: 'Gerenciar produtos',        descricao: 'Cadastrar, editar e excluir produtos e receitas.', modulo: 'ESTOQUE' },
+  { codigo: 'GERENCIAR_ESTOQUE',    nome: 'Gerenciar produtos',        descricao: 'Cadastrar, editar e excluir produtos e receitas.', modulo: 'ESTOQUE' },
   { codigo: 'CAIXA_OPERAR',          nome: 'Operar caixa',              descricao: 'Abrir, fechar, vender, sangria e reforço.', modulo: 'VENDAS' },
   { codigo: 'PEDIDOS_GERENCIAR',     nome: 'Gerenciar pedidos',         descricao: 'Abrir mesas, salvar e retomar pedidos.', modulo: 'VENDAS' },
   { codigo: 'NOTAS_EMITIR',          nome: 'Emitir notas fiscais',      descricao: 'Emitir e cancelar NF-e.', modulo: 'VENDAS' },
@@ -18,7 +18,6 @@ const FUNCIONALIDADES = [
   { codigo: 'USUARIOS_VISUALIZAR',   nome: 'Visualizar usuários',       descricao: 'Consultar contas do estabelecimento.', modulo: 'USUARIOS' },
   { codigo: 'USUARIOS_CRIAR',        nome: 'Criar usuários',            descricao: 'Cadastrar novas contas.', modulo: 'USUARIOS' },
   { codigo: 'USUARIOS_EDITAR',       nome: 'Editar usuários',           descricao: 'Alterar dados e perfil de contas.', modulo: 'USUARIOS' },
-  { codigo: 'USUARIOS_INATIVAR',     nome: 'Inativar usuários',         descricao: 'Bloquear e reativar o acesso de contas.', modulo: 'USUARIOS' },
   { codigo: 'USUARIOS_EXCLUIR',      nome: 'Excluir usuários',          descricao: 'Remover contas definitivamente.', modulo: 'USUARIOS' },
   { codigo: 'PERFIS_GERENCIAR',      nome: 'Gerenciar perfis',          descricao: 'Criar, editar e excluir perfis de acesso.', modulo: 'ACESSO' },
   { codigo: 'PERMISSOES_GERENCIAR',  nome: 'Gerenciar permissões',      descricao: 'Ajustar permissões individuais de usuários.', modulo: 'ACESSO' },
@@ -31,7 +30,7 @@ function seed() {
     perfis: [
       { id: 'pf-gerente',    nome: 'Gerente',    descricao: 'Acesso total ao estabelecimento.', codigos: ALL_CODES },
       { id: 'pf-caixa',      nome: 'Caixa',      descricao: 'Atendimento no caixa e nas mesas.', codigos: ['VISUALIZAR_ESTOQUE', 'CAIXA_OPERAR', 'PEDIDOS_GERENCIAR'] },
-      { id: 'pf-estoquista', nome: 'Estoquista', descricao: 'Recebimento e controle de estoque.', codigos: ['VISUALIZAR_ESTOQUE', 'MOVIMENTAR_ESTOQUE', 'PRODUTOS_GERENCIAR'] },
+      { id: 'pf-estoquista', nome: 'Estoquista', descricao: 'Recebimento e controle de estoque.', codigos: ['VISUALIZAR_ESTOQUE', 'MOVIMENTAR_ESTOQUE', 'GERENCIAR_ESTOQUE'] },
       { id: 'pf-financeiro', nome: 'Financeiro', descricao: 'Contas, fluxo de caixa e relatórios.', codigos: ['VISUALIZAR_ESTOQUE', 'FINANCEIRO_VISUALIZAR', 'RELATORIOS_VISUALIZAR'] },
       { id: 'pf-consulta',   nome: 'Consulta',   descricao: 'Somente leitura de estoque e relatórios.', codigos: ['VISUALIZAR_ESTOQUE', 'RELATORIOS_VISUALIZAR'] },
     ],

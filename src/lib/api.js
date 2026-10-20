@@ -115,18 +115,50 @@ export const toPermissao = (p) => {
   }
 }
 
+/*
+ * GET /autorizacoes/usuarios/{id}/permissoes devolve
+ *   { permissoesPerfil: [codigo], sobrescritas: [{ codigoFuncionalidade, efeito }], permissoesEfetivas: [codigo] }
+ * A interface trabalha com uma linha por código: { codigo, concedida, origem }.
+ */
+export const toPermissoesUsuario = (r) => {
+  if (Array.isArray(r)) return r.map(toPermissao)
+  const efeitos = new Map((r?.sobrescritas ?? []).map(s => [s.codigoFuncionalidade, s.efeito]))
+  const efetivas = new Set(r?.permissoesEfetivas ?? [])
+  const codigos = new Set([...(r?.permissoesPerfil ?? []), ...efeitos.keys()])
+  return [...codigos].map(codigo => ({
+    codigo,
+    concedida: efetivas.has(codigo),
+    origem: ORIGENS[efeitos.get(codigo)] ?? 'PERFIL',
+  }))
+}
+
+// erros de campo do back (nome, telefone, senha, nomePerfil) → campos do formulário
+const CAMPOS_USUARIO = { nome: 'name', telefone: 'phone', senha: 'password', nomePerfil: 'profileId', ativo: 'active' }
+const camposDoUsuario = (err) => {
+  if (err?.fieldErrors) err.fieldErrors = Object.fromEntries(Object.entries(err.fieldErrors).map(([k, v]) => [CAMPOS_USUARIO[k] ?? k, v]))
+  throw err
+}
+
+// o back vincula o perfil pelo nome (nomePerfil); a interface trabalha com o id
+async function comNomePerfil({ profileId, ...data }) {
+  if (profileId == null || data.profileName || data.nomePerfil) return data
+  const perfil = (await realApi.perfis.listar()).find(p => String(p.id) === String(profileId))
+  if (!perfil) throw Object.assign(new Error('Perfil não encontrado.'), { status: 404, fieldErrors: {} })
+  return { ...data, nomePerfil: perfil.nome }
+}
+
 /* ─── API real ─── */
 const realApi = {
   login:  (email, password) => request('/auth/login', send('POST', { email, senha: password })),
   logout: () => request('/auth/logout', { method: 'POST' }),
   me:     () => request('/usuario/me').then(toUsuario),
 
-  // ⚠️ CRUD de usuário ainda não documentado — ver docs/fluxo-usuarios-perfis.md §5
   usuarios: {
     listar:    () => request('/usuario').then(r => list(r).map(toUsuario)),
     obter:     (id) => request(`/usuario/${id}`).then(toUsuario),
-    criar:     (data) => request('/usuario', send('POST', data)).then(toUsuario),
-    atualizar: (id, patch) => request(`/usuario/${id}`, send('PATCH', patch)).then(r => (r ? toUsuario(r) : realApi.usuarios.obter(id))),
+    criar:     async (data) => request('/usuario', send('POST', await comNomePerfil(data))).then(toUsuario).catch(camposDoUsuario),
+    atualizar: async (id, patch) => request(`/usuario/${id}`, send('PATCH', await comNomePerfil(patch)))
+      .then(r => (r ? toUsuario(r) : realApi.usuarios.obter(id))).catch(camposDoUsuario),
     excluir:   (id) => request(`/usuario/${id}`, { method: 'DELETE' }),
   },
 
@@ -147,7 +179,7 @@ const realApi = {
   },
 
   permissoes: {
-    doUsuario: (userId) => request(`/autorizacoes/usuarios/${userId}/permissoes`).then(r => list(r).map(toPermissao)),
+    doUsuario: (userId) => request(`/autorizacoes/usuarios/${userId}/permissoes`).then(toPermissoesUsuario),
     substituirSobrescritas: (userId, sobrescritas) =>
       request(`/autorizacoes/usuarios/${userId}/sobrescritas-permissao`, send('PUT', { sobrescritas })),
   },

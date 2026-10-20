@@ -9,7 +9,7 @@ function Invoke-Api([string]$Method, [string]$Path, $Body = $null, [Microsoft.Po
   $csrf = $Session.Cookies.GetCookies($script:Base) | Where-Object Name -eq 'XSRF-TOKEN'
   if ($csrf) { $headers['X-XSRF-TOKEN'] = $csrf.Value }
   $params = @{ Method = $Method; Uri = "$script:Base$Path"; WebSession = $Session; Headers = $headers; UseBasicParsing = $true }
-  if ($null -ne $Body) { $params.Body = ($Body | ConvertTo-Json -Depth 10); $params.ContentType = 'application/json; charset=utf-8' }
+  if ($null -ne $Body) { $params.Body = (ConvertTo-Json -InputObject $Body -Depth 10); $params.ContentType = 'application/json; charset=utf-8' }
   try {
     $r = Invoke-WebRequest @params
     $json = if ($r.Content) { try { $r.Content | ConvertFrom-Json } catch { $null } } else { $null }

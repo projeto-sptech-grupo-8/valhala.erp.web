@@ -42,10 +42,15 @@ export const test = base.extend({
 })
 
 export async function login(page, { email, senha } = ADMIN) {
+  // ao abrir /#/... sem sessão o App tenta restaurar (me → refresh) e recebe 401: esperado
+  page.allowStatus?.(401, '/usuario/me')
+  page.allowStatus?.(401, '/auth/refresh')
   await page.goto('/#/dashboard')
   await page.getByPlaceholder('seu@empresa.com').fill(email)
   await page.getByPlaceholder('••••••••').fill(senha)
+  const res = page.waitForResponse(r => r.url().endsWith('/auth/login'))
   await page.getByRole('button', { name: /entrar/i }).click()
+  return res
 }
 
 export { expect }

@@ -129,7 +129,7 @@ export function UsersList({ navigate, pageParams }) {
           columns={columns}
           rows={rows}
           initialSort={{ key: 'name', dir: 'asc' }}
-          selectable={can('USUARIOS_INATIVAR')}
+          selectable={can('USUARIOS_EDITAR')}
           onRowClick={u => navigate('usuario', { id: u.id })}
           bulkActions={(sel, clear) => (
             <>

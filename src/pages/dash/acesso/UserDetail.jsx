@@ -106,7 +106,7 @@ export function UserDetail({ navigate, userId, setTitle }) {
         <div className={a.inactiveBanner} role="status">
           <ShieldAlert size={16} aria-hidden="true" />
           <span><b>Conta inativa.</b> {u.name.split(' ')[0]} não consegue entrar no sistema. Dados e histórico estão preservados.</span>
-          {can('USUARIOS_INATIVAR') && <button onClick={() => actions.open.toggleActive(u)}><UserCheck size={13} aria-hidden="true" /> Reativar</button>}
+          {can('USUARIOS_EDITAR') && <button onClick={() => actions.open.toggleActive(u)}><UserCheck size={13} aria-hidden="true" /> Reativar</button>}
         </div>
       )}
 
