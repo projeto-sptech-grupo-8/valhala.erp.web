@@ -7,7 +7,6 @@ import { fmtNum, fmtDateTime } from '../../lib/format.js'
 import { downloadCSV, stamp } from '../../lib/csv.js'
 import { fornecedoresData } from './mock.js'
 import { useStore } from './useStore.js'
-import { canEdit } from './pages.js'
 import { movDelta, movKind, fmtMovQty } from './estoque.js'
 import { DataTable } from './components/DataTable.jsx'
 import s from './dash.module.css'
@@ -26,9 +25,9 @@ function emptyForm(produto = '') {
 
 /* ─── Movimentações (RF07 / RF12) ─── */
 export function Movimentacoes({ pageParams }) {
-  const { products, movements, addMovement, role } = useStore()
+  const { products, movements, addMovement, can } = useStore()
   const toast = useToast()
-  const editable = canEdit(role)
+  const editable = can('MOVIMENTAR_ESTOQUE')
 
   const [showForm, setShowForm]     = useState(editable && !!pageParams?.novo)
   const [tipo, setTipo]             = useState('Entrada')
@@ -42,7 +41,7 @@ export function Movimentacoes({ pageParams }) {
   const upd = (k, v) => setForm(f => ({ ...f, [k]: v }))
   const prodSel = products.find(p => p.id === form.produto)
 
-  function submit(e) {
+  async function submit(e) {
     e.preventDefault()
     const q = Number(form.qty)
     const errs = {}
@@ -56,7 +55,7 @@ export function Movimentacoes({ pageParams }) {
     if (Object.keys(errs).length) return
 
     try {
-      const { alert } = addMovement({
+      const { alert } = await addMovement({
         produtoId: form.produto,
         tipo,
         qty: q,

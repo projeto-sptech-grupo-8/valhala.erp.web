@@ -119,7 +119,7 @@ export function EntradaNF({ navigate }) {
   async function confirmar() {
     setBusy(true)
     try {
-      const reg = importarNF({
+      const reg = await importarNF({
         nf,
         itens: linhas.map(l => ({
           cProd: l.it.cProd, uCom: l.it.uCom, qCom: l.it.qCom, fator: l.fator, ignorar: l.it.ignorar,

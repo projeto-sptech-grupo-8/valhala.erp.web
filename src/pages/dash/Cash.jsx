@@ -343,19 +343,23 @@ export function Cash() {
     if (delta < 0) store.registrarAuditoria({ tipo: 'Item removido', pedido: order.label, valor: round2(it.price * -delta), detalhe: `${-delta}× ${it.name}` })
   }
 
+  const vendendo = useRef(false)
+
   // leitor de código de barras digita o código + Enter
   function onSearchKey(e) {
     if (e.key !== 'Enter') return
     e.preventDefault()
-    const exact = catalogo.find(p => p.id.toLowerCase() === q)
+    const exact = catalogo.find(p => [p.id, p.sku, p.ean].some(c => c && String(c).toLowerCase() === q))
     const hit = exact || (filtered.length === 1 ? filtered[0] : null)
     if (hit) { addItem(hit); setSearch('') }
     else if (q) toast(filtered.length ? 'Mais de um produto encontrado — refine a busca.' : 'Nenhum produto com esse nome ou código.', { type: 'info' })
   }
 
-  function confirmarVenda({ pagamentos, troco }) {
+  async function confirmarVenda({ pagamentos, troco }) {
+    if (vendendo.current) return // evita venda duplicada enquanto a API responde
+    vendendo.current = true
     try {
-      const { sale, alerts } = store.finalizeSale({ orderId: order.id, desconto, pagamentos, troco, autorizacao: acimaLimite ? auth : null })
+      const { sale, alerts } = await store.finalizeSale({ orderId: order.id, desconto, pagamentos, troco, autorizacao: acimaLimite ? auth : null })
       if (config.imprimirCupom) store.print({ tipo: 'cupom', venda: sale })
       toast(`${sale.mesa} · ${fmtBRL(sale.total)}${troco ? ` · troco ${fmtBRL(troco)}` : ''}`, { title: `Venda #${sale.num} finalizada` })
       alerts.forEach(a => toast(`${a} — veja a lista de reposição.`, { type: 'warning', title: 'Estoque crítico', duration: 7000 }))
@@ -363,7 +367,9 @@ export function Cash() {
       setDescontos(d => ({ ...d, [order.id]: undefined }))
       setDescAuth(d => ({ ...d, [order.id]: undefined }))
     } catch (err) {
-      toast(err.message, { type: 'error', title: 'Venda não finalizada' })
+      toast(err.message, { type: "error", title: "Venda não finalizada" })
+    } finally {
+      vendendo.current = false
     }
   }
 

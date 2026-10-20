@@ -5,7 +5,7 @@ import { StoreCtx } from './useStore.js'
 import { caixaResumo } from './caixa.js'
 import { makeCan } from './pages.js'
 import { readTheme, saveTheme, applyTheme, clearTheme } from '../../lib/theme.js'
-import { api, isMocked, fromProduto, fromReceita, toReceita } from '../../lib/api.js'
+import { api, isMocked, fromProduto, fromReceita, toReceita, fromMovimento, toMovimento } from '../../lib/api.js'
 import {
   addLot, consumeFEFO, consumeLot, normalizeLots, weightedCost, addDaysISO, describeUsed, SEM_LOTE,
 } from './lotes.js'
@@ -166,7 +166,9 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
         const livres = (anterior.get(d.id)?.receita || []).filter(r => r.livre)
         return { local: '', ...local(d), ...d, receita: [...toReceita(receitas[i], products), ...livres] }
       })
-      commit({ ...ref.current, products, drinks })
+      // histórico: as movimentações mais recentes do back (substituem as locais)
+      const movs = await api.movimentacoes.listar()
+      commit({ ...ref.current, products, drinks, movements: movs.map(m => toMovimento(m, products)) })
       setCatalog({ status: 'ready', error: null })
     } catch (error) {
       setCatalog({ status: 'error', error })
@@ -296,7 +298,7 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
       if (!prod) throw new Error('Produto não encontrado.')
       const r = consumeLot(prod.lotes, loteId)
       const products = withProduct(st.products, produtoId, p => ({ ...p, lotes: r.lotes }))
-      const mov = makeMovement(st, { produtoId, produto: prod.name, tipo: 'Saída', qty: r.used[0].qty, obs: obsWith(motivo, r.used) })
+      const mov = makeMovement(st, { produtoId, produto: prod.name, tipo: 'Saída', perda: true, qty: r.used[0].qty, obs: obsWith(motivo, r.used) })
       commit({ ...st, products, movements: [mov, ...st.movements], seq: st.seq + 1 })
       return r.used[0]
     },
@@ -481,6 +483,8 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
       for (const it of order.items) {
         if (it.tipo === 'drink') {
           const drink = st.drinks.find(d => d.id === it.id)
+          // na API a baixa do drink é uma operação só (/saida-drink, transacional): o 1º insumo carrega o pedido
+          let drinkOp = { drinkId: it.id, quantidade: it.qty, motivo: `Venda #${num} · ${it.qty}× ${it.name}` }
           for (const r of drink?.receita || []) {
             if (r.livre || !r.produtoId) continue
             const ins = products.find(p => p.id === r.produtoId)
@@ -489,7 +493,8 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
             const c = consumeFEFO(ins.lotes, garrafas)
             if (c.missing > 0) throw new Error(`${ins.name}: sem saldo dentro da validade para ${it.qty}× ${it.name}.`)
             products = withProduct(products, ins.id, p => ({ ...p, lotes: c.lotes }))
-            movs.push(makeMovement(st, { produtoId: ins.id, produto: ins.name, tipo: 'Saída (dose)', qty: garrafas, obs: obsWith(`Venda #${num} · ${it.qty}× ${it.name} (${r.quantidade * it.qty}ml)`, c.used) }))
+            movs.push(makeMovement(st, { produtoId: ins.id, produto: ins.name, tipo: 'Saída (dose)', qty: garrafas, viaDrink: true, drinkOp, obs: obsWith(`Venda #${num} · ${it.qty}× ${it.name} (${r.quantidade * it.qty}ml)`, c.used) }))
+            drinkOp = null
           }
         } else {
           const prod = products.find(p => p.id === it.id)
@@ -578,6 +583,63 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
     },
   }
 
+  /*
+   * Catálogo remoto: toda ação que mexe no saldo roda primeiro localmente (FEFO, lotes, validações) e as
+   * movimentações geradas são enviadas à API na ordem em que ocorreram. Se alguma falhar, as já aceitas
+   * são estornadas por ajuste (regra do back: correção por ajuste/estorno) e o estado local volta ao que era —
+   * a operação acontece inteira ou não acontece.
+   */
+  const POSITIVOS = ['ENTRADA_INICIAL', 'ENTRADA', 'AJUSTE_POSITIVO']
+  async function postarMovimentos(movs, produtos) {
+    const feitos = []
+    try {
+      for (const m of movs) {
+        if (m.drinkOp) feitos.push(...await api.movimentacoes.saidaDrink(m.drinkOp))
+        const body = fromMovimento(m, produtos, { semLote: SEM_LOTE })
+        if (body) feitos.push(await api.movimentacoes.registrar(body))
+      }
+    } catch (e) {
+      const pendentes = []
+      for (const f of feitos.reverse()) {
+        await api.movimentacoes.registrar({
+          produtoId: f.produtoId,
+          tipo: POSITIVOS.includes(f.tipo) ? 'AJUSTE_NEGATIVO' : 'AJUSTE_POSITIVO',
+          quantidade: f.quantidade,
+          motivo: `Estorno automático da movimentação #${f.id} (operação não concluída)`,
+        }).catch(() => pendentes.push(f.id))
+      }
+      if (pendentes.length) e.message += ` Atenção: não foi possível estornar as movimentações ${pendentes.map(id => '#' + id).join(', ')} — revise o histórico.`
+      throw e
+    }
+  }
+
+  async function espelhado(nome, args) {
+    const antes = ref.current
+    const resultado = actions[nome](...args) // validações locais: lança antes de tocar na API
+    const novas = ref.current.movements.slice(0, ref.current.movements.length - antes.movements.length)
+    try {
+      // movimentações locais ficam no início da lista; envia da mais antiga para a mais nova
+      await postarMovimentos([...novas].reverse(), antes.products)
+    } catch (e) {
+      commit(antes)
+      await syncCatalog()
+      throw e
+    }
+    await syncCatalog()
+    return resultado
+  }
+
+  const exposed = REMOTE_CATALOG
+    ? {
+        ...actions,
+        addMovement:        (...a) => espelhado('addMovement', a),
+        registrarPerdaLote: (...a) => espelhado('registrarPerdaLote', a),
+        importarNF:         (...a) => espelhado('importarNF', a),
+        aprovarInventario:  (...a) => espelhado('aprovarInventario', a),
+        finalizeSale:       (...a) => espelhado('finalizeSale', a),
+      }
+    : actions
+
   const role = user?.profileName || 'Somente leitura'
   // tema do painel (escuro padrão); sai do <html> ao deixar o painel (logout → landing escura)
   const [theme, setThemeState] = useState(readTheme)
@@ -588,7 +650,7 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
   // sessão: atualizar dados do usuário logado e encerrar a sessão (ex.: permissões revogadas)
   const session = { updateSelf: (u) => onUserChange?.({ ...user, ...u }), logout: () => onLogout?.() }
   return (
-    <StoreCtx.Provider value={{ ...state, ...actions, operador, user, role, can, session, theme, setTheme, printJob, catalog: { ...catalog, remote: REMOTE_CATALOG, reload: reloadCatalog } }}>
+    <StoreCtx.Provider value={{ ...state, ...exposed, operador, user, role, can, session, theme, setTheme, printJob, catalog: { ...catalog, remote: REMOTE_CATALOG, reload: reloadCatalog } }}>
       {children}
     </StoreCtx.Provider>
   )

@@ -246,6 +246,55 @@ export const fromReceita = (receita, produtos) => receita.filter(r => !r.livre &
   }
 })
 
+/*
+ * Movimentação: o back registra na unidade-base (ml para fracionado). A interface usa embalagens e
+ * poucos tipos: Entrada, Saída, Saída (dose) e Ajuste (com sinal).
+ */
+const TIPO_MOV = {
+  ENTRADA_INICIAL: 'Entrada', ENTRADA: 'Entrada', SAIDA: 'Saída', SAIDA_DRINK: 'Saída (dose)',
+  PERDA: 'Saída', AJUSTE_POSITIVO: 'Ajuste', AJUSTE_NEGATIVO: 'Ajuste',
+}
+const OBS_PADRAO = { ENTRADA_INICIAL: 'Saldo inicial do cadastro', PERDA: 'Perda', SAIDA_DRINK: 'Baixa de drink' }
+const baseDe = (p) => (p?.fracionado && p.volumeEmbalagem ? p.volumeEmbalagem : 1)
+
+export const toMovimento = (m, produtos = []) => {
+  const base = baseDe(produtos.find(p => p.id === m.produtoId))
+  const qty = round3((n(m.quantidade) ?? 0) / base)
+  return {
+    id: `API-${m.id}`,
+    apiId: m.id,
+    apiTipo: m.tipo,
+    em: m.ocorridoEm,
+    produtoId: m.produtoId,
+    produto: m.produtoNome ?? '',
+    tipo: TIPO_MOV[m.tipo] ?? m.tipo,
+    qty: m.tipo === 'AJUSTE_NEGATIVO' ? -qty : qty,
+    operador: m.usuarioNome ?? '',
+    lote: m.lote ?? '',
+    nf: m.numeroNotaFiscal ?? '',
+    fornecedor: '',
+    obs: m.motivo || OBS_PADRAO[m.tipo] || '',
+    saldoPosterior: m.saldoPosterior != null ? round3(n(m.saldoPosterior) / base) : null,
+  }
+}
+
+// movimentação da interface → POST /movimentacoes-estoque (null = não vai à API, ex.: insumo de drink)
+export function fromMovimento(m, produtos, { semLote = 'SEM-LOTE' } = {}) {
+  if (m.viaDrink) return null
+  const quantidade = round3(Math.abs(m.qty) * baseDe(produtos.find(p => p.id === m.produtoId)))
+  const tipo = m.tipo === 'Entrada' ? 'ENTRADA'
+    : m.tipo === 'Ajuste' ? (m.qty > 0 ? 'AJUSTE_POSITIVO' : 'AJUSTE_NEGATIVO')
+    : m.perda || /perda|quebra|vencimento/i.test(m.obs || '') ? 'PERDA' : 'SAIDA' // mesma regra do indicador de perdas
+  return Object.fromEntries(Object.entries({
+    produtoId: m.produtoId,
+    tipo,
+    quantidade,
+    motivo: m.obs || undefined,
+    lote: tipo === 'ENTRADA' && m.lote && m.lote !== semLote ? m.lote.slice(0, 100) : undefined,
+    numeroNotaFiscal: m.nf ? String(m.nf).slice(0, 50) : undefined,
+  }).filter(([, v]) => v !== undefined))
+}
+
 // erros de campo do back → campos do formulário de produto
 const CAMPOS_PRODUTO = {
   nome: 'name', categoriaId: 'cat', unidadeMedida: 'unit', precoVenda: 'price', precoCusto: 'cost',
@@ -300,6 +349,22 @@ const realApi = {
     criar:     (p) => request('/produtos', send('POST', fromProduto(p, { criar: true }))).then(toProduto).catch(camposDoProduto),
     atualizar: (id, patch) => request(`/produtos/${id}`, send('PATCH', patch)).then(toProduto).catch(camposDoProduto),
     excluir:   (id) => request(`/produtos/${id}`, { method: 'DELETE' }),
+  },
+
+  // corpo/resposta no formato do back; a conversão para a interface é feita por toMovimento/fromMovimento
+  movimentacoes: {
+    // mais recentes primeiro; limita a quantidade de páginas para não carregar o histórico inteiro
+    listar: async (params = {}, maxPaginas = 3) => {
+      const itens = []
+      for (let pagina = 0; pagina < maxPaginas; pagina++) {
+        const r = await request(`/movimentacoes-estoque?${new URLSearchParams({ ...params, pagina, tamanho: 100 })}`)
+        itens.push(...list(r))
+        if (!r || Array.isArray(r) || r.ultima !== false) break
+      }
+      return itens
+    },
+    registrar:  (body) => request('/movimentacoes-estoque', send('POST', body)),
+    saidaDrink: (body) => request('/movimentacoes-estoque/saida-drink', send('POST', body)).then(list),
   },
 
   // ingredientes no formato do back; a conversão ml ↔ UN é feita por toReceita/fromReceita
@@ -366,7 +431,7 @@ const mockedModules = new Set(
 // produtos/receitas no mock ficam no próprio store do painel (estado local), não no mockServer
 export const isMocked = (mod) => mockedModules.has(mod)
 const pick = (key) => {
-  const mod = AUTH_KEYS.includes(key) ? 'auth' : key === 'receitas' ? 'produtos' : key
+  const mod = AUTH_KEYS.includes(key) ? 'auth' : ['receitas', 'movimentacoes'].includes(key) ? 'produtos' : key
   return (mockedModules.has(mod) ? mockApi : realApi)[key]
 }
 

@@ -5,7 +5,6 @@ import { useToast } from '../../components/useToast.js'
 import { fmtBRL, fmtNum } from '../../lib/format.js'
 import { downloadCSV, stamp } from '../../lib/csv.js'
 import { useStore } from './useStore.js'
-import { canEdit } from './pages.js'
 import { lotStatus, promoSuggestion, isExpired } from './lotes.js'
 import { DataTable } from './components/DataTable.jsx'
 import { ConfirmModal } from './acesso/ui.jsx'
@@ -23,12 +22,12 @@ const prazoTxt = (d) => (d == null ? 'sem validade' : d < 0 ? `vencido há ${-d}
 
 /* ─── Validades e lotes (FEFO) ─── */
 export function Validades() {
-  const { products, role, registrarPerdaLote } = useStore()
+  const { products, can, registrarPerdaLote } = useStore()
   const toast = useToast()
   const [filtro, setFiltro] = useState('atencao')
   const [perda, setPerda] = useState(null) // [{ produto, lot }]
   const [busy, setBusy] = useState(false)
-  const editable = canEdit(role)
+  const editable = can('MOVIMENTAR_ESTOQUE')
 
   const rows = products.flatMap(p => (p.lotes || []).filter(l => l.validade).map(l => {
     const st = lotStatus(l)
@@ -48,7 +47,7 @@ export function Validades() {
     try {
       let total = 0
       for (const { p, l } of perda) {
-        const used = registrarPerdaLote({ produtoId: p.id, loteId: l.id, motivo: 'Vencimento' })
+        const used = await registrarPerdaLote({ produtoId: p.id, loteId: l.id, motivo: "Vencimento" })
         total += used.qty * p.cost
       }
       toast(`${perda.length} lote(s) baixado(s) como perda por vencimento · ${fmtBRL(total)} a custo.`, { title: 'Perda registrada' })

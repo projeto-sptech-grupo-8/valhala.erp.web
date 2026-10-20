@@ -4,7 +4,6 @@ import { Stat, ToneBadge, Meter } from '../../components/ui.jsx'
 import { useToast } from '../../components/useToast.js'
 import { fmtBRL, fmtNum, fmtDateTime } from '../../lib/format.js'
 import { useStore } from './useStore.js'
-import { canEdit } from './pages.js'
 import { DataTable } from './components/DataTable.jsx'
 import { Modal } from './components/Modal.jsx'
 import { AuthorizeModal } from './components/AuthorizeModal.jsx'
@@ -37,7 +36,7 @@ function analisar(inv) {
 
 /* ─── Lista de inventários ─── */
 function Lista({ navigate }) {
-  const { products, inventarios, criarInventario, role } = useStore()
+  const { products, inventarios, criarInventario, can } = useStore()
   const toast = useToast()
   const [novo, setNovo] = useState(false)
   const setores = [...new Set(products.map(p => p.local).filter(Boolean))].sort()
@@ -79,7 +78,7 @@ function Lista({ navigate }) {
       <div className={s.segRow}>
         <p className={s.ruleNote} style={{ margin: 0 }}><EyeOff size={14} aria-hidden="true" /> Contagem <b>cega</b>: quem conta não vê o saldo do sistema, para não ser induzido.</p>
         <div className={s.segRowActions}>
-          {canEdit(role) && <button className="gold" onClick={() => setNovo(true)}><Plus size={14} aria-hidden="true" /> Novo inventário</button>}
+          {can('MOVIMENTAR_ESTOQUE') && <button className="gold" onClick={() => setNovo(true)}><Plus size={14} aria-hidden="true" /> Novo inventário</button>}
         </div>
       </div>
 
@@ -123,9 +122,9 @@ function Sessao({ inv, navigate }) {
     mudarStatusInventario(inv.id, 'revisao')
   }
 
-  function aprovar({ autorizadoPor }) {
+  async function aprovar({ autorizadoPor }) {
     try {
-      const r = aprovarInventario(inv.id, { autorizadoPor })
+      const r = await aprovarInventario(inv.id, { autorizadoPor })
       setModal(null)
       toast(`${r.divergentes} ajuste(s) gerado(s) · acurácia ${r.acuracia}% · líquido ${fmtBRL(r.valorLiquido)}.`, { title: `${inv.id} concluído` })
     } catch (e) {

@@ -34,7 +34,7 @@ entram em commit separado no repositório do back.
 | 3 | categorias | ✅ [relatório](categorias.md) |
 | 4 | produtos | ✅ [relatório](produtos.md) |
 | 5 | receitas de drink | ✅ junto com produtos |
-| 6 | movimentações | ⏳ |
+| 6 | movimentações | ✅ [relatório](movimentacoes.md) |
 | 7 | dashboard | ⏳ |
 
 Fora do loop (sem endpoint no back, seguem no mock): caixa, pedidos/mesas, NF-e, lotes/validade, inventário, fornecedores, financeiro, relatórios.
