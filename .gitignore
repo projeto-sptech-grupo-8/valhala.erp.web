@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# E2E
+e2e/evidencias
+e2e/relatorio
+test-results

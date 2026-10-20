@@ -3,13 +3,44 @@ import { moduloDoCodigo, rotuloDoCodigo } from './funcionalidades.js'
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
 
+/* ─── CSRF: o backend exige X-XSRF-TOKEN em POST/PUT/PATCH/DELETE (exceto /auth/login) ─── */
+const MUTATIONS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+let csrfToken = null
+
+const readCsrfCookie = () => document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/)?.[1] ?? null
+
+// cookie (mesmo host do front) ou GET /auth/csrf (API em outro domínio)
+async function csrfHeader({ cookieOnly = false } = {}) {
+  const fromCookie = readCsrfCookie()
+  if (fromCookie) return { 'X-XSRF-TOKEN': decodeURIComponent(fromCookie) }
+  if (cookieOnly) return {}
+  if (!csrfToken) {
+    const res = await fetch(BASE + '/auth/csrf', { credentials: 'include' }).catch(() => null)
+    const body = res?.ok ? await res.json().catch(() => null) : null
+    csrfToken = body?.token ?? body?.tokenCsrf ?? null
+  }
+  return csrfToken ? { 'X-XSRF-TOKEN': csrfToken } : {}
+}
+
+// um único refresh por vez: o backend rotaciona o refresh token, então chamadas paralelas derrubariam a sessão
+let refreshing = null
+function refreshSession() {
+  refreshing ??= csrfHeader({ cookieOnly: true }) // /auth/csrf exige o access token, que é o que expirou
+    .then(headers => fetch(BASE + '/auth/refresh', { method: 'POST', credentials: 'include', headers }))
+    .then(res => res.ok, () => false)
+    .finally(() => { csrfToken = null; refreshing = null })
+  return refreshing
+}
+
 async function request(path, options = {}, isRetry = false) {
+  const method = (options.method ?? 'GET').toUpperCase()
+  const csrf = MUTATIONS.has(method) && path !== '/auth/login' ? await csrfHeader() : {}
   let res
   try {
     res = await fetch(BASE + path, {
       ...options,
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json', ...options.headers },
+      headers: { 'Content-Type': 'application/json', ...csrf, ...options.headers },
     })
   } catch {
     throw Object.assign(
@@ -17,13 +48,10 @@ async function request(path, options = {}, isRetry = false) {
       { status: 0 }
     )
   }
+  if (path === '/auth/login' || path === '/auth/logout') csrfToken = null
 
   if (res.status === 401 && !isRetry && !path.startsWith('/auth')) {
-    const refreshRes = await fetch(BASE + '/auth/refresh', {
-      method: 'POST',
-      credentials: 'include',
-    })
-    if (refreshRes.ok) return request(path, options, true)
+    if (await refreshSession()) return request(path, options, true)
     throw Object.assign(new Error('Sessão expirada'), { status: 401 })
   }
 
@@ -69,8 +97,8 @@ export const toUsuario = (u) => ({
   name: u.name ?? u.nome ?? '',
   email: u.email ?? '',
   phone: u.phone ?? u.telefone ?? '',
-  profileId: u.profileId ?? u.perfilId ?? null,
-  profileName: u.profileName ?? u.perfilNome ?? null,
+  profileId: u.profileId ?? u.idPerfil ?? u.perfilId ?? null,
+  profileName: u.profileName ?? u.nomePerfil ?? u.perfilNome ?? null,
   active: u.active ?? u.ativo ?? true,
   createdAt: u.createdAt ?? u.criadoEm ?? null,
   updatedAt: u.updatedAt ?? u.atualizadoEm ?? null,
@@ -89,7 +117,7 @@ export const toPermissao = (p) => {
 
 /* ─── API real ─── */
 const realApi = {
-  login:  (email, password) => request('/auth/login', send('POST', { email, password })),
+  login:  (email, password) => request('/auth/login', send('POST', { email, senha: password })),
   logout: () => request('/auth/logout', { method: 'POST' }),
   me:     () => request('/usuario/me').then(toUsuario),
 
@@ -155,4 +183,20 @@ const mockApi = {
   },
 }
 
-export const api = import.meta.env.VITE_MOCK === 'true' ? mockApi : realApi
+/*
+ * VITE_MOCK=true          → tudo no mock
+ * VITE_MOCK_MODULES=a,b   → só esses módulos no mock (auth, usuarios, funcionalidades, perfis, permissoes)
+ * Integração módulo a módulo: tire o módulo da lista quando ele passar nos testes contra a API real.
+ */
+const AUTH_KEYS = ['login', 'logout', 'me']
+const mockedModules = new Set(
+  import.meta.env.VITE_MOCK === 'true'
+    ? [...Object.keys(realApi), 'auth']
+    : (import.meta.env.VITE_MOCK_MODULES ?? '').split(',').map(s => s.trim()).filter(Boolean)
+)
+const pick = (key) => {
+  const mod = AUTH_KEYS.includes(key) ? 'auth' : key
+  return (mockedModules.has(mod) ? mockApi : realApi)[key]
+}
+
+export const api = Object.fromEntries(Object.keys(realApi).map(key => [key, pick(key)]))
