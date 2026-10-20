@@ -13,7 +13,7 @@ import {
 export const pages = {
   dashboard:     { section: 'Início',        title: 'Dashboard',            desc: 'Estoque, vendas e caixa da adega em um só lugar.', icon: LayoutDashboard },
   produtos:      { section: 'Catálogo',       title: 'Produtos e drinks',             desc: 'Bebidas, drinks, doses e combos vendidos pela adega.', icon: Package },
-  categorias:    { section: 'Catálogo',       title: 'Categorias',           desc: 'Organização do catálogo por família de produto.', icon: Tag },
+  categorias:    { section: 'Catálogo',       title: 'Categorias',           desc: 'Organização do catálogo por família de produto.', icon: Tag, perm: 'VISUALIZAR_ESTOQUE' },
   movimentacoes: { section: 'Estoque',       title: 'Movimentações',        desc: 'Histórico completo de entradas, saídas e ajustes.', icon: ArrowLeftRight },
   reposicao:     { section: 'Estoque',       title: 'Reposição',            desc: 'Produtos que precisam ser reabastecidos.', icon: ShoppingCart },
   caixa:         { section: 'Vendas',        title: 'Caixa',                desc: 'Vendas de balcão e mesas simultâneas.', icon: CreditCard },

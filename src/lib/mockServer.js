@@ -218,5 +218,42 @@ export const mockServer = {
       })
   },
 
+  /* ─── categorias (mesmas regras do back: nome único sem diferenciar maiúsculas, 409 com produtos) ─── */
+  async listarCategorias() { await delay(); return clone(categorias()) },
+  async criarCategoria({ nome, descricao }) {
+    await delay(400)
+    validarNomeCategoria(nome)
+    const now = new Date().toISOString()
+    const c = { id: ++db.seq, nome: nome.trim(), descricao: descricao?.trim() || '', ativo: true, criadoEm: now, atualizadoEm: now }
+    categorias().push(c); save()
+    return clone(c)
+  },
+  async atualizarCategoria(id, patch) {
+    await delay(400)
+    const c = getCategoria(id)
+    if ('nome' in patch) validarNomeCategoria(patch.nome, id)
+    Object.assign(c, patch, { atualizadoEm: new Date().toISOString() }); save()
+    return clone(c)
+  },
+  async excluirCategoria(id) {
+    await delay(400)
+    getCategoria(id)
+    db.categorias = categorias().filter(c => c.id !== id); save()
+    return null
+  },
+
   reset() { db = seed(); save() },
+}
+
+function categorias() {
+  db.categorias ??= ['Cerveja', 'Vinho', 'Destilados', 'Gin & Licores', 'Combos', 'Sem Álcool']
+    .map((nome, i) => ({ id: i + 1, nome, descricao: '', ativo: true, criadoEm: '2026-01-01T09:00:00', atualizadoEm: '2026-01-01T09:00:00' }))
+  return db.categorias
+}
+function getCategoria(id) {
+  return categorias().find(c => c.id === id) || fail(404, 'Categoria não encontrada.')
+}
+function validarNomeCategoria(nome, ignoreId) {
+  if (!nome || !nome.trim()) fail(400, 'Dados inválidos.', { nome: 'O nome da categoria é obrigatório.' })
+  if (categorias().some(c => c.id !== ignoreId && norm(c.nome) === norm(nome))) fail(409, 'Categoria já existe no estabelecimento')
 }

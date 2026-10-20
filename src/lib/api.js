@@ -71,7 +71,7 @@ async function request(path, options = {}, isRetry = false) {
 const send = (method, body) => ({ method, body: body === undefined ? undefined : JSON.stringify(body) })
 
 /* ─── Normalizadores: aceitam campos em PT ou EN e listas paginadas ─── */
-const list = (r) => (Array.isArray(r) ? r : r?.content ?? r?.items ?? [])
+const list = (r) => (Array.isArray(r) ? r : r?.itens ?? r?.content ?? r?.items ?? [])
 
 export const toFuncionalidade = (f) => {
   const codigo = typeof f === 'string' ? f : f.codigo ?? f.code ?? f.codigoFuncionalidade
@@ -147,6 +147,25 @@ async function comNomePerfil({ profileId, ...data }) {
   return { ...data, nomePerfil: perfil.nome }
 }
 
+export const toCategoria = (c) => ({
+  id: c.id,
+  nome: c.nome ?? c.name ?? '',
+  descricao: c.descricao ?? c.description ?? '',
+  ativo: c.ativo ?? c.active ?? true,
+  criadoEm: c.criadoEm ?? null,
+  atualizadoEm: c.atualizadoEm ?? null,
+})
+
+// percorre todas as páginas de um endpoint paginado (RespostaPaginadaDto)
+async function todasAsPaginas(path, params = {}) {
+  const itens = []
+  for (let pagina = 0; ; pagina++) {
+    const r = await request(`${path}?${new URLSearchParams({ ...params, pagina, tamanho: 100 })}`)
+    itens.push(...list(r))
+    if (!r || Array.isArray(r) || r.ultima !== false) return itens
+  }
+}
+
 /* ─── API real ─── */
 const realApi = {
   login:  (email, password) => request('/auth/login', send('POST', { email, senha: password })),
@@ -176,6 +195,13 @@ const realApi = {
     excluir:   (id) => request(`/autorizacoes/perfis/${id}`, { method: 'DELETE' }),
     substituirFuncionalidades: (id, codigos) =>
       request(`/autorizacoes/perfis/${id}/funcionalidades/codigos`, send('PUT', codigos)),
+  },
+
+  categorias: {
+    listar:    () => todasAsPaginas('/categorias').then(r => r.map(toCategoria)),
+    criar:     ({ nome, descricao }) => request('/categorias', send('POST', { nome, descricao })).then(toCategoria),
+    atualizar: (id, patch) => request(`/categorias/${id}`, send('PATCH', patch)).then(toCategoria),
+    excluir:   (id) => request(`/categorias/${id}`, { method: 'DELETE' }),
   },
 
   permissoes: {
@@ -209,6 +235,12 @@ const mockApi = {
     excluir:   (id) => m.excluirPerfil(id),
     substituirFuncionalidades: (id, codigos) => m.substituirFuncionalidadesPerfil(id, codigos),
   },
+  categorias: {
+    listar:    () => m.listarCategorias().then(r => r.map(toCategoria)),
+    criar:     (data) => m.criarCategoria(data).then(toCategoria),
+    atualizar: (id, patch) => m.atualizarCategoria(id, patch).then(toCategoria),
+    excluir:   (id) => m.excluirCategoria(id),
+  },
   permissoes: {
     doUsuario: (userId) => m.permissoesUsuario(userId).then(r => r.map(toPermissao)),
     substituirSobrescritas: (userId, sobrescritas) => m.substituirSobrescritas(userId, { sobrescritas }),
@@ -217,7 +249,7 @@ const mockApi = {
 
 /*
  * VITE_MOCK=true          → tudo no mock
- * VITE_MOCK_MODULES=a,b   → só esses módulos no mock (auth, usuarios, funcionalidades, perfis, permissoes)
+ * VITE_MOCK_MODULES=a,b   → só esses módulos no mock (auth, usuarios, funcionalidades, perfis, permissoes, categorias)
  * Integração módulo a módulo: tire o módulo da lista quando ele passar nos testes contra a API real.
  */
 const AUTH_KEYS = ['login', 'logout', 'me']

@@ -46,6 +46,7 @@ export async function login(page, { email, senha } = ADMIN) {
   page.allowStatus?.(401, '/usuario/me')
   page.allowStatus?.(401, '/auth/refresh')
   await page.goto('/#/dashboard')
+  await page.reload() // garante estado limpo mesmo se a página já estava aberta
   await page.getByPlaceholder('seu@empresa.com').fill(email)
   await page.getByPlaceholder('••••••••').fill(senha)
   const res = page.waitForResponse(r => r.url().endsWith('/auth/login'))
