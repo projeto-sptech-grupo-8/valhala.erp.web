@@ -53,7 +53,6 @@ export function InsumoDrawer({ product: p, onClose, navigate }) {
 
       {[
         ['Custo unitário', fmtBRL(p.cost)],
-        ['Localização',    p.local],
         ['Unidade',        p.unit],
         ...(mlDisp ? [['Volume da embalagem', `${p.volumeEmbalagem}ml`]] : []),
       ].map(([label, val]) => (

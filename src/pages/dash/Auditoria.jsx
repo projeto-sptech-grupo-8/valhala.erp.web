@@ -13,7 +13,6 @@ const TIPO_TONE = {
   'Desconto acima do limite': 'bad',
   'Cancelamento de pedido': 'bad',
   'Item removido': 'neutral',
-  'Inventário aprovado': 'neutral',
 }
 const PERIODOS = [['hoje', 'Hoje'], ['7', '7 dias'], ['30', '30 dias'], ['todos', 'Tudo']]
 

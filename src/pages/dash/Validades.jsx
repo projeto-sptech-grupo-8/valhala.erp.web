@@ -76,7 +76,7 @@ export function Validades() {
   const columns = [
     {
       key: 'produto', header: 'Produto', sort: r => r.p.name,
-      render: r => <span className={s.lotProd}><b className={s.cellStrong}>{r.p.name}</b><small>{r.p.cat} · {r.p.local}</small></span>,
+      render: r => <span className={s.lotProd}><b className={s.cellStrong}>{r.p.name}</b><small>{r.p.cat}</small></span>,
     },
     { key: 'lote', header: 'Lote', width: 110, sort: r => r.l.lote, render: r => <code className={s.mono}>{r.l.lote}</code> },
     {

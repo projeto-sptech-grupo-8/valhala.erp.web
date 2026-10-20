@@ -119,7 +119,6 @@ export function porCanal(sales, canais) {
 
 /* ─── Perdas por motivo (sintético + movimentações reais) ─── */
 function motivoDe(m) {
-  if (m.tipo === 'Ajuste' && m.qty < 0 && /Diferença de inventário/.test(m.obs || '')) return 'Diferença de inventário'
   if (m.tipo !== 'Saída') return null
   return MOTIVOS_PERDA.find(x => (m.obs || '').startsWith(x)) || null
 }

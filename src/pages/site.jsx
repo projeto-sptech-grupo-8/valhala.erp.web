@@ -28,10 +28,10 @@ const metrics = [
 ]
 
 const features = [
-  { icon: '▣', title: 'Estoque inteligente', desc: 'Monitore níveis, locais, entradas, saídas e alertas de reposição em tempo real.' },
-  { icon: '◇', title: 'Vendas integradas', desc: 'Caixa, pedidos e orçamentos conectados ao estoque, sem lançamentos duplicados.' },
+  { icon: '▣', title: 'Estoque inteligente', desc: 'Monitore níveis, entradas, saídas e alertas de reposição em tempo real.' },
+  { icon: '◇', title: 'Vendas integradas', desc: 'Caixa e pedidos conectados ao estoque, sem lançamentos duplicados.' },
   { icon: '▤', title: 'Financeiro claro', desc: 'Acompanhe contas, fluxo de caixa, recebimentos e resultados em uma única visão.' },
-  { icon: '✓', title: 'Inventário guiado', desc: 'Conte com agilidade, encontre divergências e ajuste o saldo com segurança.' },
+  { icon: '✓', title: 'Validades sob controle', desc: 'Lotes com validade, venda do que vence primeiro e alerta antes de perder mercadoria.' },
   { icon: '≡', title: 'Fiscal organizado', desc: 'Centralize notas fiscais e mantenha o histórico de cada operação acessível.' },
   { icon: '↗', title: 'Relatórios estratégicos', desc: 'Transforme dados da rotina em indicadores para decisões mais inteligentes.' },
 ]
@@ -201,8 +201,8 @@ export default function Site({ go }) {
           </div>
           <div className={s.howGrid}>
             {[
-              ['Configure', 'Cadastre produtos, categorias, fornecedores e locais de armazenamento em minutos.'],
-              ['Opere', 'Venda, receba, movimente e conte o estoque — tudo sem sair do painel.'],
+              ['Configure', 'Cadastre produtos, categorias e drinks em minutos.'],
+              ['Opere', 'Venda, receba e movimente o estoque — tudo sem sair do painel.'],
               ['Decida', 'Visualize indicadores reais e transforme a rotina em melhores resultados.'],
             ].map(([verb, desc]) => (
               <div key={verb} className={s.howStep}>
@@ -224,7 +224,6 @@ export default function Site({ go }) {
             {[
               ['1.248', 'produtos sob controle'],
               ['312', 'vendas processadas no mês'],
-              ['76%', 'do inventário concluído'],
               ['99,9%', 'de disponibilidade'],
             ].map(([n, l]) => (
               <div key={l} className={s.numberItem}><b>{n}</b><small>{l}</small></div>

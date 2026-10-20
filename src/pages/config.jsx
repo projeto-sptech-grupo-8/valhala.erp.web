@@ -24,7 +24,6 @@ const notifGroups = [
   ['Estoque', [
     ['Estoque crítico', 'Alertas quando um produto atinge o mínimo.', true],
     ['Entradas recebidas', 'Confirmação de recebimento de mercadoria.', true],
-    ['Inventário concluído', 'Resumo ao finalizar uma contagem.', false],
   ]],
   ['Vendas & Financeiro', [
     ['Venda no caixa', 'Notificar cada venda concluída.', false],

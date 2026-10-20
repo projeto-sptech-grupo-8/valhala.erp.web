@@ -5,13 +5,12 @@ import { METAS, toneLower } from '../../lib/kpi.js'
 import { useToast } from '../../components/useToast.js'
 import { fmtNum, fmtDateTime } from '../../lib/format.js'
 import { downloadCSV, stamp } from '../../lib/csv.js'
-import { fornecedoresData } from './mock.js'
 import { useStore } from './useStore.js'
 import { movDelta, movKind, fmtMovQty } from './estoque.js'
 import { DataTable } from './components/DataTable.jsx'
 import s from './dash.module.css'
 
-const MOTIVOS_SAIDA = ['Perda / quebra', 'Vencimento', 'Consumo interno', 'Devolução ao fornecedor', 'Outro']
+const MOTIVOS_SAIDA = ['Perda / quebra', 'Vencimento', 'Consumo interno', 'Devolução', 'Outro']
 
 const kindChip = {
   Entrada: [s.chipOk, ArrowUp],
@@ -20,7 +19,7 @@ const kindChip = {
 }
 
 function emptyForm(produto = '') {
-  return { produto, qty: '', obs: '', nf: '', fornecedor: '', lote: '', validade: '', custo: '', motivo: MOTIVOS_SAIDA[0] }
+  return { produto, qty: '', obs: '', nf: '', lote: '', validade: '', custo: '', motivo: MOTIVOS_SAIDA[0] }
 }
 
 /* ─── Movimentações (RF07 / RF12) ─── */
@@ -60,7 +59,6 @@ export function Movimentacoes({ pageParams }) {
         tipo,
         qty: q,
         nf: tipo === 'Entrada' ? form.nf : '',
-        fornecedor: tipo === 'Entrada' ? form.fornecedor : '',
         lote: tipo === 'Entrada' ? form.lote : '',
         validade: tipo === 'Entrada' ? form.validade : '',
         custo: tipo === 'Entrada' ? Number(String(form.custo).replace(',', '.')) || 0 : 0,
@@ -93,8 +91,8 @@ export function Movimentacoes({ pageParams }) {
 
   function exportar() {
     downloadCSV(`movimentacoes-${stamp()}`,
-      ['Data/Hora', 'Produto', 'Código', 'Tipo', 'Quantidade', 'Operador', 'NF', 'Fornecedor', 'Observação'],
-      filteredMovs.map(m => [fmtDateTime(m.em), m.produto, m.produtoId, m.tipo, movDelta(m), m.operador, m.nf, m.fornecedor, m.obs]))
+      ['Data/Hora', 'Produto', 'Código', 'Tipo', 'Quantidade', 'Operador', 'NF', 'Observação'],
+      filteredMovs.map(m => [fmtDateTime(m.em), m.produto, products.find(p => p.id === m.produtoId)?.sku || m.produtoId, m.tipo, movDelta(m), m.operador, m.nf, m.obs]))
     toast(`${filteredMovs.length} movimentações exportadas.`, { title: 'Exportação concluída' })
   }
 
@@ -124,7 +122,7 @@ export function Movimentacoes({ pageParams }) {
       key: 'ref', header: 'Referência', sort: false,
       render: m => (
         <span className={s.refCell}>
-          {m.nf && <span>NF {m.nf}{m.fornecedor ? ` · ${m.fornecedor}` : ''}</span>}
+          {m.nf && <span>NF {m.nf}</span>}
           {m.obs && <small>{m.obs}</small>}
           {!m.nf && !m.obs && '—'}
         </span>
@@ -186,19 +184,13 @@ export function Movimentacoes({ pageParams }) {
               )}
               <label className={errors.obs ? s.fieldError : undefined}>
                 <span>Observação {tipo === 'Ajuste' && <i className={s.req} aria-hidden="true">*</i>}</span>
-                <input placeholder={tipo === 'Ajuste' ? 'Ex.: contagem física de inventário' : 'Nota interna (opcional)'} value={form.obs} onChange={e => upd('obs', e.target.value)} aria-invalid={!!errors.obs} />
+                <input placeholder={tipo === 'Ajuste' ? 'Ex.: contagem física' : 'Nota interna (opcional)'} value={form.obs} onChange={e => upd('obs', e.target.value)} aria-invalid={!!errors.obs} />
                 {errors.obs && <small className={s.errMsg}>{errors.obs}</small>}
               </label>
               {tipo === 'Entrada' && (
                 <>
-                  <label><span>Nº NF-e do fornecedor</span>
+                  <label><span>Nº da NF-e</span>
                     <input placeholder="000.000" value={form.nf} onChange={e => upd('nf', e.target.value)} />
-                  </label>
-                  <label><span>Fornecedor</span>
-                    <select value={form.fornecedor} onChange={e => upd('fornecedor', e.target.value)}>
-                      <option value="">Selecione</option>
-                      {fornecedoresData.map(f => <option key={f.nome}>{f.nome}</option>)}
-                    </select>
                   </label>
                   <label><span>Lote</span>
                     <input placeholder="Ex.: L2610A (vazio = SEM-LOTE)" value={form.lote} onChange={e => upd('lote', e.target.value)} />

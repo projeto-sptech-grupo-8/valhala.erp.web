@@ -2,12 +2,12 @@ import { test, expect, login } from './fixtures.js'
 
 /*
  * Regressão de navegação: com o catálogo vindo da API, todas as telas do painel (inclusive as que ainda
- * rodam só no front: caixa, NF-e, inventário, relatórios…) precisam abrir sem erro de console/JS.
+ * rodam só no front: caixa, NF-e, relatórios…) precisam abrir sem erro de console/JS.
  * Páginas que exigem um id (editar, usuario, perfil…) ficam de fora.
  */
 const PAGINAS = [
-  'dashboard', 'produtos', 'categorias', 'movimentacoes', 'reposicao', 'caixa', 'orcamento', 'notafiscal',
-  'entradanf', 'inventario', 'validades', 'auditoria', 'relatorios', 'financeiro', 'novo',
+  'dashboard', 'produtos', 'categorias', 'movimentacoes', 'reposicao', 'caixa', 'notafiscal',
+  'entradanf', 'validades', 'auditoria', 'relatorios', 'financeiro', 'novo',
   'usuarios', 'novousuario', 'perfis', 'novoperfil', 'seguranca', 'notificacoes', 'geral',
 ]
 
@@ -49,4 +49,16 @@ test('todas as paginas abrem sem erro com dados reais', async ({ page, shot }) =
     await expect(page.getByText('Algo deu errado'), `página ${p}`).toHaveCount(0)
     await shot(p)
   }
+})
+
+test('paginas removidas (orcamento, inventario) mostram "nao encontrada" sem quebrar', async ({ page, shot }) => {
+  await login(page)
+  await expect(page.getByRole('button', { name: 'Sair' })).toBeVisible()
+  for (const p of ['orcamento', 'inventario']) {
+    await page.goto(`/#/${p}`)
+    await expect(page.getByText('Página não encontrada')).toBeVisible()
+    await shot(`removida-${p}`)
+  }
+  // e não aparecem mais no menu
+  await expect(page.getByRole('navigation').getByText(/Orçamentos|Inventário/)).toHaveCount(0)
 })

@@ -272,7 +272,6 @@ export const toMovimento = (m, produtos = []) => {
     operador: m.usuarioNome ?? '',
     lote: m.lote ?? '',
     nf: m.numeroNotaFiscal ?? '',
-    fornecedor: '',
     obs: m.motivo || OBS_PADRAO[m.tipo] || '',
     saldoPosterior: m.saldoPosterior != null ? round3(n(m.saldoPosterior) / base) : null,
   }

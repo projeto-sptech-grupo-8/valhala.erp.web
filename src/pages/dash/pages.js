@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Package, Tag, ArrowLeftRight, ShoppingCart,
-  CreditCard, FileSpreadsheet, Receipt, TrendingUp,
-  Users, Shield, Bell, Settings, KeyRound, CalendarClock, FileUp, ClipboardList, ShieldCheck, BarChart3,
+  CreditCard, Receipt, TrendingUp,
+  Users, Shield, Bell, Settings, KeyRound, CalendarClock, FileUp, ShieldCheck, BarChart3,
 } from 'lucide-react'
 
 /*
@@ -17,10 +17,8 @@ export const pages = {
   movimentacoes: { section: 'Estoque',       title: 'Movimentações',        desc: 'Histórico completo de entradas, saídas e ajustes.', icon: ArrowLeftRight, perm: 'VISUALIZAR_ESTOQUE' },
   reposicao:     { section: 'Estoque',       title: 'Reposição',            desc: 'Produtos que precisam ser reabastecidos.', icon: ShoppingCart },
   caixa:         { section: 'Vendas',        title: 'Caixa',                desc: 'Vendas de balcão e mesas simultâneas.', icon: CreditCard },
-  orcamento:     { section: 'Vendas',        title: 'Orçamentos',           desc: 'Propostas comerciais enviadas a clientes.', icon: FileSpreadsheet },
   notafiscal:    { section: 'Vendas',        title: 'Notas fiscais',        desc: 'NF-e emitidas para vendas e pedidos.', icon: Receipt },
-  entradanf:     { section: 'Estoque',       title: 'Entrada por XML',      desc: 'Importe a NF-e do fornecedor: itens, custo, lote e validade conferidos antes de entrar.', icon: FileUp, perm: 'MOVIMENTAR_ESTOQUE' },
-  inventario:    { section: 'Estoque',       title: 'Inventário',           desc: 'Contagem cega por setor, divergências e ajuste aprovado pelo gerente.', icon: ClipboardList, perm: 'VISUALIZAR_ESTOQUE' },
+  entradanf:     { section: 'Estoque',       title: 'Entrada por XML',      desc: 'Importe a NF-e do emitente: itens, custo, lote e validade conferidos antes de entrar.', icon: FileUp, perm: 'MOVIMENTAR_ESTOQUE' },
   validades:     { section: 'Estoque',       title: 'Validades e lotes',    desc: 'Lotes vencidos e a vencer, com sugestão de promoção para escoar.', icon: CalendarClock, perm: 'VISUALIZAR_ESTOQUE' },
   auditoria:     { section: 'Vendas',        title: 'Auditoria do caixa',   desc: 'Descontos, cancelamentos e itens removidos — quem fez, quem autorizou e quanto.', icon: ShieldCheck },
   relatorios:    { section: 'Financeiro',    title: 'Relatórios',           desc: 'Curva ABC, margem, ruptura, horários de pico, canais e perdas.', icon: BarChart3 },
@@ -49,13 +47,13 @@ export const domains = [
   { id: 'catalogo',   label: 'Catálogo',           icon: Package, groups: [{ items: ['produtos', 'categorias'] }] },
   // RF02 / RF07 / RF11 / RF12 — saldo físico, entradas, saídas e alertas
   { id: 'estoque',    label: 'Estoque',            icon: ArrowLeftRight, groups: [
-    { label: 'Operação', items: ['movimentacoes', 'entradanf', 'inventario'] },
+    { label: 'Operação', items: ['movimentacoes', 'entradanf'] },
     { label: 'Controle', items: ['reposicao', 'validades'] },
   ] },
   // RF04–RF06 / RF08 — atendimento, caixa e documentos de venda
   { id: 'vendas',     label: 'Vendas',             icon: CreditCard, groups: [
     { label: 'Atendimento', items: ['caixa'] },
-    { label: 'Documentos', items: ['orcamento', 'notafiscal'] },
+    { label: 'Documentos', items: ['notafiscal'] },
     { label: 'Controle', items: ['auditoria'] },
   ] },
   // RF09 — resultado, fluxo de caixa e contas
@@ -85,14 +83,14 @@ export function visibleDomains(role, can, list = domains) {
  * Espelha os perfis do backend (profileName). Páginas filhas herdam a permissão da mãe.
  */
 const ALL = Object.keys(pages)
-const ESTOQUE = ['dashboard', 'produtos', 'categorias', 'movimentacoes', 'reposicao', 'novo', 'editar', 'entradanf', 'inventario', 'validades']
+const ESTOQUE = ['dashboard', 'produtos', 'categorias', 'movimentacoes', 'reposicao', 'novo', 'editar', 'entradanf', 'validades']
 
 const roleAccess = {
   Administrador:     ALL,
   Gerente:           ALL, // a doc da API: o gerente sempre possui todas as permissões
   Caixa:             ['dashboard', 'caixa', 'produtos', 'notificacoes', 'seguranca'],
   Estoquista:        [...ESTOQUE, 'notificacoes', 'seguranca'],
-  Financeiro:        ['dashboard', 'financeiro', 'relatorios', 'orcamento', 'notafiscal', 'notificacoes', 'seguranca'],
+  Financeiro:        ['dashboard', 'financeiro', 'relatorios', 'notafiscal', 'notificacoes', 'seguranca'],
   'Somente leitura': ['dashboard', 'produtos', 'categorias', 'movimentacoes', 'reposicao', 'validades', 'relatorios', 'seguranca'],
 }
 

@@ -1,7 +1,7 @@
 import { test, expect, login } from './fixtures.js'
 
 /*
- * Teste exploratório pelo front: fluxos sem E2E dedicado (NF-e, validades, inventário) e varredura de
+ * Teste exploratório pelo front: fluxos sem E2E dedicado (NF-e, validades) e varredura de
  * interações em todas as telas (filtros, abas, modais, exportações), com admin, usuário limitado e celular.
  * O fixture reprova qualquer erro de console/JS ou resposta 4xx/5xx não declarada.
  */
@@ -114,41 +114,6 @@ test('validades: lote vencido baixado como PERDA', async ({ page, shot }) => {
   expect(Number(ultima.quantidade), '1 garrafa = 750 ml').toBe(750)
 })
 
-test('inventario: contagem cega aprovada vira AJUSTE no back', async ({ page, shot }) => {
-  await entrar(page)
-  const api = await apiCtx(page)
-  const hk = await produto(api, N.heineken)
-  // setor (localização) é um dado local do produto
-  await ir(page, `editar?id=${hk.id}`)
-  await page.getByLabel('Localização').selectOption('Câmara Fria A')
-  await page.getByRole('button', { name: 'Salvar alterações' }).first().click()
-  await toast(page, 'Alterações salvas')
-
-  await ir(page, 'inventario')
-  await page.getByRole('button', { name: /Novo inventário/ }).click()
-  await selecionar(page.getByRole('dialog').locator('select'), 'Câmara Fria A')
-  await page.getByRole('dialog').getByRole('button', { name: /Abrir contagem/ }).click()
-  const item = page.getByRole('listitem').filter({ hasText: N.heineken })
-  await expect(item).toContainText(hk.sku) // SKU, não UUID
-  await item.getByPlaceholder('Contado').fill(String(Number(hk.quantidadeEstoque) - 2))
-  for (const outro of await page.getByRole('listitem').filter({ hasNotText: N.heineken }).filter({ has: page.getByPlaceholder('Contado') }).all()) {
-    await outro.getByRole('button', { name: /Não achei/ }).click()
-  }
-  await shot('contagem')
-  await page.getByRole('button', { name: /Finalizar contagem/ }).click()
-  await page.getByRole('button', { name: /Aprovar ajustes/ }).click()
-  const dialog = page.getByRole('dialog')
-  const motivo = dialog.locator('select')
-  if (await motivo.count()) await motivo.selectOption({ index: 1 }).catch(() => {})
-  await dialog.getByRole('button', { name: /Aprovar e ajustar estoque/ }).click()
-  await toast(page, 'concluído')
-  await shot('aprovado')
-
-  const ultima = (await movs(api, N.heineken))[0]
-  expect(ultima.tipo).toBe('AJUSTE_NEGATIVO')
-  expect(Number(ultima.quantidade)).toBe(2)
-})
-
 test('caixa: abre, vende produto e drink, sangria, fecha', async ({ page, shot }) => {
   await entrar(page)
   await ir(page, 'caixa')
@@ -194,8 +159,8 @@ test('caixa: abre, vende produto e drink, sangria, fecha', async ({ page, shot }
 /* ─── varredura de interações: tudo que não grava dados ─── */
 async function varrer(page, shot, prefixo) {
   const rotas = [
-    'dashboard', 'produtos', 'categorias', 'movimentacoes', 'reposicao', 'caixa', 'orcamento', 'notafiscal',
-    'entradanf', 'inventario', 'validades', 'auditoria', 'relatorios', 'financeiro', 'novo',
+    'dashboard', 'produtos', 'categorias', 'movimentacoes', 'reposicao', 'caixa', 'notafiscal',
+    'entradanf', 'validades', 'auditoria', 'relatorios', 'financeiro', 'novo',
     'usuarios', 'novousuario', 'perfis', 'novoperfil', 'seguranca', 'notificacoes', 'geral',
   ]
   for (const rota of rotas) {

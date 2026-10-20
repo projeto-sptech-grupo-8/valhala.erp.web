@@ -13,17 +13,17 @@ import {
 /*
  * Store do painel (estado local + localStorage).
  * Concentra tudo que muda com o uso: estoque (com lotes/FEFO), movimentações, mesas, caixa, vendas,
- * entradas por NF-e, inventários e auditoria do caixa.
+ * entradas por NF-e e auditoria do caixa.
  *
  * Catálogo (produtos e drinks): com o módulo `produtos` fora do mock, a fonte da verdade é a API e o
- * store funciona como cache. Campos que o back ainda não tem (LOCAL_FIELDS: local, fornecedor, dose,
+ * store funciona como cache. Campos que o back ainda não tem (LOCAL_FIELDS: dose,
  * fardo, lotes/validade, receita "livre") continuam guardados aqui, por produto, e são mesclados a
  * cada sincronização. Os lotes se reconciliam com o saldo real (normalizeLots).
  */
 const KEY = 'valhalla:store:v2'
 const KEY_V1 = 'valhalla:store:v1'
 const REMOTE_CATALOG = !isMocked('produtos')
-const LOCAL_FIELDS = ['local', 'fornecedor', 'doseMl', 'unidadesFardo', 'saidas30d', 'lotes']
+const LOCAL_FIELDS = ['doseMl', 'unidadesFardo', 'saidas30d', 'lotes']
 const isUuid = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(String(id))
 
 const round = (n) => Math.round(n * 1000) / 1000
@@ -58,7 +58,6 @@ function seedMovements() {
       qty: m.tipo === 'Ajuste' ? m.qty : Math.abs(m.qty),
       operador: m.operador,
       nf: m.nf,
-      fornecedor: m.fornecedor,
       obs: '',
     }
   })
@@ -85,9 +84,8 @@ function seed() {
     sessoes: [],
     sales: [],
     seq: 1,
-    vinculos: {},        // de-para fornecedor → produto: { 'CNPJ|cProd': { produtoId, fator } }
-    nfsImportadas: [],   // [{ chave, numero, serie, fornecedor, cnpj, valor, itens, em, operador }]
-    inventarios: [],
+    vinculos: {},        // de-para emitente da NF-e → produto: { 'CNPJ|cProd': { produtoId, fator } }
+    nfsImportadas: [],   // [{ chave, numero, serie, emitente, cnpj, valor, itens, em, operador }]
     auditoria: [],
     config: DEFAULT_CONFIG,
   }
@@ -159,12 +157,12 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
       const anterior = new Map([...st.products, ...st.drinks].map(p => [p.id, p]))
       const local = (p) => Object.fromEntries(LOCAL_FIELDS.filter(k => anterior.get(p.id)?.[k] !== undefined).map(k => [k, anterior.get(p.id)[k]]))
       const products = lista.filter(p => p.tipo === 'padrao').map(p => {
-        const merged = { local: '', fornecedor: '', saidas30d: 0, ...local(p), ...p }
+        const merged = { saidas30d: 0, ...local(p), ...p }
         return { ...merged, lotes: normalizeLots({ ...merged, lotes: merged.lotes || [] }) }
       })
       const drinks = drinksApi.map((d, i) => {
         const livres = (anterior.get(d.id)?.receita || []).filter(r => r.livre)
-        return { local: '', ...local(d), ...d, receita: [...toReceita(receitas[i], products), ...livres] }
+        return { ...local(d), ...d, receita: [...toReceita(receitas[i], products), ...livres] }
       })
       // histórico: as movimentações mais recentes do back (substituem as locais)
       const movs = await api.movimentacoes.listar()
@@ -222,7 +220,7 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
   let localSeq = 0
   function makeMovement(st, fields) {
     localSeq++
-    return { id: `MOV-${Date.now()}-${st.seq}-${localSeq}`, em: new Date().toISOString(), operador, nf: '', fornecedor: '', obs: '', ...fields }
+    return { id: `MOV-${Date.now()}-${st.seq}-${localSeq}`, em: new Date().toISOString(), operador, nf: '', obs: '', ...fields }
   }
 
   function auditEntry(fields) {
@@ -283,7 +281,7 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
 
       const mov = makeMovement(st, {
         produtoId, produto: prod.name, tipo, qty: qtyMov, operador: rest.operador || operador,
-        nf: rest.nf || '', fornecedor: rest.fornecedor || '',
+        nf: rest.nf || '',
         lote: tipo === 'Entrada' ? (lote || SEM_LOTE) : '', validade: tipo === 'Entrada' ? (validade || null) : null,
         obs: obsWith(rest.obs, used),
       })
@@ -322,76 +320,16 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
         vinculos[`${nf.cnpj}|${it.cProd}`] = { produtoId: prod.id, fator: it.fator }
         movs.push(makeMovement(st, {
           produtoId: prod.id, produto: prod.name, tipo: 'Entrada', qty: it.qty,
-          nf: nf.numero, fornecedor: nf.fornecedor, lote: it.lote || SEM_LOTE, validade: it.validade || null,
+          nf: nf.numero, lote: it.lote || SEM_LOTE, validade: it.validade || null,
           obs: `NF-e ${nf.numero} · item ${it.cProd}${it.fator !== 1 ? ` (${it.qCom} ${it.uCom} × ${it.fator})` : ''} · custo ${it.custo.toFixed(2).replace('.', ',')}`,
         }))
       }
       const registro = {
-        chave: nf.chave, numero: nf.numero, serie: nf.serie, fornecedor: nf.fornecedor, cnpj: nf.cnpj,
+        chave: nf.chave, numero: nf.numero, serie: nf.serie, emitente: nf.emitente, cnpj: nf.cnpj,
         valor: nf.valor, itens: validos.length, ignorados: itens.length - validos.length, em: new Date().toISOString(), operador,
       }
       commit({ ...st, products, vinculos, movements: [...movs.reverse(), ...st.movements], nfsImportadas: [registro, ...st.nfsImportadas], seq: st.seq + movs.length + 1 })
       return registro
-    },
-
-    /* ─── Inventário cego por setor ─── */
-    criarInventario({ setor }) {
-      const st = ref.current
-      if (st.inventarios.some(i => i.setor === setor && (i.status === 'contando' || i.status === 'revisao'))) {
-        throw new Error(`Já existe um inventário em andamento para ${setor}.`)
-      }
-      const itens = st.products.filter(p => p.local === setor)
-      if (!itens.length) throw new Error('Nenhum produto neste setor.')
-      const inv = {
-        id: `INV-${String(st.inventarios.length + 1).padStart(3, '0')}`,
-        setor, status: 'contando', criadoEm: new Date().toISOString(), operador,
-        snapshot: itens.map(p => ({ produtoId: p.id, produto: p.name, unit: p.unit, sistema: p.qty, custo: p.cost })),
-        contagem: {},
-      }
-      commit({ ...st, inventarios: [inv, ...st.inventarios] })
-      return inv
-    },
-    salvarContagem(id, produtoId, valor) {
-      const st = ref.current
-      commit({ ...st, inventarios: st.inventarios.map(i => i.id === id ? { ...i, contagem: { ...i.contagem, [produtoId]: valor } } : i) })
-    },
-    mudarStatusInventario(id, status) {
-      const st = ref.current
-      commit({ ...st, inventarios: st.inventarios.map(i => i.id === id ? { ...i, status } : i) })
-    },
-    aprovarInventario(id, { autorizadoPor }) {
-      const st = ref.current
-      const inv = st.inventarios.find(i => i.id === id)
-      if (!inv || inv.status !== 'revisao') throw new Error('Inventário não está em revisão.')
-      let products = st.products
-      const movs = []
-      let divergentes = 0, valorLiquido = 0
-      for (const s of inv.snapshot) {
-        const contado = Number(inv.contagem[s.produtoId])
-        const delta = round(contado - s.sistema)
-        if (!delta) continue
-        divergentes++
-        valorLiquido += delta * s.custo
-        const prod = products.find(p => p.id === s.produtoId)
-        if (!prod) continue
-        let used = []
-        if (delta > 0) {
-          products = withProduct(products, prod.id, p => ({ ...p, lotes: addLot(p.lotes, { lote: SEM_LOTE, qty: delta, custo: p.cost }) }))
-        } else {
-          const r = consumeFEFO(prod.lotes, Math.min(-delta, prod.qty), { allowExpired: true })
-          used = r.used
-          products = withProduct(products, prod.id, p => ({ ...p, lotes: r.lotes }))
-        }
-        movs.push(makeMovement(st, { produtoId: prod.id, produto: prod.name, tipo: 'Ajuste', qty: delta, obs: obsWith(`Diferença de inventário · ${inv.id} · ${inv.setor}`, used) }))
-      }
-      const total = inv.snapshot.length
-      const resultado = { itens: total, divergentes, acuracia: Math.round(((total - divergentes) / total) * 100), valorLiquido: round2(valorLiquido), autorizadoPor }
-      commit({
-        ...st, products, movements: [...movs.reverse(), ...st.movements], seq: st.seq + movs.length + 1,
-        inventarios: st.inventarios.map(i => i.id === id ? { ...i, status: 'concluido', concluidoEm: new Date().toISOString(), resultado } : i),
-        auditoria: [auditEntry({ tipo: 'Inventário aprovado', autorizadoPor, valor: round2(valorLiquido), detalhe: `${inv.id} · ${inv.setor} · ${divergentes} divergência(s)` }), ...st.auditoria],
-      })
-      return resultado
     },
 
     /* ─── Mesas / pedidos (RF04–RF06) ─── */
@@ -635,7 +573,6 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
         addMovement:        (...a) => espelhado('addMovement', a),
         registrarPerdaLote: (...a) => espelhado('registrarPerdaLote', a),
         importarNF:         (...a) => espelhado('importarNF', a),
-        aprovarInventario:  (...a) => espelhado('aprovarInventario', a),
         finalizeSale:       (...a) => espelhado('finalizeSale', a),
       }
     : actions

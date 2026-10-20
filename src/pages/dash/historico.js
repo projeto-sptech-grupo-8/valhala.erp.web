@@ -18,7 +18,7 @@ function mulberry32(seed) {
 }
 
 export const CANAIS = ['Balcão', 'Mesa', 'Delivery']
-export const MOTIVOS_PERDA = ['Perda / quebra', 'Vencimento', 'Consumo interno', 'Diferença de inventário']
+export const MOTIVOS_PERDA = ['Perda / quebra', 'Vencimento', 'Consumo interno']
 
 const WEEKDAY = [1.0, 0.55, 0.6, 0.7, 0.9, 1.45, 1.6]                                   // dom..sáb
 const HOURS = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
@@ -111,13 +111,12 @@ export function getHistorico(now = new Date()) {
       else r.zeroOntem = false
     }
 
-    // perdas: quebra quase diária em cerveja, consumo interno semanal, vencimento e inventário mensais
+    // perdas: quebra quase diária em cerveja, consumo interno semanal, vencimento mensal
     const iso = day.toISOString()
     if (rng() < 0.35) { const p = pickWeighted(rng, allProducts.filter(x => x.cat === 'Cerveja'), [3, 1, 2, 1]); perdas.push({ em: iso, produtoId: p.id, produto: p.name, motivo: 'Perda / quebra', qty: 1 + Math.floor(rng() * 2), custo: p.cost }) }
     if (wd === 6) { const alvo = rng() < 0.5 ? 'BEB-013' : 'BEB-012'; const p = allProducts.find(x => x.id === alvo); perdas.push({ em: iso, produtoId: p.id, produto: p.name, motivo: 'Consumo interno', qty: 2 + Math.floor(rng() * 4), custo: p.cost }) }
     if (day.getDate() === 28) {
       const p = allProducts.find(x => x.id === 'BEB-004'); perdas.push({ em: iso, produtoId: p.id, produto: p.name, motivo: 'Vencimento', qty: 3 + Math.floor(rng() * 6), custo: p.cost })
-      const q = allProducts.find(x => x.id === 'BEB-003'); perdas.push({ em: iso, produtoId: q.id, produto: q.name, motivo: 'Diferença de inventário', qty: 2 + Math.floor(rng() * 4), custo: q.cost })
     }
   }
 

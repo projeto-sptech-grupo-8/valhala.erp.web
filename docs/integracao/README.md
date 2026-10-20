@@ -37,4 +37,6 @@ entram em commit separado no repositório do back.
 | 6 | movimentações | ✅ [relatório](movimentacoes.md) |
 | 7 | dashboard | ✅ [relatório](dashboard.md) |
 
-Fora do loop (sem endpoint no back, seguem no mock): caixa, pedidos/mesas, NF-e, lotes/validade, inventário, fornecedores, financeiro, relatórios.
+Fora do loop (sem endpoint no back, seguem no mock): caixa, pedidos/mesas, NF-e, lotes/validade, financeiro, relatórios.
+
+Removidos por decisão de negócio: orçamentos, inventário, fornecedor e local de estoque — ver [remocoes.md](remocoes.md).

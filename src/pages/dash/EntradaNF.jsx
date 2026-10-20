@@ -52,7 +52,7 @@ export function EntradaNF({ navigate }) {
     try {
       const parsed = parseNFe(xml)
       if (nfsImportadas.some(x => x.chave === parsed.nf.chave)) {
-        setErro(`A NF-e nº ${parsed.nf.numero} de ${parsed.nf.fornecedor} já foi importada. Entrada duplicada bloqueada.`)
+        setErro(`A NF-e nº ${parsed.nf.numero} de ${parsed.nf.emitente} já foi importada. Entrada duplicada bloqueada.`)
         return
       }
       setNf(parsed.nf)
@@ -151,7 +151,7 @@ export function EntradaNF({ navigate }) {
           onDrop={e => { e.preventDefault(); setDrag(false); lerArquivo(e.dataTransfer.files?.[0]) }}
         >
           <FileUp size={30} aria-hidden="true" />
-          <h3>Arraste o XML da NF-e do fornecedor</h3>
+          <h3>Arraste o XML da NF-e</h3>
           <p>O sistema lê itens, quantidades, custo, lote e validade. Você confere tudo antes de entrar no estoque.</p>
           <div className={s.dropActions}>
             <button className="gold" onClick={() => fileRef.current?.click()}><FileCode2 size={14} aria-hidden="true" /> Selecionar arquivo .xml</button>
@@ -168,12 +168,12 @@ export function EntradaNF({ navigate }) {
             ? <p className={s.muted}>Nenhuma nota importada ainda.</p>
             : (
               <table className={s.simpleTable}>
-                <thead><tr><th scope="col">NF-e</th><th scope="col">Fornecedor</th><th scope="col">Itens</th><th scope="col">Valor</th><th scope="col">Importada em</th><th scope="col">Por</th></tr></thead>
+                <thead><tr><th scope="col">NF-e</th><th scope="col">Emitente</th><th scope="col">Itens</th><th scope="col">Valor</th><th scope="col">Importada em</th><th scope="col">Por</th></tr></thead>
                 <tbody>
                   {nfsImportadas.slice(0, 8).map(n => (
                     <tr key={n.chave}>
                       <td><b>{n.numero}</b><small className={s.muted}> série {n.serie}</small></td>
-                      <td>{n.fornecedor}</td>
+                      <td>{n.emitente ?? n.fornecedor}</td>
                       <td>{n.itens}{n.ignorados ? <small className={s.muted}> (+{n.ignorados} ignorado{n.ignorados > 1 ? 's' : ''})</small> : null}</td>
                       <td>{fmtBRL(n.valor)}</td>
                       <td>{fmtDateTime(n.em)}</td>
@@ -194,7 +194,7 @@ export function EntradaNF({ navigate }) {
       <article className={`card ${s.doneCard}`}>
         <PackageCheck size={30} aria-hidden="true" />
         <h3>NF-e {resultado.reg.numero} importada</h3>
-        <p>{resultado.reg.itens} item(ns) de {resultado.reg.fornecedor} deram entrada, com lote, validade e custo médio atualizado.</p>
+        <p>{resultado.reg.itens} item(ns) de {resultado.reg.emitente} deram entrada, com lote, validade e custo médio atualizado.</p>
         <ul className={s.confirmList}>
           {resultado.linhas.map(l => (
             <li key={l.it.nItem}><b>{l.prod.name}</b> · +{fmtNum(l.qty)} {l.prod.unit} · {fmtBRL(l.custo)}/un · lote {l.it.lote || 'SEM-LOTE'}</li>
@@ -226,7 +226,7 @@ export function EntradaNF({ navigate }) {
 
       <article className={`card ${s.nfHead}`}>
         <div><small>NF-e</small><b>{nf.numero}</b><span>série {nf.serie}</span></div>
-        <div><small>Fornecedor</small><b>{nf.fornecedor}</b><span>CNPJ {fmtCNPJ(nf.cnpj)}</span></div>
+        <div><small>Emitente</small><b>{nf.emitente}</b><span>CNPJ {fmtCNPJ(nf.cnpj)}</span></div>
         <div><small>Emissão</small><b>{nf.emissao ? fmtDateTime(nf.emissao) : '—'}</b><span>&nbsp;</span></div>
         <div>
           <small>Valor da nota</small><b>{fmtBRL(nf.valor)}</b>
@@ -296,8 +296,8 @@ export function EntradaNF({ navigate }) {
       </div>
 
       <p className={s.ruleNote}>
-        Ao confirmar: entradas com NF e fornecedor, lotes criados para o FEFO, <b>custo médio ponderado</b> atualizado
-        e vínculo código do fornecedor → produto salvo para as próximas notas.
+        Ao confirmar: entradas com o número da NF, lotes criados para o FEFO, <b>custo médio ponderado</b> atualizado
+        e vínculo código do item do emitente → produto salvo para as próximas notas.
         {linhas.some(l => l.it.ignorar) && <> Itens ignorados somam {fmtBRL(somaItens - somaAtivos)} e ficam fora da entrada.</>}
       </p>
 

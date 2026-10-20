@@ -85,7 +85,7 @@ test('saida por perda vira PERDA e ajuste negativo vira AJUSTE_NEGATIVO', async 
   await page.getByRole('radio', { name: 'Ajuste' }).click()
   await selecionar(page.locator('select').filter({ hasText: 'Selecione o produto' }), TONICA)
   await page.getByPlaceholder('Ex.: -2').fill('-1')
-  await page.getByPlaceholder('Ex.: contagem física de inventário').fill('contagem E2E')
+  await page.getByPlaceholder('Ex.: contagem física').fill('contagem E2E')
   await page.getByRole('button', { name: 'Confirmar ajuste' }).click()
   await toast(page, 'Movimentação registrada')
 

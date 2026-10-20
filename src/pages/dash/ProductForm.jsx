@@ -4,7 +4,6 @@ import { useToast } from '../../components/useToast.js'
 import { fmtBRL, fmtNum } from '../../lib/format.js'
 import { api } from '../../lib/api.js'
 import { useResource } from '../../lib/useResource.js'
-import { stores, fornecedoresData } from './mock.js'
 import { useStore } from './useStore.js'
 import { getCustoDrink, rendColor } from './estoque.js'
 import { Modal } from './components/Modal.jsx'
@@ -57,8 +56,6 @@ function emptyForm(tipo, p) {
     id: p?.id || '',
     cat: p?.categoriaId != null ? String(p.categoriaId) : (p?.cat || ''),
     unit: p?.unit || (tipo === 'drink' ? 'copo' : 'un'),
-    local: p?.local || '',
-    fornecedor: p?.fornecedor || '',
     lote: p?.lote || '',
     validade: p?.validade || '',
     cost: p?.cost ?? '',
@@ -194,7 +191,6 @@ function ProductFormBody({ navigate, editData }) {
       cat: catSel?.nome ?? form.cat,
       categoriaId: catSel?.id ?? null,
       unit: form.unit,
-      local: form.local,
       price: Number(form.price),
       tipo,
     }
@@ -205,7 +201,6 @@ function ProductFormBody({ navigate, editData }) {
           cost: Number(form.cost),
           min: Number(form.min),
           qty: isEdit ? editData.qty : Number(form.qty),
-          fornecedor: form.fornecedor,
           lote: form.lote,
           validade: form.validade,
           volumeEmbalagem: num(form.volumeEmbalagem) > 0 ? Number(form.volumeEmbalagem) : null,
@@ -307,20 +302,8 @@ function ProductFormBody({ navigate, editData }) {
                 : <><option value="un">Unidade (un)</option><option value="garrafa">Garrafa</option><option value="cx">Caixa</option><option value="fardo">Fardo</option><option value="kit">Kit</option><option value="L">Litro (L)</option></>}
             </select>
           </Field>
-          <Field name="local" label="Localização">
-            <select {...bind('local')}>
-              <option value="">Selecione</option>
-              {stores.map(st => <option key={st[0]}>{st[0]}</option>)}
-            </select>
-          </Field>
           {tipo === 'padrao' && (
             <>
-              <Field name="fornecedor" label="Fornecedor">
-                <select {...bind('fornecedor')}>
-                  <option value="">Selecione</option>
-                  {fornecedoresData.map(f => <option key={f.nome}>{f.nome}</option>)}
-                </select>
-              </Field>
               <Field name="lote" label="Número do lote"><input placeholder="Ex.: LOTE-2026-09" {...bind('lote')} /></Field>
               <Field name="validade" label="Data de validade"><input type="date" {...bind('validade')} /></Field>
             </>
