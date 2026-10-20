@@ -6,3 +6,4 @@
 | 2 | Baixa | 3 testes unitários falham no `main` (`ProdutoServiceTest` ×2, `ReceitaDrinkServiceTest`): `businessEventLogger` nulo — provavelmente o mock não foi adicionado no commit de logs. | Aberto |
 | 3 | Alta | CORS não permitia `X-XSRF-TOKEN` → preflight bloqueado em toda mutação com o header. | Corrigido (branch `feat/integracao-api`) |
 | 4 | Alta | `PUT /autorizacoes/usuarios/{id}/sobrescritas-permissao` → 500 (`A collection with orphan deletion was no longer referenced`). | Corrigido (branch `feat/integracao-api`) |
+| 5 | Alta | `GET /dashboard/resumo` → 500 no PostgreSQL (`function('year', …)` vira `year()`, inexistente no PostgreSQL; testes passam em H2). | Corrigido (branch `feat/integracao-api`) |

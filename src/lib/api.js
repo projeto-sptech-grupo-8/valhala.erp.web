@@ -295,6 +295,19 @@ export function fromMovimento(m, produtos, { semLote = 'SEM-LOTE' } = {}) {
   }).filter(([, v]) => v !== undefined))
 }
 
+const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+export const toResumoDashboard = (r) => ({
+  geradoEm: r?.referencia?.geradoEm ?? null,
+  // mes vem como "2026-10"
+  serieMensal: (r?.movimentacoes?.serieMensal ?? []).map(x => ({
+    m: MESES[Number(String(x.mes).slice(5, 7)) - 1] ?? x.mes,
+    mes: x.mes,
+    entradas: Number(x.entradas) || 0,
+    saidas: Number(x.saidas) || 0,
+  })),
+  estoque: r?.estoque ?? null,
+})
+
 // erros de campo do back → campos do formulário de produto
 const CAMPOS_PRODUTO = {
   nome: 'name', categoriaId: 'cat', unidadeMedida: 'unit', precoVenda: 'price', precoCusto: 'cost',
@@ -349,6 +362,11 @@ const realApi = {
     criar:     (p) => request('/produtos', send('POST', fromProduto(p, { criar: true }))).then(toProduto).catch(camposDoProduto),
     atualizar: (id, patch) => request(`/produtos/${id}`, send('PATCH', patch)).then(toProduto).catch(camposDoProduto),
     excluir:   (id) => request(`/produtos/${id}`, { method: 'DELETE' }),
+  },
+
+  // série mensal = quantidade de movimentações (entradas/saídas) por mês, já com os meses sem movimento
+  dashboard: {
+    resumo: (meses = 6) => request(`/dashboard/resumo?meses=${meses}`).then(toResumoDashboard),
   },
 
   // corpo/resposta no formato do back; a conversão para a interface é feita por toMovimento/fromMovimento
@@ -419,7 +437,7 @@ const mockApi = {
 
 /*
  * VITE_MOCK=true          → tudo no mock
- * VITE_MOCK_MODULES=a,b   → só esses módulos no mock (auth, usuarios, funcionalidades, perfis, permissoes, categorias, produtos)
+ * VITE_MOCK_MODULES=a,b   → só esses módulos no mock (auth, usuarios, funcionalidades, perfis, permissoes, categorias, produtos, dashboard)
  * Integração módulo a módulo: tire o módulo da lista quando ele passar nos testes contra a API real.
  */
 const AUTH_KEYS = ['login', 'logout', 'me']

@@ -40,8 +40,11 @@ test('login, F5 mantem sessao, logout encerra', async ({ page, shot, context }) 
 test('access token expirado e renovado via refresh com CSRF', async ({ page, shot, context }) => {
   page.allowStatus(401, '/usuario/me')
   page.allowStatus(401, '/auth/refresh') // só o da abertura, antes do login; o refresh pós-expiração é verificado abaixo
+  // o painel sincroniza catálogo e histórico ao abrir; espera terminar para não apagar o cookie no meio
+  const sincronizou = page.waitForResponse(r => r.url().includes('/movimentacoes-estoque'))
   await login(page)
   await expect(page.getByRole('button', { name: 'Sair' })).toBeVisible()
+  await sincronizou
   // simula expiração do access token: o próximo /usuario/me dá 401 e o front deve renovar
   await context.clearCookies({ name: 'accessToken' })
   const refresh = page.waitForResponse(r => r.url().endsWith('/auth/refresh'))

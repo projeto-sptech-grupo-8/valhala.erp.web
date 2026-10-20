@@ -8,6 +8,8 @@ import { useToast } from '../../components/useToast.js'
 import { fmtBRL, fmtNum, fmtDateTime } from '../../lib/format.js'
 import { downloadCSV, stamp } from '../../lib/csv.js'
 import { monthData } from './mock.js'
+import { api } from '../../lib/api.js'
+import { useResource } from '../../lib/useResource.js'
 import { useStore } from './useStore.js'
 import { caixaResumo, FORMAS } from './caixa.js'
 import { isCritical, getStatus, movDelta, fmtMovQty } from './estoque.js'
@@ -20,6 +22,9 @@ export function Dashboard({ navigate }) {
   const { products, movements, sales, caixa } = useStore()
   const toast = useToast()
   const critical = products.filter(isCritical)
+  // série mensal do back (contagem de movimentações); recarrega quando o histórico muda. No mock, dados de demonstração.
+  const resumo = useResource(() => (api.dashboard ? api.dashboard.resumo(6) : null), [movements[0]?.id])
+  const serie = api.dashboard ? resumo.data?.serieMensal ?? [] : monthData
 
   const today = new Date().toDateString()
   const vendasHoje = sales.filter(v => new Date(v.em).toDateString() === today)
@@ -52,7 +57,7 @@ export function Dashboard({ navigate }) {
   const toneSaude = toneHigher(saude, METAS.saudeEstoque)
 
   function exportChart() {
-    downloadCSV(`movimentacao-estoque-${stamp()}`, ['Mês', 'Entradas', 'Saídas'], monthData.map(m => [m.m, m.entradas, m.saidas]))
+    downloadCSV(`movimentacao-estoque-${stamp()}`, ['Mês', 'Entradas', 'Saídas'], serie.map(m => [m.mes ?? m.m, m.entradas, m.saidas]))
     toast('Arquivo CSV gerado.', { title: 'Exportação concluída' })
   }
 
@@ -86,10 +91,11 @@ export function Dashboard({ navigate }) {
         <article className="card">
           <div className={s.cardTitleRow}>
             <h3>Movimentação de estoque · 6 meses</h3>
+            {api.dashboard && <small className={s.hint} title="Quantidade de movimentações registradas no mês">nº de lançamentos{resumo.error ? ' · não foi possível atualizar' : ''}</small>}
             <button onClick={exportChart}>Exportar <Download size={13} aria-hidden="true" /></button>
           </div>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={monthData} barSize={16} barGap={4} margin={{ top: 8, right: 8, left: -28, bottom: 0 }}>
+            <BarChart data={serie} barSize={16} barGap={4} margin={{ top: 8, right: 8, left: -28, bottom: 0 }}>
               <CartesianGrid vertical={false} stroke="rgba(201,162,39,.08)" />
               <XAxis dataKey="m" tick={axisTick} axisLine={false} tickLine={false} />
               <YAxis tick={axisTick} axisLine={false} tickLine={false} />
