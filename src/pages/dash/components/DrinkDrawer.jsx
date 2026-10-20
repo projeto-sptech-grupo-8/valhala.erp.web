@@ -22,7 +22,7 @@ export function DrinkDrawer({ drink: d, onClose, navigate }) {
   return (
     <Drawer onClose={onClose} title={`Detalhes de ${d.name}`}>
       <div>
-        <span className={s.stockCode}>{d.id}</span>
+        <span className={s.stockCode}>{d.sku || d.id}</span>
         <h2 className={s.drawerTitle}>{d.name}</h2>
         <div className={s.drawerTags}>
           <em className={`${s.chip} ${s.chipDrink}`}><Wine size={11} aria-hidden="true" /> Drink</em>

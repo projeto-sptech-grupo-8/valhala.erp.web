@@ -7,9 +7,10 @@ import { useToast } from '../../components/useToast.js'
 import { fmtBRL, fmtNum } from '../../lib/format.js'
 import { downloadCSV, stamp } from '../../lib/csv.js'
 import { useStore } from './useStore.js'
-import { canEdit } from './pages.js'
+
 import { getStatusAny, getRendimentoDrink, getEstoqueML, rendColor } from './estoque.js'
 import { StatusChip } from './components/StatusChip.jsx'
+import { ErrorBlock, LoadingBlock } from './acesso/ui.jsx'
 import { DataTable } from './components/DataTable.jsx'
 import { DrinkDrawer } from './components/DrinkDrawer.jsx'
 import { InsumoDrawer } from './components/InsumoDrawer.jsx'
@@ -21,7 +22,7 @@ const STATUS_ORDER = { Zerado: 0, Crítico: 1, Baixo: 2, Estável: 3 }
 
 /* ─── Produtos ─── */
 export function Products({ navigate, pageParams }) {
-  const { products, drinks, role } = useStore()
+  const { products, drinks, can, catalog } = useStore()
   const toast = useToast()
   const [search, setSearch]             = useState('')
   const [catFilter, setCatFilter]       = useState(pageParams?.cat || 'Todas')
@@ -31,7 +32,8 @@ export function Products({ navigate, pageParams }) {
   const [showGiro, setShowGiro]         = useState(false)
   const [selectedId, setSelectedId]     = useState(null)
   const [etiquetas, setEtiquetas]       = useState(null) // produtos para imprimir etiqueta
-  const editable = canEdit(role)
+  const editable = can('GERENCIAR_ESTOQUE')
+  const codeOf = (p) => p.sku || p.id
 
   const allCombined = [...products, ...drinks]
   const allCats = ['Todas', ...new Set(allCombined.map(p => p.cat))]
@@ -51,7 +53,7 @@ export function Products({ navigate, pageParams }) {
       tipoFilter === 'Padrão' ? p.tipo === 'padrao' :
       tipoFilter === 'Drinks' ? p.tipo === 'drink' : true
     return byTipo &&
-      (!q || p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q)) &&
+      (!q || p.name.toLowerCase().includes(q) || codeOf(p).toLowerCase().includes(q)) &&
       (catFilter === 'Todas' || p.cat === catFilter) &&
       (statusFilter === 'Todos' || st === statusFilter)
   })
@@ -65,12 +67,12 @@ export function Products({ navigate, pageParams }) {
   function exportRows(rows, name) {
     downloadCSV(`${name}-${stamp()}`,
       ['Código', 'Produto', 'Tipo', 'Categoria', 'Quantidade', 'Mínimo', 'Unidade', 'Custo', 'Preço', 'Margem %', 'Status'],
-      rows.map(p => [p.id, p.name, p.tipo === 'drink' ? 'Drink' : 'Padrão', p.cat, qtyOf(p) ?? '', p.min ?? '', p.unit, p.cost ?? '', p.price, marginOf(p) ?? '', getStatusAny(p, products)]))
+      rows.map(p => [codeOf(p), p.name, p.tipo === 'drink' ? 'Drink' : 'Padrão', p.cat, qtyOf(p) ?? '', p.min ?? '', p.unit, p.cost ?? '', p.price, marginOf(p) ?? '', getStatusAny(p, products)]))
     toast(`${rows.length} produto${rows.length === 1 ? '' : 's'} exportado${rows.length === 1 ? '' : 's'}.`, { title: 'Exportação concluída' })
   }
 
   const columns = [
-    { key: 'id', header: 'Código', width: 90, render: p => <span className={s.stockCode}>{p.id}</span> },
+    { key: 'sku', header: 'Código', width: 90, render: p => <span className={s.stockCode}>{codeOf(p)}</span> },
     {
       key: 'name', header: 'Produto',
       render: p => (
@@ -151,8 +153,14 @@ export function Products({ navigate, pageParams }) {
     },
   ]
 
+  if (catalog.status === 'error' && !allCombined.length) return <ErrorBlock error={catalog.error} onRetry={catalog.reload} />
+  if (catalog.status === 'loading' && !allCombined.length) return <LoadingBlock lines={8} label="Carregando produtos" />
+
   return (
     <>
+      {catalog.status === 'error' && (
+        <p className={s.errSummary} role="alert">Não foi possível atualizar o catálogo: {catalog.error?.message}. Exibindo a última versão carregada.</p>
+      )}
       <div className={s.prodToolbar}>
         <Sel value={tipoFilter} onChange={e => setTipoFilter(e.target.value)} aria-label="Filtrar por tipo">
           <option value="Todos">Tipo: Todos</option>

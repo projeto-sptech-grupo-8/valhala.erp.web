@@ -64,6 +64,7 @@ test('usuario so leitura nao ve acoes de edicao', async ({ page, shot }) => {
     headers: { Origin: 'http://localhost:5173', 'X-XSRF-TOKEN': (await page.context().cookies(API)).find(c => c.name === 'XSRF-TOKEN')?.value ?? '' },
   })
   expect(res.status()).toBe(201)
+  await page.goto('about:blank') // desmonta o app antes de trocar de sessão (sem requisições em voo)
   await page.context().clearCookies()
 
   await abrir(page, LEITOR)

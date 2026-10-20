@@ -12,7 +12,7 @@ import {
  */
 export const pages = {
   dashboard:     { section: 'Início',        title: 'Dashboard',            desc: 'Estoque, vendas e caixa da adega em um só lugar.', icon: LayoutDashboard },
-  produtos:      { section: 'Catálogo',       title: 'Produtos e drinks',             desc: 'Bebidas, drinks, doses e combos vendidos pela adega.', icon: Package },
+  produtos:      { section: 'Catálogo',       title: 'Produtos e drinks',             desc: 'Bebidas, drinks, doses e combos vendidos pela adega.', icon: Package, perm: 'VISUALIZAR_ESTOQUE' },
   categorias:    { section: 'Catálogo',       title: 'Categorias',           desc: 'Organização do catálogo por família de produto.', icon: Tag, perm: 'VISUALIZAR_ESTOQUE' },
   movimentacoes: { section: 'Estoque',       title: 'Movimentações',        desc: 'Histórico completo de entradas, saídas e ajustes.', icon: ArrowLeftRight },
   reposicao:     { section: 'Estoque',       title: 'Reposição',            desc: 'Produtos que precisam ser reabastecidos.', icon: ShoppingCart },
@@ -25,8 +25,8 @@ export const pages = {
   auditoria:     { section: 'Vendas',        title: 'Auditoria do caixa',   desc: 'Descontos, cancelamentos e itens removidos — quem fez, quem autorizou e quanto.', icon: ShieldCheck },
   relatorios:    { section: 'Financeiro',    title: 'Relatórios',           desc: 'Curva ABC, margem, ruptura, horários de pico, canais e perdas.', icon: BarChart3 },
   financeiro:    { section: 'Financeiro',    title: 'Financeiro',           desc: 'Fluxo de caixa, resultado e contas a pagar e receber.', icon: TrendingUp },
-  novo:          { section: 'Catálogo',       title: 'Novo produto',         desc: 'Cadastre um item no catálogo da adega.', parent: 'produtos' },
-  editar:        { section: 'Catálogo',       title: 'Editar produto',       desc: 'Atualize os dados de um item do catálogo.', parent: 'produtos' },
+  novo:          { section: 'Catálogo',       title: 'Novo produto',         desc: 'Cadastre um item no catálogo da adega.', parent: 'produtos', perm: 'GERENCIAR_ESTOQUE' },
+  editar:        { section: 'Catálogo',       title: 'Editar produto',       desc: 'Atualize os dados de um item do catálogo.', parent: 'produtos', perm: 'GERENCIAR_ESTOQUE' },
   usuarios:      { section: 'Controle de acesso', title: 'Usuários',             desc: 'Contas do estabelecimento, perfis vinculados e status de acesso.', icon: Users, perm: 'USUARIOS_VISUALIZAR' },
   novousuario:   { section: 'Controle de acesso', title: 'Novo usuário',         desc: 'Crie uma conta e vincule um perfil de acesso.', parent: 'usuarios', perm: 'USUARIOS_CRIAR' },
   usuario:       { section: 'Controle de acesso', title: 'Detalhe do usuário',   desc: 'Dados da conta, perfil e permissões efetivas.', parent: 'usuarios', perm: 'USUARIOS_VISUALIZAR' },

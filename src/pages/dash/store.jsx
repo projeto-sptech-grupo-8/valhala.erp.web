@@ -5,6 +5,7 @@ import { StoreCtx } from './useStore.js'
 import { caixaResumo } from './caixa.js'
 import { makeCan } from './pages.js'
 import { readTheme, saveTheme, applyTheme, clearTheme } from '../../lib/theme.js'
+import { api, isMocked, fromProduto, fromReceita, toReceita } from '../../lib/api.js'
 import {
   addLot, consumeFEFO, consumeLot, normalizeLots, weightedCost, addDaysISO, describeUsed, SEM_LOTE,
 } from './lotes.js'
@@ -13,10 +14,17 @@ import {
  * Store do painel (estado local + localStorage).
  * Concentra tudo que muda com o uso: estoque (com lotes/FEFO), movimentações, mesas, caixa, vendas,
  * entradas por NF-e, inventários e auditoria do caixa.
- * Quando o backend existir, cada ação abaixo vira uma chamada em src/lib/api.js.
+ *
+ * Catálogo (produtos e drinks): com o módulo `produtos` fora do mock, a fonte da verdade é a API e o
+ * store funciona como cache. Campos que o back ainda não tem (LOCAL_FIELDS: local, fornecedor, dose,
+ * fardo, lotes/validade, receita "livre") continuam guardados aqui, por produto, e são mesclados a
+ * cada sincronização. Os lotes se reconciliam com o saldo real (normalizeLots).
  */
 const KEY = 'valhalla:store:v2'
 const KEY_V1 = 'valhalla:store:v1'
+const REMOTE_CATALOG = !isMocked('produtos')
+const LOCAL_FIELDS = ['local', 'fornecedor', 'doseMl', 'unidadesFardo', 'saidas30d', 'lotes']
+const isUuid = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(String(id))
 
 const round = (n) => Math.round(n * 1000) / 1000
 const round2 = (n) => Math.round(n * 100) / 100
@@ -66,9 +74,10 @@ const DEFAULT_CONFIG = {
 function seed() {
   return {
     version: 2,
-    products: allProducts.map(p => ({ ...p, lotes: seedLots(p) })),
-    drinks: drinkProducts.map(d => ({ ...d, receita: d.receita.map(r => ({ ...r })) })),
-    movements: seedMovements(),
+    // catálogo remoto: começa vazio e é preenchido pela API (sem dados de demonstração misturados)
+    products: REMOTE_CATALOG ? [] : allProducts.map(p => ({ ...p, fracionado: !!p.volumeEmbalagem, lotes: seedLots(p) })),
+    drinks: REMOTE_CATALOG ? [] : drinkProducts.map(d => ({ ...d, receita: d.receita.map(r => ({ ...r })) })),
+    movements: REMOTE_CATALOG ? [] : seedMovements(),
     orders: [{ id: 1, label: 'Mesa 1', canal: 'Mesa', items: [] }],
     activeOrderId: 1,
     nextOrderId: 2,
@@ -107,6 +116,10 @@ function load() {
     const raw = localStorage.getItem(KEY)
     if (raw) {
       const st = JSON.parse(raw)
+      // cache de demonstração (ids BEB-/DRK-) não se mistura com o catálogo da API
+      if (REMOTE_CATALOG && [...(st.products || []), ...(st.drinks || [])].some(p => !isUuid(p.id))) {
+        Object.assign(st, { products: [], drinks: [], movements: [] })
+      }
       return { ...seed(), ...st, config: { ...DEFAULT_CONFIG, ...(st.config || {}) } }
     }
     const v1 = localStorage.getItem(KEY_V1)
@@ -131,6 +144,76 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
   function commit(next) {
     ref.current = next
     setState(next)
+  }
+
+  /* ─── Catálogo remoto: API + campos locais ─── */
+  const [catalog, setCatalog] = useState({ status: REMOTE_CATALOG ? 'loading' : 'ready', error: null })
+
+  async function syncCatalog() {
+    if (!REMOTE_CATALOG) return
+    try {
+      const lista = await api.produtos.listar()
+      const drinksApi = lista.filter(p => p.tipo === 'drink')
+      const receitas = await Promise.all(drinksApi.map(d => api.receitas.obter(d.id).catch(() => [])))
+      const st = ref.current
+      const anterior = new Map([...st.products, ...st.drinks].map(p => [p.id, p]))
+      const local = (p) => Object.fromEntries(LOCAL_FIELDS.filter(k => anterior.get(p.id)?.[k] !== undefined).map(k => [k, anterior.get(p.id)[k]]))
+      const products = lista.filter(p => p.tipo === 'padrao').map(p => {
+        const merged = { local: '', fornecedor: '', saidas30d: 0, ...local(p), ...p }
+        return { ...merged, lotes: normalizeLots({ ...merged, lotes: merged.lotes || [] }) }
+      })
+      const drinks = drinksApi.map((d, i) => {
+        const livres = (anterior.get(d.id)?.receita || []).filter(r => r.livre)
+        return { local: '', ...local(d), ...d, receita: [...toReceita(receitas[i], products), ...livres] }
+      })
+      commit({ ...ref.current, products, drinks })
+      setCatalog({ status: 'ready', error: null })
+    } catch (error) {
+      setCatalog({ status: 'error', error })
+    }
+  }
+
+  useEffect(() => { syncCatalog() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const reloadCatalog = () => { setCatalog(c => ({ ...c, status: 'loading' })); return syncCatalog() }
+
+  // PATCH só com o que mudou; fracionamento/volume não mudam depois de criado (regra do back)
+  function patchProduto(antes, depois) {
+    const a = fromProduto(antes), d = fromProduto(depois)
+    delete d.fracionado; delete d.volumeEmbalagemMl
+    return Object.fromEntries(Object.entries(d).filter(([k, v]) => JSON.stringify(a[k]) !== JSON.stringify(v)))
+  }
+  const receitaMudou = (a = [], b = []) =>
+    JSON.stringify(fromReceita(a, ref.current.products)) !== JSON.stringify(fromReceita(b, ref.current.products))
+
+  async function saveProductRemote(product, originalId) {
+    const st = ref.current
+    const antes = originalId ? [...st.products, ...st.drinks].find(p => p.id === originalId) : null
+    let salvo
+    if (!antes) {
+      salvo = await api.produtos.criar(product)
+      if (product.tipo === 'drink') {
+        try {
+          await api.receitas.substituir(salvo.id, fromReceita(product.receita, st.products))
+        } catch (e) {
+          await api.produtos.excluir(salvo.id).catch(() => {}) // não deixa drink sem receita
+          throw e
+        }
+      }
+    } else {
+      const patch = patchProduto(antes, product)
+      salvo = Object.keys(patch).length ? await api.produtos.atualizar(antes.id, patch) : antes
+      if (product.tipo === 'drink' && receitaMudou(antes.receita, product.receita)) {
+        await api.receitas.substituir(antes.id, fromReceita(product.receita, st.products))
+      }
+    }
+    // guarda os campos locais e a parte "livre" da receita antes de sincronizar
+    const listKey = product.tipo === 'drink' ? 'drinks' : 'products'
+    const localPart = Object.fromEntries(LOCAL_FIELDS.filter(k => product[k] !== undefined).map(k => [k, product[k]]))
+    const cur = ref.current
+    const entry = { ...(antes || {}), ...salvo, ...localPart, ...(product.tipo === 'drink' && { receita: product.receita }) }
+    commit({ ...cur, [listKey]: [...cur[listKey].filter(p => p.id !== salvo.id), entry] })
+    await syncCatalog()
+    return salvo
   }
 
   // IDs únicos mesmo com várias movimentações no mesmo milissegundo
@@ -160,6 +243,7 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
   const actions = {
     /* ─── Produtos ─── */
     saveProduct(product, originalId) {
+      if (REMOTE_CATALOG) return saveProductRemote(product, originalId)
       const st = ref.current
       const listKey = product.tipo === 'drink' ? 'drinks' : 'products'
       const list = st[listKey]
@@ -169,6 +253,7 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
         ? list.map(p => p.id === (originalId || product.id) ? { ...p, ...prepared } : p)
         : [...list, prepared]
       commit({ ...st, [listKey]: nextList })
+      return Promise.resolve(prepared)
     },
 
     /* ─── Movimentações manuais (RF07) — com lote e FEFO ─── */
@@ -503,7 +588,7 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
   // sessão: atualizar dados do usuário logado e encerrar a sessão (ex.: permissões revogadas)
   const session = { updateSelf: (u) => onUserChange?.({ ...user, ...u }), logout: () => onLogout?.() }
   return (
-    <StoreCtx.Provider value={{ ...state, ...actions, operador, user, role, can, session, theme, setTheme, printJob }}>
+    <StoreCtx.Provider value={{ ...state, ...actions, operador, user, role, can, session, theme, setTheme, printJob, catalog: { ...catalog, remote: REMOTE_CATALOG, reload: reloadCatalog } }}>
       {children}
     </StoreCtx.Provider>
   )

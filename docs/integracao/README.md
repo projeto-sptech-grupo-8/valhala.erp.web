@@ -32,8 +32,8 @@ entram em commit separado no repositório do back.
 | 1 | auth | ✅ [relatório](auth.md) |
 | 2 | usuários / perfis / permissões | ✅ [relatório](acesso.md) |
 | 3 | categorias | ✅ [relatório](categorias.md) |
-| 4 | produtos | ⏳ |
-| 5 | receitas de drink | ⏳ |
+| 4 | produtos | ✅ [relatório](produtos.md) |
+| 5 | receitas de drink | ✅ junto com produtos |
 | 6 | movimentações | ⏳ |
 | 7 | dashboard | ⏳ |
 

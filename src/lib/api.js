@@ -166,6 +166,96 @@ async function todasAsPaginas(path, params = {}) {
   }
 }
 
+/*
+ * Produto: o back guarda o saldo de produto fracionado em ML; a interface trabalha em embalagens
+ * (garrafas). A conversão acontece só aqui, nos dois sentidos.
+ */
+const n = (v) => (v == null || v === '' ? null : Number(v))
+const round3 = (v) => Math.round(v * 1000) / 1000
+
+export const toProduto = (r) => {
+  const fracionado = !!r.fracionado
+  const volume = n(r.volumeEmbalagemMl)
+  const base = fracionado && volume ? volume : 1
+  return {
+    id: r.id,
+    sku: r.sku ?? '',
+    name: r.nome ?? '',
+    descricao: r.descricao ?? '',
+    tipo: r.tipo === 'DRINK' ? 'drink' : 'padrao',
+    categoriaId: r.categoriaId ?? null,
+    cat: r.categoriaNome ?? '',
+    unit: r.unidadeMedida ?? 'un',
+    ean: r.codigoBarras ?? '',
+    cost: n(r.precoCusto) ?? 0,
+    price: n(r.precoVenda) ?? 0,
+    margem: n(r.margemPercentual),
+    fracionado,
+    volumeEmbalagem: volume,
+    ativo: r.ativo ?? true,
+    qty: round3((n(r.quantidadeEstoque) ?? 0) / base),
+    min: round3((n(r.estoqueMinimo) ?? 0) / base),
+  }
+}
+
+// campos do produto da interface → contrato do back (só os informados)
+export function fromProduto(p, { criar = false } = {}) {
+  const drink = p.tipo === 'drink'
+  const base = p.fracionado && p.volumeEmbalagem ? p.volumeEmbalagem : 1
+  const body = {
+    nome: p.name,
+    categoriaId: p.categoriaId,
+    unidadeMedida: p.unit,
+    precoVenda: p.price,
+    precoCusto: drink ? undefined : p.cost,
+    codigoBarras: p.ean || undefined,
+    descricao: p.descricao || undefined,
+  }
+  if (!drink) {
+    body.fracionado = !!p.fracionado
+    body.volumeEmbalagemMl = p.volumeEmbalagem ?? undefined
+    if (p.min != null) body.estoqueMinimo = round3(p.min * base)
+    if (criar) body.quantidadeInicial = round3((p.qty ?? 0) * base)
+  }
+  if (criar) body.tipo = drink ? 'DRINK' : 'PADRAO'
+  return Object.fromEntries(Object.entries(body).filter(([, v]) => v !== undefined))
+}
+
+/*
+ * Receita: a interface guarda a quantidade em ml (insumo × volume da embalagem). O back usa ML para
+ * insumo fracionado e UN (unidades) para os demais — a conversão fica aqui.
+ */
+export const toReceita = (ingredientes, produtos) => list(ingredientes).map(i => {
+  const ins = produtos.find(p => p.id === i.produtoId)
+  const qtd = n(i.quantidade) ?? 0
+  return {
+    produtoId: i.produtoId,
+    quantidade: i.unidadeConsumo === 'UN' ? round3(qtd * (ins?.volumeEmbalagem || 1)) : qtd,
+    unidade: i.unidadeConsumo ?? 'ML',
+    livre: false,
+  }
+})
+
+export const fromReceita = (receita, produtos) => receita.filter(r => !r.livre && r.produtoId).map(r => {
+  const ins = produtos.find(p => p.id === r.produtoId)
+  const un = ins && !ins.fracionado
+  return {
+    produtoId: r.produtoId,
+    quantidade: un ? round3(r.quantidade / (ins.volumeEmbalagem || 1)) : r.quantidade,
+    unidadeConsumo: un ? 'UN' : 'ML',
+  }
+})
+
+// erros de campo do back → campos do formulário de produto
+const CAMPOS_PRODUTO = {
+  nome: 'name', categoriaId: 'cat', unidadeMedida: 'unit', precoVenda: 'price', precoCusto: 'cost',
+  estoqueMinimo: 'min', quantidadeInicial: 'qty', volumeEmbalagemMl: 'volumeEmbalagem', ingredientes: 'receita',
+}
+const camposDoProduto = (err) => {
+  if (err?.fieldErrors) err.fieldErrors = Object.fromEntries(Object.entries(err.fieldErrors).map(([k, v]) => [CAMPOS_PRODUTO[k.split(/[.[]/)[0]] ?? k, v]))
+  throw err
+}
+
 /* ─── API real ─── */
 const realApi = {
   login:  (email, password) => request('/auth/login', send('POST', { email, senha: password })),
@@ -202,6 +292,21 @@ const realApi = {
     criar:     ({ nome, descricao }) => request('/categorias', send('POST', { nome, descricao })).then(toCategoria),
     atualizar: (id, patch) => request(`/categorias/${id}`, send('PATCH', patch)).then(toCategoria),
     excluir:   (id) => request(`/categorias/${id}`, { method: 'DELETE' }),
+  },
+
+  produtos: {
+    listar:    (params) => todasAsPaginas('/produtos', params).then(r => r.map(toProduto)),
+    obter:     (id) => request(`/produtos/${id}`).then(toProduto),
+    criar:     (p) => request('/produtos', send('POST', fromProduto(p, { criar: true }))).then(toProduto).catch(camposDoProduto),
+    atualizar: (id, patch) => request(`/produtos/${id}`, send('PATCH', patch)).then(toProduto).catch(camposDoProduto),
+    excluir:   (id) => request(`/produtos/${id}`, { method: 'DELETE' }),
+  },
+
+  // ingredientes no formato do back; a conversão ml ↔ UN é feita por toReceita/fromReceita
+  receitas: {
+    obter:      (drinkId) => request(`/drinks/${drinkId}/receita`),
+    substituir: (drinkId, ingredientes) =>
+      request(`/drinks/${drinkId}/receita`, send('PUT', { ingredientes })).catch(camposDoProduto),
   },
 
   permissoes: {
@@ -249,7 +354,7 @@ const mockApi = {
 
 /*
  * VITE_MOCK=true          → tudo no mock
- * VITE_MOCK_MODULES=a,b   → só esses módulos no mock (auth, usuarios, funcionalidades, perfis, permissoes, categorias)
+ * VITE_MOCK_MODULES=a,b   → só esses módulos no mock (auth, usuarios, funcionalidades, perfis, permissoes, categorias, produtos)
  * Integração módulo a módulo: tire o módulo da lista quando ele passar nos testes contra a API real.
  */
 const AUTH_KEYS = ['login', 'logout', 'me']
@@ -258,8 +363,10 @@ const mockedModules = new Set(
     ? [...Object.keys(realApi), 'auth']
     : (import.meta.env.VITE_MOCK_MODULES ?? '').split(',').map(s => s.trim()).filter(Boolean)
 )
+// produtos/receitas no mock ficam no próprio store do painel (estado local), não no mockServer
+export const isMocked = (mod) => mockedModules.has(mod)
 const pick = (key) => {
-  const mod = AUTH_KEYS.includes(key) ? 'auth' : key
+  const mod = AUTH_KEYS.includes(key) ? 'auth' : key === 'receitas' ? 'produtos' : key
   return (mockedModules.has(mod) ? mockApi : realApi)[key]
 }
 
