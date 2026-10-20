@@ -258,7 +258,7 @@ export function EntradaNF({ navigate }) {
                     <span>Produto no catálogo {it.origem === 'ean' && <ToneBadge tone="ok" label="pelo EAN" />}{it.origem === 'vinculo' && <ToneBadge tone="ok" label="vínculo salvo" />}{it.origem === 'nenhum' && !it.produtoId && <ToneBadge tone="warn" label="sem vínculo" />}</span>
                     <select value={it.produtoId} onChange={e => upd(i, { produtoId: e.target.value, origem: e.target.value ? 'manual' : 'nenhum' })} aria-invalid={!prod || undefined}>
                       <option value="">Selecione o produto…</option>
-                      {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.id})</option>)}
+                      {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.sku || p.id})</option>)}
                     </select>
                   </label>
                   <label>

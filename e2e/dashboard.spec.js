@@ -18,9 +18,9 @@ test('dashboard mostra serie mensal, alertas e ultimas movimentacoes do back', a
   await post('/movimentacoes-estoque', { produtoId: p.id, tipo: 'SAIDA', quantidade: 1, motivo: 'E2E dashboard' })
 
   await page.goto('/#/dashboard')
-  const resumo = page.waitForResponse(r => r.url().includes('/dashboard/resumo'))
   await page.reload()
-  const body = await (await resumo).json()
+  // lê o resumo direto da API (interceptar a resposta da tela é instável: o goto e o reload disparam a mesma busca)
+  const body = await (await page.request.get(`${API}/dashboard/resumo?meses=6`)).json()
 
   const mesAtual = MESES[new Date().getMonth()]
   await expect(page.locator('svg text').filter({ hasText: new RegExp(`^${mesAtual}$`) }).first()).toBeVisible()

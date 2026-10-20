@@ -6,6 +6,7 @@
  * Quando o backend existir, este arquivo é substituído por GET /relatorios/...
  */
 import { allProducts, drinkProducts } from './mock.js'
+import { isMocked } from '../../lib/api.js'
 
 function mulberry32(seed) {
   return function () {
@@ -46,6 +47,8 @@ const drinkCost = (d) => d.receita.reduce((a, r) => {
 let cache = null
 
 export function getHistorico(now = new Date()) {
+  // catálogo da API: não mistura vendas fictícias de produtos de demonstração nos relatórios
+  if (!isMocked('produtos')) return { sales: [], ruptura: {}, rupturaDiaria: [], perdas: [], dias: 90 }
   const key = now.toDateString()
   if (cache?.key === key) return cache.data
   const rng = mulberry32(20260901)

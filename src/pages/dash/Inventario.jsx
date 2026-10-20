@@ -107,7 +107,8 @@ function Lista({ navigate }) {
 
 /* ─── Sessão de inventário ─── */
 function Sessao({ inv, navigate }) {
-  const { salvarContagem, mudarStatusInventario, aprovarInventario } = useStore()
+  const { products, salvarContagem, mudarStatusInventario, aprovarInventario } = useStore()
+  const codigo = (id) => products.find(p => p.id === id)?.sku || id
   const toast = useToast()
   const [q, setQ] = useState('')
   const [modal, setModal] = useState(null) // 'aprovar' | 'cancelar'
@@ -169,7 +170,7 @@ function Sessao({ inv, navigate }) {
             const v = inv.contagem[l.produtoId]
             return (
               <li key={l.produtoId} className={counted(v) ? s.countDone : undefined}>
-                <span><b>{l.produto}</b><small>{l.produtoId}</small></span>
+                <span><b>{l.produto}</b><small>{codigo(l.produtoId)}</small></span>
                 <label>
                   <span className={s.srOnly}>Quantidade contada de {l.produto}</span>
                   <input type="number" inputMode="decimal" min="0" step="any" value={v ?? ''} placeholder="Contado"

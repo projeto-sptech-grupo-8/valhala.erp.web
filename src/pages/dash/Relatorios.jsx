@@ -1,3 +1,4 @@
+import { isMocked } from '../../lib/api.js'
 import { useState } from 'react'
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -368,7 +369,9 @@ export function Relatorios({ navigate, pageParams }) {
         ))}
       </nav>
 
-      <p className={s.ruleNote}><Info size={14} aria-hidden="true" /> Dados de demonstração: 90 dias simulados a partir do giro de cada produto + as vendas reais desta sessão. Com o backend, os números passam a vir do banco.</p>
+      <p className={s.ruleNote}><Info size={14} aria-hidden="true" /> {isMocked("produtos")
+        ? "Dados de demonstração: 90 dias simulados a partir do giro de cada produto + as vendas reais desta sessão. Com o backend, os números passam a vir do banco."
+        : "Baseado nas vendas do caixa registradas neste navegador: o back ainda não guarda vendas, então cada computador vê só as próprias."}</p>
 
       {aba === 'abc' && <ABC sales={sales} exportar={exportar} />}
       {aba === 'margem' && <Margem sales={sales} exportar={exportar} />}

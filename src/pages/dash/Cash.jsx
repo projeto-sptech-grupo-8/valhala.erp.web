@@ -14,7 +14,6 @@ import { AuthorizeModal } from './components/AuthorizeModal.jsx'
 import s from './dash.module.css'
 import c from './Cash.module.css'
 
-const posCats = ['Todos', 'Cerveja', 'Vinho', 'Destilados', 'Gin', 'Drinks', 'Combos', 'Sem Álcool']
 const round2 = (n) => Math.round(n * 100) / 100
 /* aceita "1.234,56", "12,5" e "12.5" */
 const parseMoney = (v) => {
@@ -301,13 +300,16 @@ export function Cash() {
   // só o saldo dentro da validade é vendável (lote vencido fica bloqueado — FEFO)
   const vendaveis = products.map(p => ({ ...p, qty: sellableQty(p) }))
   const catalogo = [
-    ...vendaveis.map(p => ({ id: p.id, name: p.name, cat: p.cat, price: p.price, tipo: 'padrao', disp: Math.floor(p.qty) - (reservado[p.id] || 0), vencido: p.qty < products.find(x => x.id === p.id).qty })),
-    ...drinks.map(d => ({ id: d.id, name: d.name, cat: d.cat, price: d.price, tipo: 'drink', disp: (getRendimentoDrink(d, vendaveis) ?? 0) - (reservado[d.id] || 0) })),
+    ...vendaveis.map(p => ({ id: p.id, codes: [p.sku, p.ean].filter(Boolean), name: p.name, cat: p.cat, price: p.price, tipo: 'padrao', disp: Math.floor(p.qty) - (reservado[p.id] || 0), vencido: p.qty < products.find(x => x.id === p.id).qty })),
+    ...drinks.map(d => ({ id: d.id, codes: [d.sku].filter(Boolean), name: d.name, cat: d.cat, price: d.price, tipo: 'drink', disp: (getRendimentoDrink(d, vendaveis) ?? 0) - (reservado[d.id] || 0) })),
   ]
+
+  // abas pelas categorias que existem no catálogo (antes era uma lista fixa de demonstração)
+  const posCats = ['Todos', ...[...new Set(catalogo.map(p => p.cat).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'))]
 
   const q = search.trim().toLowerCase()
   const filtered = catalogo.filter(p =>
-    (cat === 'Todos' || p.cat === cat) && (!q || p.name.toLowerCase().includes(q) || p.id.toLowerCase() === q)
+    (cat === 'Todos' || p.cat === cat) && (!q || p.name.toLowerCase().includes(q) || [p.id, ...p.codes].some(c => String(c).toLowerCase() === q))
   )
 
   const subtotal = order.items.reduce((acc, it) => acc + it.price * it.qty, 0)
@@ -349,7 +351,7 @@ export function Cash() {
   function onSearchKey(e) {
     if (e.key !== 'Enter') return
     e.preventDefault()
-    const exact = catalogo.find(p => [p.id, p.sku, p.ean].some(c => c && String(c).toLowerCase() === q))
+    const exact = catalogo.find(p => [p.id, ...p.codes].some(c => String(c).toLowerCase() === q))
     const hit = exact || (filtered.length === 1 ? filtered[0] : null)
     if (hit) { addItem(hit); setSearch('') }
     else if (q) toast(filtered.length ? 'Mais de um produto encontrado — refine a busca.' : 'Nenhum produto com esse nome ou código.', { type: 'info' })
