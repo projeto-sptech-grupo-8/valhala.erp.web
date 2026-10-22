@@ -1,7 +1,7 @@
 # Verificação completa de um módulo (ou de todos). Para no primeiro passo que falhar.
 #   powershell -File scripts/gate.ps1            -> roda tudo (regressão completa)
 #   powershell -File scripts/gate.ps1 -Modulo auth
-# Pré-requisitos: Postgres, API em :8080, `npm run dev` em :5173 com VITE_MOCK=false.
+# Pré-requisitos: Postgres, API em :8080, `npm run dev` em :5173.
 # RESET_DB: caminho de um script que restaura o banco ao estado inicial (opcional, recomendado).
 param([string]$Modulo = '*')
 $ErrorActionPreference = 'Stop'

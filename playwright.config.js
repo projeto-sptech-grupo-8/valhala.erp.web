@@ -1,6 +1,6 @@
 import { defineConfig } from '@playwright/test'
 
-// E2E contra o backend real. Pré-requisito: API em :8080 e `npm run dev` em :5173 (VITE_MOCK=false).
+// E2E contra o backend real. Pré-requisito: API em :8080 e `npm run dev` em :5173.
 export default defineConfig({
   testDir: './e2e',
   workers: 1, // um banco só: os testes não podem rodar em paralelo

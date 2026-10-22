@@ -6,7 +6,6 @@
 - Refresh usa só o cookie CSRF (`/auth/csrf` exige o access token, que é o que expirou).
 - Login envia `senha` (o back também aceita `password` via `@JsonAlias`); erro de campo `senha` aparece no formulário.
 - `toUsuario` mapeia `idPerfil` / `nomePerfil` do back.
-- `VITE_MOCK_MODULES`: mock por módulo.
 
 ## Mudança no back (commit separado)
 - CORS passa a permitir o header `X-XSRF-TOKEN` — antes o navegador bloqueava o preflight de toda mutação que enviasse o header.

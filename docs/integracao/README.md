@@ -6,7 +6,7 @@ e o próximo só começa depois disso.
 ## O loop (por módulo)
 
 1. **Contrato** — ler `docs/openapi.yaml` e os DTOs do back; listar telas/ações do front que usam o módulo.
-2. **Implementar** — chamadas em `src/lib/api.js`; tirar o módulo de `VITE_MOCK_MODULES`; remover a lógica equivalente do `store.jsx`.
+2. **Implementar** — chamadas em `src/lib/api.js`; remover a lógica equivalente do `store.jsx`.
 3. **Smoke de API** — `scripts/smoke/<modulo>.ps1`: contrato direto na API (status, campos, erros 400/403/409).
 4. **E2E no navegador** — `e2e/<modulo>.spec.js` com Playwright no Chrome instalado. Prints de cada passo em
    `e2e/evidencias/<modulo>/`. O teste falha sozinho se houver erro de console ou resposta 4xx/5xx não declarada.
@@ -20,7 +20,7 @@ entram em commit separado no repositório do back.
 ## Ambiente local
 
 - API em `:8080` (`DB_PASSWORD`, `JWT_SECRET`, `FRONTEND_URL=http://localhost:5173`)
-- Front: `.env.development.local` com `VITE_MOCK=false` e `VITE_MOCK_MODULES=<módulos ainda no mock>`
+- Front: sem mock — tudo vem da API. Para dados de demonstração, suba o back com `SPRING_PROFILES_ACTIVE=dev` (Flyway aplica `db/demo/R__dados_demonstracao.sql`; usuários `*@meraki.com`, senha `Senha@123`)
 - `RESET_DB=<script>` faz o gate restaurar o banco ao estado inicial (schema + seed) antes de cada bateria
 - Login de teste: `admin@valhalla.local` / `Senha@123` (seed)
 

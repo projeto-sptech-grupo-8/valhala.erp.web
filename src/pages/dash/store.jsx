@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { allProducts, drinkProducts, movimentacoes } from './mock.js'
 import { getStatus, isCritical } from './estoque.js'
 import { StoreCtx } from './useStore.js'
 import { caixaResumo } from './caixa.js'
 import { makeCan } from './pages.js'
 import { readTheme, saveTheme, applyTheme, clearTheme } from '../../lib/theme.js'
-import { api, isMocked, fromProduto, fromReceita, toReceita, fromMovimento, toMovimento } from '../../lib/api.js'
+import { api, fromProduto, fromReceita, toReceita, fromMovimento, toMovimento } from '../../lib/api.js'
 import {
-  addLot, consumeFEFO, consumeLot, normalizeLots, weightedCost, addDaysISO, describeUsed, SEM_LOTE,
+  addLot, consumeFEFO, consumeLot, normalizeLots, weightedCost, describeUsed, SEM_LOTE,
 } from './lotes.js'
 
 /*
@@ -21,47 +20,11 @@ import {
  * cada sincronização. Os lotes se reconciliam com o saldo real (normalizeLots).
  */
 const KEY = 'valhalla:store:v2'
-const KEY_V1 = 'valhalla:store:v1'
-const REMOTE_CATALOG = !isMocked('produtos')
 const LOCAL_FIELDS = ['doseMl', 'unidadesFardo', 'saidas30d', 'lotes']
 const isUuid = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(String(id))
 
 const round = (n) => Math.round(n * 1000) / 1000
 const round2 = (n) => Math.round(n * 100) / 100
-
-/* lotes de demonstração (validade relativa a hoje) */
-const SEED_LOTS = {
-  'BEB-001': [['L2609A', 12, 18], ['L2610B', 75, 30]],
-  'BEB-002': [['ST0926', 40, 8]],
-  'BEB-003': [['BD0812', -3, 6], ['BD0905', 25, 12], ['BD0920', 110, 18]],
-  'BEB-004': [['CR0801', 5, 8], ['CR0915', 90, 16]],
-  'BEB-012': [['RB0830', 20, 24], ['RB0920', 160, 48]],
-  'BEB-013': [['AG0901', 200, 96]],
-  'BEB-014': [['CB0911', 28, 20]],
-}
-function seedLots(p) {
-  const def = SEED_LOTS[p.id]
-  if (!def) return [{ id: `LT-${p.id}-0`, lote: `${p.id.slice(-3)}-${new Date().getFullYear()}`, validade: null, qty: p.qty, custo: p.cost, nf: '', entradaEm: '2026-08-01T10:00:00' }]
-  return def.map(([lote, dias, qty], i) => ({ id: `LT-${p.id}-${i}`, lote, validade: addDaysISO(dias), qty, custo: p.cost, nf: '', entradaEm: `2026-0${7 + (i % 2)}-1${i}T10:00:00` }))
-}
-
-function seedMovements() {
-  return movimentacoes.map((m, i) => {
-    const [, time] = m.data.split(' · ')
-    const prod = allProducts.find(p => p.name.startsWith(m.produto))
-    return {
-      id: `MOV-SEED-${i}`,
-      em: `${m.dateISO}T${time}:00`,
-      produtoId: prod?.id || '',
-      produto: m.produto,
-      tipo: m.tipo,
-      qty: m.tipo === 'Ajuste' ? m.qty : Math.abs(m.qty),
-      operador: m.operador,
-      nf: m.nf,
-      obs: '',
-    }
-  })
-}
 
 const DEFAULT_CONFIG = {
   limiteDescontoPct: 10,
@@ -73,10 +36,10 @@ const DEFAULT_CONFIG = {
 function seed() {
   return {
     version: 2,
-    // catálogo remoto: começa vazio e é preenchido pela API (sem dados de demonstração misturados)
-    products: REMOTE_CATALOG ? [] : allProducts.map(p => ({ ...p, fracionado: !!p.volumeEmbalagem, lotes: seedLots(p) })),
-    drinks: REMOTE_CATALOG ? [] : drinkProducts.map(d => ({ ...d, receita: d.receita.map(r => ({ ...r })) })),
-    movements: REMOTE_CATALOG ? [] : seedMovements(),
+    // catálogo: começa vazio e é preenchido pela API
+    products: [],
+    drinks: [],
+    movements: [],
     orders: [{ id: 1, label: 'Mesa 1', canal: 'Mesa', items: [] }],
     activeOrderId: 1,
     nextOrderId: 2,
@@ -91,37 +54,17 @@ function seed() {
   }
 }
 
-/* v1 → v2: produtos ganham lotes (saldo atual vira SEM-LOTE) e EAN do cadastro; nada registrado se perde */
-function migrate(old) {
-  const base = seed()
-  const products = (old.products || base.products).map(p => {
-    const ref = allProducts.find(a => a.id === p.id)
-    const withEan = { ...p, ean: p.ean || ref?.ean || '' }
-    return { ...withEan, lotes: normalizeLots(withEan) }
-  })
-  return {
-    ...base,
-    ...old,
-    version: 2,
-    products,
-    orders: (old.orders || base.orders).map(o => ({ canal: 'Mesa', ...o })),
-    config: { ...DEFAULT_CONFIG, ...(old.config || {}) },
-  }
-}
-
 function load() {
   try {
     const raw = localStorage.getItem(KEY)
     if (raw) {
       const st = JSON.parse(raw)
-      // cache de demonstração (ids BEB-/DRK-) não se mistura com o catálogo da API
-      if (REMOTE_CATALOG && [...(st.products || []), ...(st.drinks || [])].some(p => !isUuid(p.id))) {
+      // cache antigo (ids que não são UUID, ex.: BEB-/DRK-) não se mistura com o catálogo da API
+      if ([...(st.products || []), ...(st.drinks || [])].some(p => !isUuid(p.id))) {
         Object.assign(st, { products: [], drinks: [], movements: [] })
       }
       return { ...seed(), ...st, config: { ...DEFAULT_CONFIG, ...(st.config || {}) } }
     }
-    const v1 = localStorage.getItem(KEY_V1)
-    if (v1) return migrate(JSON.parse(v1))
   } catch { /* storage indisponível ou corrompido */ }
   return seed()
 }
@@ -145,10 +88,9 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
   }
 
   /* ─── Catálogo remoto: API + campos locais ─── */
-  const [catalog, setCatalog] = useState({ status: REMOTE_CATALOG ? 'loading' : 'ready', error: null })
+  const [catalog, setCatalog] = useState({ status: 'loading', error: null })
 
   async function syncCatalog() {
-    if (!REMOTE_CATALOG) return
     try {
       const lista = await api.produtos.listar()
       const drinksApi = lista.filter(p => p.tipo === 'drink')
@@ -243,17 +185,7 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
   const actions = {
     /* ─── Produtos ─── */
     saveProduct(product, originalId) {
-      if (REMOTE_CATALOG) return saveProductRemote(product, originalId)
-      const st = ref.current
-      const listKey = product.tipo === 'drink' ? 'drinks' : 'products'
-      const list = st[listKey]
-      const exists = list.some(p => p.id === (originalId || product.id))
-      const prepared = listKey === 'products' && !exists ? { ...product, lotes: normalizeLots({ ...product, lotes: [] }) } : product
-      const nextList = exists
-        ? list.map(p => p.id === (originalId || product.id) ? { ...p, ...prepared } : p)
-        : [...list, prepared]
-      commit({ ...st, [listKey]: nextList })
-      return Promise.resolve(prepared)
+      return saveProductRemote(product, originalId)
     },
 
     /* ─── Movimentações manuais (RF07) — com lote e FEFO ─── */
@@ -567,15 +499,13 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
     return resultado
   }
 
-  const exposed = REMOTE_CATALOG
-    ? {
-        ...actions,
-        addMovement:        (...a) => espelhado('addMovement', a),
-        registrarPerdaLote: (...a) => espelhado('registrarPerdaLote', a),
-        importarNF:         (...a) => espelhado('importarNF', a),
-        finalizeSale:       (...a) => espelhado('finalizeSale', a),
-      }
-    : actions
+  const exposed = {
+    ...actions,
+    addMovement:        (...a) => espelhado('addMovement', a),
+    registrarPerdaLote: (...a) => espelhado('registrarPerdaLote', a),
+    importarNF:         (...a) => espelhado('importarNF', a),
+    finalizeSale:       (...a) => espelhado('finalizeSale', a),
+  }
 
   const role = user?.profileName || 'Somente leitura'
   // tema do painel (escuro padrão); sai do <html> ao deixar o painel (logout → landing escura)
@@ -587,7 +517,7 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
   // sessão: atualizar dados do usuário logado e encerrar a sessão (ex.: permissões revogadas)
   const session = { updateSelf: (u) => onUserChange?.({ ...user, ...u }), logout: () => onLogout?.() }
   return (
-    <StoreCtx.Provider value={{ ...state, ...exposed, operador, user, role, can, session, theme, setTheme, printJob, catalog: { ...catalog, remote: REMOTE_CATALOG, reload: reloadCatalog } }}>
+    <StoreCtx.Provider value={{ ...state, ...exposed, operador, user, role, can, session, theme, setTheme, printJob, catalog: { ...catalog, remote: true, reload: reloadCatalog } }}>
       {children}
     </StoreCtx.Provider>
   )

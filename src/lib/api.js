@@ -1,4 +1,3 @@
-import { mockServer } from './mockServer.js'
 import { moduloDoCodigo, rotuloDoCodigo } from './funcionalidades.js'
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
@@ -398,58 +397,4 @@ const realApi = {
   },
 }
 
-/* ─── Mock (VITE_MOCK=true): mesmo contrato, regras simuladas em mockServer.js ─── */
-const m = mockServer
-const mockApi = {
-  login:  (email, password) => m.login(email, password),
-  logout: () => m.logout(),
-  me:     () => m.me().then(toUsuario),
-  usuarios: {
-    listar:    () => m.listarUsuarios().then(r => r.map(toUsuario)),
-    obter:     (id) => m.obterUsuario(id).then(toUsuario),
-    criar:     (data) => m.criarUsuario(data).then(toUsuario),
-    atualizar: (id, patch) => m.atualizarUsuario(id, patch).then(toUsuario),
-    excluir:   (id) => m.excluirUsuario(id),
-  },
-  funcionalidades: {
-    listar: () => m.listarFuncionalidades().then(r => r.map(toFuncionalidade)),
-  },
-  perfis: {
-    listar:    () => m.listarPerfis().then(r => r.map(toPerfil)),
-    obter:     (id) => m.obterPerfil(id).then(toPerfil),
-    criar:     ({ nome, descricao, codigos }) => m.criarPerfil({ nome, descricao, codigosFuncionalidades: codigos }).then(toPerfil),
-    atualizar: (id, patch) => m.atualizarPerfil(id, patch).then(toPerfil),
-    excluir:   (id) => m.excluirPerfil(id),
-    substituirFuncionalidades: (id, codigos) => m.substituirFuncionalidadesPerfil(id, codigos),
-  },
-  categorias: {
-    listar:    () => m.listarCategorias().then(r => r.map(toCategoria)),
-    criar:     (data) => m.criarCategoria(data).then(toCategoria),
-    atualizar: (id, patch) => m.atualizarCategoria(id, patch).then(toCategoria),
-    excluir:   (id) => m.excluirCategoria(id),
-  },
-  permissoes: {
-    doUsuario: (userId) => m.permissoesUsuario(userId).then(r => r.map(toPermissao)),
-    substituirSobrescritas: (userId, sobrescritas) => m.substituirSobrescritas(userId, { sobrescritas }),
-  },
-}
-
-/*
- * VITE_MOCK=true          → tudo no mock
- * VITE_MOCK_MODULES=a,b   → só esses módulos no mock (auth, usuarios, funcionalidades, perfis, permissoes, categorias, produtos, dashboard)
- * Integração módulo a módulo: tire o módulo da lista quando ele passar nos testes contra a API real.
- */
-const AUTH_KEYS = ['login', 'logout', 'me']
-const mockedModules = new Set(
-  import.meta.env.VITE_MOCK === 'true'
-    ? [...Object.keys(realApi), 'auth']
-    : (import.meta.env.VITE_MOCK_MODULES ?? '').split(',').map(s => s.trim()).filter(Boolean)
-)
-// produtos/receitas no mock ficam no próprio store do painel (estado local), não no mockServer
-export const isMocked = (mod) => mockedModules.has(mod)
-const pick = (key) => {
-  const mod = AUTH_KEYS.includes(key) ? 'auth' : ['receitas', 'movimentacoes'].includes(key) ? 'produtos' : key
-  return (mockedModules.has(mod) ? mockApi : realApi)[key]
-}
-
-export const api = Object.fromEntries(Object.keys(realApi).map(key => [key, pick(key)]))
+export const api = realApi
