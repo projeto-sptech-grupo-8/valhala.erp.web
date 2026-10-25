@@ -107,7 +107,7 @@ function Etiquetas({ job }) {
             <div className="foot">
               <div className="unit">
                 {up && <>R$ {money(up.valor)} / {up.unidade}<br /></>}
-                {p.id}
+                {p.sku || p.id}
               </div>
               {p.ean && <Barcode code={p.ean} />}
             </div>

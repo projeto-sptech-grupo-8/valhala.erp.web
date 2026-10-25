@@ -48,8 +48,8 @@ export function useUserActions({ navigate, perfis = [], funcionalidades = [], ov
       view && { label: 'Ver detalhes', icon: Eye, onClick: () => navigate('usuario', { id: u.id }) },
       edit && can('USUARIOS_EDITAR') && { label: 'Editar dados', icon: Pencil, onClick: () => navigate('editarusuario', { id: u.id }) },
       can('USUARIOS_EDITAR') && { label: 'Mudar perfil', icon: KeyRound, onClick: () => open.changeProfile(u) },
-      (can('USUARIOS_INATIVAR') || can('USUARIOS_EXCLUIR')) && { divider: true },
-      can('USUARIOS_INATIVAR') && {
+      (can('USUARIOS_EDITAR') || can('USUARIOS_EXCLUIR')) && { divider: true },
+      can('USUARIOS_EDITAR') && {
         label: u.active ? 'Inativar acesso' : 'Reativar acesso', icon: u.active ? UserX : UserCheck,
         disabled: self, hint: 'Você não pode inativar a própria conta', onClick: () => open.toggleActive(u),
       },
@@ -104,7 +104,7 @@ export function useUserActions({ navigate, perfis = [], funcionalidades = [], ov
           title={`Excluir ${m.user.name}?`}
           subtitle="Esta ação é permanente e não pode ser desfeita."
           confirmLabel="Excluir definitivamente" danger busy={busy} requireText={m.user.email} onClose={close}
-          extraActions={can('USUARIOS_INATIVAR') && m.user.active && (
+          extraActions={can('USUARIOS_EDITAR') && m.user.active && (
             <button type="button" className={a.linkBtn} disabled={busy} onClick={() => open.toggleActive(m.user)}>Inativar em vez disso</button>
           )}
           onConfirm={() => run(async () => { await api.usuarios.excluir(m.user.id); onDeleted?.(m.user) },

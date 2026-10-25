@@ -180,7 +180,7 @@ function Ruptura({ dias, products, exportar }) {
             </BarChart>
           </ResponsiveContainer>
         )}
-        <p className={s.chartNote}>Venda perdida = unidades procuradas enquanto o produto estava zerado × preço. Ruptura crônica pede rever estoque mínimo ou fornecedor.</p>
+        <p className={s.chartNote}>Venda perdida = unidades procuradas enquanto o produto estava zerado × preço. Ruptura crônica pede rever o estoque mínimo.</p>
       </article>
       <DataTable caption="Ruptura por produto" columns={columns} rows={rows} initialSort={{ key: 'vendaPerdida', dir: 'desc' }} pageSize={15} />
     </>
@@ -201,7 +201,7 @@ function Horarios({ sales, dias, exportar }) {
       <div className="stats">
         <Stat a="Horário de pico" b={`${picos[0]?.dia} ${picos[0]?.hora}h`} c={`${picos[0]?.tickets ?? 0} vendas no período · ${fmtBRL(picos[0]?.receita ?? 0)}`} />
         <Stat a="Dia mais forte" b={melhorDia?.dia} c={`${melhorDia?.tickets} vendas em ${dias} dias`} />
-        <Stat a="Dia mais fraco" b={piorDia?.dia} c={`${piorDia?.tickets} vendas — bom para folga e inventário`} />
+        <Stat a="Dia mais fraco" b={piorDia?.dia} c={`${piorDia?.tickets} vendas — bom para folga e recebimento`} />
       </div>
       <article className="card">
         <div className={s.cardTitleRow}>
@@ -248,7 +248,7 @@ function Horarios({ sales, dias, exportar }) {
           </div>
         )}
         <p className={s.chartNote}>
-          <b>Escala sugerida:</b> reforçar a equipe em {picos.map(p => `${p.dia} ${p.hora}h`).join(', ')}; usar {piorDia?.dia} para inventário e recebimento de mercadoria.
+          <b>Escala sugerida:</b> reforçar a equipe em {picos.map(p => `${p.dia} ${p.hora}h`).join(', ')}; usar {piorDia?.dia} para recebimento de mercadoria.
         </p>
       </article>
     </>
@@ -368,7 +368,7 @@ export function Relatorios({ navigate, pageParams }) {
         ))}
       </nav>
 
-      <p className={s.ruleNote}><Info size={14} aria-hidden="true" /> Dados de demonstração: 90 dias simulados a partir do giro de cada produto + as vendas reais desta sessão. Com o backend, os números passam a vir do banco.</p>
+      <p className={s.ruleNote}><Info size={14} aria-hidden="true" /> Baseado nas vendas do caixa registradas neste navegador: o back ainda não guarda vendas, então cada computador vê só as próprias.</p>
 
       {aba === 'abc' && <ABC sales={sales} exportar={exportar} />}
       {aba === 'margem' && <Margem sales={sales} exportar={exportar} />}

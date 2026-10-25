@@ -20,7 +20,6 @@ import { Cash } from './dash/Cash.jsx'
 import { Listing } from './dash/Listing.jsx'
 import { Validades } from './dash/Validades.jsx'
 import { EntradaNF } from './dash/EntradaNF.jsx'
-import { Inventario } from './dash/Inventario.jsx'
 import { Auditoria } from './dash/Auditoria.jsx'
 import { Relatorios } from './dash/Relatorios.jsx'
 import { PrintHost } from './dash/components/Print.jsx'
@@ -48,11 +47,10 @@ function Page({ page, navigate, pageParams, setTitle }) {
   if (page === 'financeiro')    return <Finance />
   if (page === 'validades')     return <Validades navigate={navigate} />
   if (page === 'entradanf')     return <EntradaNF navigate={navigate} />
-  if (page === 'inventario')    return <Inventario navigate={navigate} pageParams={pageParams} />
   if (page === 'auditoria')     return <Auditoria />
   if (page === 'relatorios')    return <Relatorios navigate={navigate} pageParams={pageParams} />
   if (page === 'caixa')         return <Cash />
-  if (['orcamento', 'notafiscal'].includes(page)) return <Listing page={page} />
+  if (page === 'notafiscal')    return <Listing page={page} />
   if (page === 'usuarios')      return <UsersList navigate={navigate} setTitle={setTitle} pageParams={pageParams} />
   if (page === 'novousuario')   return <UserForm navigate={navigate} setTitle={setTitle} />
   if (page === 'editarusuario') return <UserForm navigate={navigate} setTitle={setTitle} userId={pageParams.id} />

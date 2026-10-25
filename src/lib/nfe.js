@@ -1,5 +1,5 @@
 /*
- * Leitura do XML da NF-e (modelo 55) do fornecedor.
+ * Leitura do XML da NF-e (modelo 55) de entrada.
  * Lê só o necessário para a entrada de mercadoria: cabeçalho, emitente, itens e rastro (lote/validade).
  * Independe de namespace (funciona com ou sem xmlns do portal fiscal).
  */
@@ -59,7 +59,7 @@ export function parseNFe(xml) {
       numero: text(ide, 'nNF'),
       serie: text(ide, 'serie'),
       emissao: dh,
-      fornecedor: text(emit, 'xFant') || text(emit, 'xNome'),
+      emitente: text(emit, 'xFant') || text(emit, 'xNome'),
       razao: text(emit, 'xNome'),
       cnpj: onlyDigits(text(emit, 'CNPJ') || text(emit, 'CPF')),
       valor: num(text(first(inf, 'ICMSTot'), 'vNF')),

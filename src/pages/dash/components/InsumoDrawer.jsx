@@ -23,7 +23,7 @@ export function InsumoDrawer({ product: p, onClose, navigate }) {
   return (
     <Drawer onClose={onClose} title={`Detalhes de ${p.name}`}>
       <div>
-        <span className={s.stockCode}>{p.id}</span>
+        <span className={s.stockCode}>{p.sku || p.id}</span>
         <h2 className={s.drawerTitle}>{p.name}</h2>
         <div className={s.drawerTags}>
           <StatusChip status={st} />
@@ -53,7 +53,6 @@ export function InsumoDrawer({ product: p, onClose, navigate }) {
 
       {[
         ['Custo unitário', fmtBRL(p.cost)],
-        ['Localização',    p.local],
         ['Unidade',        p.unit],
         ...(mlDisp ? [['Volume da embalagem', `${p.volumeEmbalagem}ml`]] : []),
       ].map(([label, val]) => (

@@ -34,8 +34,8 @@ export default function Login({ go, onSuccess }) {
         const fe = err.fieldErrors ?? {}
         setErrors({
           email:   fe.email    ?? undefined,
-          pass:    fe.password ?? undefined,
-          general: !fe.email && !fe.password ? err.message : undefined,
+          pass:    fe.senha ?? fe.password ?? undefined,
+          general: !fe.email && !fe.senha && !fe.password ? err.message : undefined,
         })
       }
     } finally {

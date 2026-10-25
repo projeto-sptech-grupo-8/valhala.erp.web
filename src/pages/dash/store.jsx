@@ -1,60 +1,30 @@
 import { useEffect, useRef, useState } from 'react'
-import { allProducts, drinkProducts, movimentacoes } from './mock.js'
 import { getStatus, isCritical } from './estoque.js'
 import { StoreCtx } from './useStore.js'
 import { caixaResumo } from './caixa.js'
 import { makeCan } from './pages.js'
 import { readTheme, saveTheme, applyTheme, clearTheme } from '../../lib/theme.js'
+import { api, fromProduto, fromReceita, toReceita, fromMovimento, toMovimento } from '../../lib/api.js'
 import {
-  addLot, consumeFEFO, consumeLot, normalizeLots, weightedCost, addDaysISO, describeUsed, SEM_LOTE,
+  addLot, consumeFEFO, consumeLot, normalizeLots, weightedCost, describeUsed, SEM_LOTE,
 } from './lotes.js'
 
 /*
  * Store do painel (estado local + localStorage).
  * Concentra tudo que muda com o uso: estoque (com lotes/FEFO), movimentações, mesas, caixa, vendas,
- * entradas por NF-e, inventários e auditoria do caixa.
- * Quando o backend existir, cada ação abaixo vira uma chamada em src/lib/api.js.
+ * entradas por NF-e e auditoria do caixa.
+ *
+ * Catálogo (produtos e drinks): com o módulo `produtos` fora do mock, a fonte da verdade é a API e o
+ * store funciona como cache. Campos que o back ainda não tem (LOCAL_FIELDS: dose,
+ * fardo, lotes/validade, receita "livre") continuam guardados aqui, por produto, e são mesclados a
+ * cada sincronização. Os lotes se reconciliam com o saldo real (normalizeLots).
  */
 const KEY = 'valhalla:store:v2'
-const KEY_V1 = 'valhalla:store:v1'
+const LOCAL_FIELDS = ['doseMl', 'unidadesFardo', 'saidas30d', 'lotes']
+const isUuid = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(String(id))
 
 const round = (n) => Math.round(n * 1000) / 1000
 const round2 = (n) => Math.round(n * 100) / 100
-
-/* lotes de demonstração (validade relativa a hoje) */
-const SEED_LOTS = {
-  'BEB-001': [['L2609A', 12, 18], ['L2610B', 75, 30]],
-  'BEB-002': [['ST0926', 40, 8]],
-  'BEB-003': [['BD0812', -3, 6], ['BD0905', 25, 12], ['BD0920', 110, 18]],
-  'BEB-004': [['CR0801', 5, 8], ['CR0915', 90, 16]],
-  'BEB-012': [['RB0830', 20, 24], ['RB0920', 160, 48]],
-  'BEB-013': [['AG0901', 200, 96]],
-  'BEB-014': [['CB0911', 28, 20]],
-}
-function seedLots(p) {
-  const def = SEED_LOTS[p.id]
-  if (!def) return [{ id: `LT-${p.id}-0`, lote: `${p.id.slice(-3)}-${new Date().getFullYear()}`, validade: null, qty: p.qty, custo: p.cost, nf: '', entradaEm: '2026-08-01T10:00:00' }]
-  return def.map(([lote, dias, qty], i) => ({ id: `LT-${p.id}-${i}`, lote, validade: addDaysISO(dias), qty, custo: p.cost, nf: '', entradaEm: `2026-0${7 + (i % 2)}-1${i}T10:00:00` }))
-}
-
-function seedMovements() {
-  return movimentacoes.map((m, i) => {
-    const [, time] = m.data.split(' · ')
-    const prod = allProducts.find(p => p.name.startsWith(m.produto))
-    return {
-      id: `MOV-SEED-${i}`,
-      em: `${m.dateISO}T${time}:00`,
-      produtoId: prod?.id || '',
-      produto: m.produto,
-      tipo: m.tipo,
-      qty: m.tipo === 'Ajuste' ? m.qty : Math.abs(m.qty),
-      operador: m.operador,
-      nf: m.nf,
-      fornecedor: m.fornecedor,
-      obs: '',
-    }
-  })
-}
 
 const DEFAULT_CONFIG = {
   limiteDescontoPct: 10,
@@ -66,9 +36,10 @@ const DEFAULT_CONFIG = {
 function seed() {
   return {
     version: 2,
-    products: allProducts.map(p => ({ ...p, lotes: seedLots(p) })),
-    drinks: drinkProducts.map(d => ({ ...d, receita: d.receita.map(r => ({ ...r })) })),
-    movements: seedMovements(),
+    // catálogo: começa vazio e é preenchido pela API
+    products: [],
+    drinks: [],
+    movements: [],
     orders: [{ id: 1, label: 'Mesa 1', canal: 'Mesa', items: [] }],
     activeOrderId: 1,
     nextOrderId: 2,
@@ -76,29 +47,10 @@ function seed() {
     sessoes: [],
     sales: [],
     seq: 1,
-    vinculos: {},        // de-para fornecedor → produto: { 'CNPJ|cProd': { produtoId, fator } }
-    nfsImportadas: [],   // [{ chave, numero, serie, fornecedor, cnpj, valor, itens, em, operador }]
-    inventarios: [],
+    vinculos: {},        // de-para emitente da NF-e → produto: { 'CNPJ|cProd': { produtoId, fator } }
+    nfsImportadas: [],   // [{ chave, numero, serie, emitente, cnpj, valor, itens, em, operador }]
     auditoria: [],
     config: DEFAULT_CONFIG,
-  }
-}
-
-/* v1 → v2: produtos ganham lotes (saldo atual vira SEM-LOTE) e EAN do cadastro; nada registrado se perde */
-function migrate(old) {
-  const base = seed()
-  const products = (old.products || base.products).map(p => {
-    const ref = allProducts.find(a => a.id === p.id)
-    const withEan = { ...p, ean: p.ean || ref?.ean || '' }
-    return { ...withEan, lotes: normalizeLots(withEan) }
-  })
-  return {
-    ...base,
-    ...old,
-    version: 2,
-    products,
-    orders: (old.orders || base.orders).map(o => ({ canal: 'Mesa', ...o })),
-    config: { ...DEFAULT_CONFIG, ...(old.config || {}) },
   }
 }
 
@@ -107,10 +59,12 @@ function load() {
     const raw = localStorage.getItem(KEY)
     if (raw) {
       const st = JSON.parse(raw)
+      // cache antigo (ids que não são UUID, ex.: BEB-/DRK-) não se mistura com o catálogo da API
+      if ([...(st.products || []), ...(st.drinks || [])].some(p => !isUuid(p.id))) {
+        Object.assign(st, { products: [], drinks: [], movements: [] })
+      }
       return { ...seed(), ...st, config: { ...DEFAULT_CONFIG, ...(st.config || {}) } }
     }
-    const v1 = localStorage.getItem(KEY_V1)
-    if (v1) return migrate(JSON.parse(v1))
   } catch { /* storage indisponível ou corrompido */ }
   return seed()
 }
@@ -133,11 +87,82 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
     setState(next)
   }
 
+  /* ─── Catálogo remoto: API + campos locais ─── */
+  const [catalog, setCatalog] = useState({ status: 'loading', error: null })
+
+  async function syncCatalog() {
+    try {
+      const lista = await api.produtos.listar()
+      const drinksApi = lista.filter(p => p.tipo === 'drink')
+      const receitas = await Promise.all(drinksApi.map(d => api.receitas.obter(d.id).catch(() => [])))
+      const st = ref.current
+      const anterior = new Map([...st.products, ...st.drinks].map(p => [p.id, p]))
+      const local = (p) => Object.fromEntries(LOCAL_FIELDS.filter(k => anterior.get(p.id)?.[k] !== undefined).map(k => [k, anterior.get(p.id)[k]]))
+      const products = lista.filter(p => p.tipo === 'padrao').map(p => {
+        const merged = { saidas30d: 0, ...local(p), ...p }
+        return { ...merged, lotes: normalizeLots({ ...merged, lotes: merged.lotes || [] }) }
+      })
+      const drinks = drinksApi.map((d, i) => {
+        const livres = (anterior.get(d.id)?.receita || []).filter(r => r.livre)
+        return { ...local(d), ...d, receita: [...toReceita(receitas[i], products), ...livres] }
+      })
+      // histórico: as movimentações mais recentes do back (substituem as locais)
+      const movs = await api.movimentacoes.listar()
+      commit({ ...ref.current, products, drinks, movements: movs.map(m => toMovimento(m, products)) })
+      setCatalog({ status: 'ready', error: null })
+    } catch (error) {
+      setCatalog({ status: 'error', error })
+    }
+  }
+
+  useEffect(() => { syncCatalog() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const reloadCatalog = () => { setCatalog(c => ({ ...c, status: 'loading' })); return syncCatalog() }
+
+  // PATCH só com o que mudou; fracionamento/volume não mudam depois de criado (regra do back)
+  function patchProduto(antes, depois) {
+    const a = fromProduto(antes), d = fromProduto(depois)
+    delete d.fracionado; delete d.volumeEmbalagemMl
+    return Object.fromEntries(Object.entries(d).filter(([k, v]) => JSON.stringify(a[k]) !== JSON.stringify(v)))
+  }
+  const receitaMudou = (a = [], b = []) =>
+    JSON.stringify(fromReceita(a, ref.current.products)) !== JSON.stringify(fromReceita(b, ref.current.products))
+
+  async function saveProductRemote(product, originalId) {
+    const st = ref.current
+    const antes = originalId ? [...st.products, ...st.drinks].find(p => p.id === originalId) : null
+    let salvo
+    if (!antes) {
+      salvo = await api.produtos.criar(product)
+      if (product.tipo === 'drink') {
+        try {
+          await api.receitas.substituir(salvo.id, fromReceita(product.receita, st.products))
+        } catch (e) {
+          await api.produtos.excluir(salvo.id).catch(() => {}) // não deixa drink sem receita
+          throw e
+        }
+      }
+    } else {
+      const patch = patchProduto(antes, product)
+      salvo = Object.keys(patch).length ? await api.produtos.atualizar(antes.id, patch) : antes
+      if (product.tipo === 'drink' && receitaMudou(antes.receita, product.receita)) {
+        await api.receitas.substituir(antes.id, fromReceita(product.receita, st.products))
+      }
+    }
+    // guarda os campos locais e a parte "livre" da receita antes de sincronizar
+    const listKey = product.tipo === 'drink' ? 'drinks' : 'products'
+    const localPart = Object.fromEntries(LOCAL_FIELDS.filter(k => product[k] !== undefined).map(k => [k, product[k]]))
+    const cur = ref.current
+    const entry = { ...(antes || {}), ...salvo, ...localPart, ...(product.tipo === 'drink' && { receita: product.receita }) }
+    commit({ ...cur, [listKey]: [...cur[listKey].filter(p => p.id !== salvo.id), entry] })
+    await syncCatalog()
+    return salvo
+  }
+
   // IDs únicos mesmo com várias movimentações no mesmo milissegundo
   let localSeq = 0
   function makeMovement(st, fields) {
     localSeq++
-    return { id: `MOV-${Date.now()}-${st.seq}-${localSeq}`, em: new Date().toISOString(), operador, nf: '', fornecedor: '', obs: '', ...fields }
+    return { id: `MOV-${Date.now()}-${st.seq}-${localSeq}`, em: new Date().toISOString(), operador, nf: '', obs: '', ...fields }
   }
 
   function auditEntry(fields) {
@@ -160,15 +185,7 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
   const actions = {
     /* ─── Produtos ─── */
     saveProduct(product, originalId) {
-      const st = ref.current
-      const listKey = product.tipo === 'drink' ? 'drinks' : 'products'
-      const list = st[listKey]
-      const exists = list.some(p => p.id === (originalId || product.id))
-      const prepared = listKey === 'products' && !exists ? { ...product, lotes: normalizeLots({ ...product, lotes: [] }) } : product
-      const nextList = exists
-        ? list.map(p => p.id === (originalId || product.id) ? { ...p, ...prepared } : p)
-        : [...list, prepared]
-      commit({ ...st, [listKey]: nextList })
+      return saveProductRemote(product, originalId)
     },
 
     /* ─── Movimentações manuais (RF07) — com lote e FEFO ─── */
@@ -196,7 +213,7 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
 
       const mov = makeMovement(st, {
         produtoId, produto: prod.name, tipo, qty: qtyMov, operador: rest.operador || operador,
-        nf: rest.nf || '', fornecedor: rest.fornecedor || '',
+        nf: rest.nf || '',
         lote: tipo === 'Entrada' ? (lote || SEM_LOTE) : '', validade: tipo === 'Entrada' ? (validade || null) : null,
         obs: obsWith(rest.obs, used),
       })
@@ -211,7 +228,7 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
       if (!prod) throw new Error('Produto não encontrado.')
       const r = consumeLot(prod.lotes, loteId)
       const products = withProduct(st.products, produtoId, p => ({ ...p, lotes: r.lotes }))
-      const mov = makeMovement(st, { produtoId, produto: prod.name, tipo: 'Saída', qty: r.used[0].qty, obs: obsWith(motivo, r.used) })
+      const mov = makeMovement(st, { produtoId, produto: prod.name, tipo: 'Saída', perda: true, qty: r.used[0].qty, obs: obsWith(motivo, r.used) })
       commit({ ...st, products, movements: [mov, ...st.movements], seq: st.seq + 1 })
       return r.used[0]
     },
@@ -235,76 +252,16 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
         vinculos[`${nf.cnpj}|${it.cProd}`] = { produtoId: prod.id, fator: it.fator }
         movs.push(makeMovement(st, {
           produtoId: prod.id, produto: prod.name, tipo: 'Entrada', qty: it.qty,
-          nf: nf.numero, fornecedor: nf.fornecedor, lote: it.lote || SEM_LOTE, validade: it.validade || null,
+          nf: nf.numero, lote: it.lote || SEM_LOTE, validade: it.validade || null,
           obs: `NF-e ${nf.numero} · item ${it.cProd}${it.fator !== 1 ? ` (${it.qCom} ${it.uCom} × ${it.fator})` : ''} · custo ${it.custo.toFixed(2).replace('.', ',')}`,
         }))
       }
       const registro = {
-        chave: nf.chave, numero: nf.numero, serie: nf.serie, fornecedor: nf.fornecedor, cnpj: nf.cnpj,
+        chave: nf.chave, numero: nf.numero, serie: nf.serie, emitente: nf.emitente, cnpj: nf.cnpj,
         valor: nf.valor, itens: validos.length, ignorados: itens.length - validos.length, em: new Date().toISOString(), operador,
       }
       commit({ ...st, products, vinculos, movements: [...movs.reverse(), ...st.movements], nfsImportadas: [registro, ...st.nfsImportadas], seq: st.seq + movs.length + 1 })
       return registro
-    },
-
-    /* ─── Inventário cego por setor ─── */
-    criarInventario({ setor }) {
-      const st = ref.current
-      if (st.inventarios.some(i => i.setor === setor && (i.status === 'contando' || i.status === 'revisao'))) {
-        throw new Error(`Já existe um inventário em andamento para ${setor}.`)
-      }
-      const itens = st.products.filter(p => p.local === setor)
-      if (!itens.length) throw new Error('Nenhum produto neste setor.')
-      const inv = {
-        id: `INV-${String(st.inventarios.length + 1).padStart(3, '0')}`,
-        setor, status: 'contando', criadoEm: new Date().toISOString(), operador,
-        snapshot: itens.map(p => ({ produtoId: p.id, produto: p.name, unit: p.unit, sistema: p.qty, custo: p.cost })),
-        contagem: {},
-      }
-      commit({ ...st, inventarios: [inv, ...st.inventarios] })
-      return inv
-    },
-    salvarContagem(id, produtoId, valor) {
-      const st = ref.current
-      commit({ ...st, inventarios: st.inventarios.map(i => i.id === id ? { ...i, contagem: { ...i.contagem, [produtoId]: valor } } : i) })
-    },
-    mudarStatusInventario(id, status) {
-      const st = ref.current
-      commit({ ...st, inventarios: st.inventarios.map(i => i.id === id ? { ...i, status } : i) })
-    },
-    aprovarInventario(id, { autorizadoPor }) {
-      const st = ref.current
-      const inv = st.inventarios.find(i => i.id === id)
-      if (!inv || inv.status !== 'revisao') throw new Error('Inventário não está em revisão.')
-      let products = st.products
-      const movs = []
-      let divergentes = 0, valorLiquido = 0
-      for (const s of inv.snapshot) {
-        const contado = Number(inv.contagem[s.produtoId])
-        const delta = round(contado - s.sistema)
-        if (!delta) continue
-        divergentes++
-        valorLiquido += delta * s.custo
-        const prod = products.find(p => p.id === s.produtoId)
-        if (!prod) continue
-        let used = []
-        if (delta > 0) {
-          products = withProduct(products, prod.id, p => ({ ...p, lotes: addLot(p.lotes, { lote: SEM_LOTE, qty: delta, custo: p.cost }) }))
-        } else {
-          const r = consumeFEFO(prod.lotes, Math.min(-delta, prod.qty), { allowExpired: true })
-          used = r.used
-          products = withProduct(products, prod.id, p => ({ ...p, lotes: r.lotes }))
-        }
-        movs.push(makeMovement(st, { produtoId: prod.id, produto: prod.name, tipo: 'Ajuste', qty: delta, obs: obsWith(`Diferença de inventário · ${inv.id} · ${inv.setor}`, used) }))
-      }
-      const total = inv.snapshot.length
-      const resultado = { itens: total, divergentes, acuracia: Math.round(((total - divergentes) / total) * 100), valorLiquido: round2(valorLiquido), autorizadoPor }
-      commit({
-        ...st, products, movements: [...movs.reverse(), ...st.movements], seq: st.seq + movs.length + 1,
-        inventarios: st.inventarios.map(i => i.id === id ? { ...i, status: 'concluido', concluidoEm: new Date().toISOString(), resultado } : i),
-        auditoria: [auditEntry({ tipo: 'Inventário aprovado', autorizadoPor, valor: round2(valorLiquido), detalhe: `${inv.id} · ${inv.setor} · ${divergentes} divergência(s)` }), ...st.auditoria],
-      })
-      return resultado
     },
 
     /* ─── Mesas / pedidos (RF04–RF06) ─── */
@@ -396,6 +353,8 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
       for (const it of order.items) {
         if (it.tipo === 'drink') {
           const drink = st.drinks.find(d => d.id === it.id)
+          // na API a baixa do drink é uma operação só (/saida-drink, transacional): o 1º insumo carrega o pedido
+          let drinkOp = { drinkId: it.id, quantidade: it.qty, motivo: `Venda #${num} · ${it.qty}× ${it.name}` }
           for (const r of drink?.receita || []) {
             if (r.livre || !r.produtoId) continue
             const ins = products.find(p => p.id === r.produtoId)
@@ -404,7 +363,8 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
             const c = consumeFEFO(ins.lotes, garrafas)
             if (c.missing > 0) throw new Error(`${ins.name}: sem saldo dentro da validade para ${it.qty}× ${it.name}.`)
             products = withProduct(products, ins.id, p => ({ ...p, lotes: c.lotes }))
-            movs.push(makeMovement(st, { produtoId: ins.id, produto: ins.name, tipo: 'Saída (dose)', qty: garrafas, obs: obsWith(`Venda #${num} · ${it.qty}× ${it.name} (${r.quantidade * it.qty}ml)`, c.used) }))
+            movs.push(makeMovement(st, { produtoId: ins.id, produto: ins.name, tipo: 'Saída (dose)', qty: garrafas, viaDrink: true, drinkOp, obs: obsWith(`Venda #${num} · ${it.qty}× ${it.name} (${r.quantidade * it.qty}ml)`, c.used) }))
+            drinkOp = null
           }
         } else {
           const prod = products.find(p => p.id === it.id)
@@ -493,6 +453,60 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
     },
   }
 
+  /*
+   * Catálogo remoto: toda ação que mexe no saldo roda primeiro localmente (FEFO, lotes, validações) e as
+   * movimentações geradas são enviadas à API na ordem em que ocorreram. Se alguma falhar, as já aceitas
+   * são estornadas por ajuste (regra do back: correção por ajuste/estorno) e o estado local volta ao que era —
+   * a operação acontece inteira ou não acontece.
+   */
+  const POSITIVOS = ['ENTRADA_INICIAL', 'ENTRADA', 'AJUSTE_POSITIVO']
+  async function postarMovimentos(movs, produtos) {
+    const feitos = []
+    try {
+      for (const m of movs) {
+        if (m.drinkOp) feitos.push(...await api.movimentacoes.saidaDrink(m.drinkOp))
+        const body = fromMovimento(m, produtos, { semLote: SEM_LOTE })
+        if (body) feitos.push(await api.movimentacoes.registrar(body))
+      }
+    } catch (e) {
+      const pendentes = []
+      for (const f of feitos.reverse()) {
+        await api.movimentacoes.registrar({
+          produtoId: f.produtoId,
+          tipo: POSITIVOS.includes(f.tipo) ? 'AJUSTE_NEGATIVO' : 'AJUSTE_POSITIVO',
+          quantidade: f.quantidade,
+          motivo: `Estorno automático da movimentação #${f.id} (operação não concluída)`,
+        }).catch(() => pendentes.push(f.id))
+      }
+      if (pendentes.length) e.message += ` Atenção: não foi possível estornar as movimentações ${pendentes.map(id => '#' + id).join(', ')} — revise o histórico.`
+      throw e
+    }
+  }
+
+  async function espelhado(nome, args) {
+    const antes = ref.current
+    const resultado = actions[nome](...args) // validações locais: lança antes de tocar na API
+    const novas = ref.current.movements.slice(0, ref.current.movements.length - antes.movements.length)
+    try {
+      // movimentações locais ficam no início da lista; envia da mais antiga para a mais nova
+      await postarMovimentos([...novas].reverse(), antes.products)
+    } catch (e) {
+      commit(antes)
+      await syncCatalog()
+      throw e
+    }
+    await syncCatalog()
+    return resultado
+  }
+
+  const exposed = {
+    ...actions,
+    addMovement:        (...a) => espelhado('addMovement', a),
+    registrarPerdaLote: (...a) => espelhado('registrarPerdaLote', a),
+    importarNF:         (...a) => espelhado('importarNF', a),
+    finalizeSale:       (...a) => espelhado('finalizeSale', a),
+  }
+
   const role = user?.profileName || 'Somente leitura'
   // tema do painel (escuro padrão); sai do <html> ao deixar o painel (logout → landing escura)
   const [theme, setThemeState] = useState(readTheme)
@@ -503,7 +517,7 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
   // sessão: atualizar dados do usuário logado e encerrar a sessão (ex.: permissões revogadas)
   const session = { updateSelf: (u) => onUserChange?.({ ...user, ...u }), logout: () => onLogout?.() }
   return (
-    <StoreCtx.Provider value={{ ...state, ...actions, operador, user, role, can, session, theme, setTheme, printJob }}>
+    <StoreCtx.Provider value={{ ...state, ...exposed, operador, user, role, can, session, theme, setTheme, printJob, catalog: { ...catalog, remote: true, reload: reloadCatalog } }}>
       {children}
     </StoreCtx.Provider>
   )

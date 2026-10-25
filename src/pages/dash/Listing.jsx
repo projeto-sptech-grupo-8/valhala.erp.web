@@ -6,7 +6,7 @@ import { DataTable } from './components/DataTable.jsx'
 import { StatusChip } from './components/StatusChip.jsx'
 import s from './dash.module.css'
 
-/* ─── Listing genérico (orçamentos / notas fiscais) ─── */
+/* ─── Listing genérico (notas fiscais) ─── */
 export function Listing({ page }) {
   const toast = useToast()
   const x = lists[page]
@@ -26,7 +26,7 @@ export function Listing({ page }) {
         <button onClick={() => { downloadCSV(`${page}-${stamp()}`, x.heads, x.rows); toast('Arquivo CSV gerado.', { title: 'Exportação concluída' }) }}>
           Exportar <Download size={13} aria-hidden="true" />
         </button>
-        <button className="gold" onClick={() => toast(PENDING_BACKEND, { type: 'info', title: page === 'notafiscal' ? 'Emitir NF-e' : 'Novo orçamento' })}>
+        <button className="gold" onClick={() => toast(PENDING_BACKEND, { type: 'info', title: 'Emitir NF-e' })}>
           Novo <Plus size={13} aria-hidden="true" />
         </button>
       </div>

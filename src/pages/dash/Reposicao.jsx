@@ -32,7 +32,7 @@ export function Reposicao({ navigate }) {
     const lines = urgentes.map(p => `${p.name}: ${fmtNum(p.qty)}/${p.min} ${p.unit} — pedir ${sugestao(p)} ${p.unit}`)
     try {
       await navigator.clipboard.writeText(lines.join('\n'))
-      toast('Cole no WhatsApp ou e-mail do fornecedor.', { title: 'Lista copiada' })
+      toast('Cole no WhatsApp ou e-mail do pedido de compra.', { title: 'Lista copiada' })
     } catch {
       toast('O navegador bloqueou a área de transferência. Use "Exportar".', { type: 'error', title: 'Não foi possível copiar' })
     }
@@ -40,8 +40,8 @@ export function Reposicao({ navigate }) {
 
   function exportar() {
     downloadCSV(`reposicao-${stamp()}`,
-      ['Código', 'Produto', 'Categoria', 'Fornecedor', 'Em estoque', 'Mínimo', 'Sugestão de compra', 'Unidade', 'Situação'],
-      urgentes.map(p => [p.id, p.name, p.cat, p.fornecedor || '', p.qty, p.min, sugestao(p), p.unit, getStatus(p)]))
+      ['Código', 'Produto', 'Categoria', 'Em estoque', 'Mínimo', 'Sugestão de compra', 'Unidade', 'Situação'],
+      urgentes.map(p => [p.sku || p.id, p.name, p.cat, p.qty, p.min, sugestao(p), p.unit, getStatus(p)]))
     toast(`${urgentes.length} itens exportados.`, { title: 'Exportação concluída' })
   }
 

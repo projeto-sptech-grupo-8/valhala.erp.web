@@ -9,7 +9,7 @@ const MAX_TENTATIVAS = 3
 const BLOQUEIO_S = 30
 
 /*
- * Autorização do gerente para ações sensíveis (desconto acima do limite, cancelamento, ajuste de inventário).
+ * Autorização do gerente para ações sensíveis (desconto acima do limite, cancelamento).
  * - operador já é Gerente/Admin → confirma com motivo (fica registrado que ele mesmo autorizou)
  * - senão → gerente presente digita o PIN (mock: Configurações gerais; backend: endpoint de aprovação)
  * 3 PINs errados bloqueiam por 30s.

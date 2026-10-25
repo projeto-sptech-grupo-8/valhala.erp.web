@@ -2,7 +2,8 @@ import { cloneElement, useRef, useState } from 'react'
 import { Package, Wine, CheckCircle, Plus, X, AlertTriangle, ArrowLeft } from 'lucide-react'
 import { useToast } from '../../components/useToast.js'
 import { fmtBRL, fmtNum } from '../../lib/format.js'
-import { cats, stores, fornecedoresData } from './mock.js'
+import { api } from '../../lib/api.js'
+import { useResource } from '../../lib/useResource.js'
 import { useStore } from './useStore.js'
 import { getCustoDrink, rendColor } from './estoque.js'
 import { Modal } from './components/Modal.jsx'
@@ -53,17 +54,15 @@ function emptyForm(tipo, p) {
   return {
     name: p?.name || '',
     id: p?.id || '',
-    cat: p?.cat || (tipo === 'drink' ? 'Drinks' : ''),
+    cat: p?.categoriaId != null ? String(p.categoriaId) : (p?.cat || ''),
     unit: p?.unit || (tipo === 'drink' ? 'copo' : 'un'),
-    local: p?.local || '',
-    fornecedor: p?.fornecedor || '',
     lote: p?.lote || '',
     validade: p?.validade || '',
     cost: p?.cost ?? '',
     price: p?.price ?? '',
     min: p?.min ?? '',
     qty: p?.qty ?? '',
-    vendaDose: p?.doseMl ? 'Sim' : 'Não',
+    vendaDose: p?.fracionado || p?.doseMl ? 'Sim' : 'Não',
     doseMl: p?.doseMl ?? '',
     fardo: p?.unidadesFardo ? 'Sim' : 'Não',
     unidadesFardo: p?.unidadesFardo ?? '',
@@ -73,10 +72,12 @@ function emptyForm(tipo, p) {
 
 const num = (v) => (v === '' || v == null ? NaN : Number(v))
 
-function validate(tipo, f, receita, { products, drinks, originalId }) {
+function validate(tipo, f, receita, { products, drinks, originalId, remote }) {
   const e = {}
   if (!f.name.trim()) e.name = 'Informe o nome do produto.'
-  if (!f.id.trim()) e.id = 'Informe o código/SKU.'
+  // com a API, o SKU é gerado pelo back
+  if (remote) { /* sem validação de código */ }
+  else if (!f.id.trim()) e.id = 'Informe o código/SKU.'
   else if (!/^[A-Z0-9-]{3,20}$/i.test(f.id.trim())) e.id = 'Use de 3 a 20 letras, números ou hífen.'
   else if ([...products, ...drinks].some(p => p.id.toUpperCase() === f.id.trim().toUpperCase() && p.id !== originalId)) e.id = 'Já existe um produto com este código.'
   if (!f.cat) e.cat = 'Selecione a categoria.'
@@ -87,7 +88,7 @@ function validate(tipo, f, receita, { products, drinks, originalId }) {
     if (!(num(f.min) >= 0)) e.min = 'Informe o estoque mínimo — ele dispara os alertas de reposição.'
     if (!originalId && !(num(f.qty) >= 0)) e.qty = 'Informe a quantidade inicial (pode ser 0).'
     if (f.vendaDose === 'Sim') {
-      if (!(num(f.doseMl) > 0)) e.doseMl = 'Informe o volume da dose.'
+      if (!(num(f.doseMl) > 0) && !remote) e.doseMl = 'Informe o volume da dose.' // com a API é só auxiliar de venda (guardado localmente)
       if (!(num(f.volumeEmbalagem) > 0)) e.volumeEmbalagem = 'Necessário para calcular doses por garrafa.'
       else if (num(f.doseMl) > num(f.volumeEmbalagem)) e.doseMl = 'A dose não pode ser maior que a embalagem.'
     }
@@ -103,10 +104,31 @@ function validate(tipo, f, receita, { products, drinks, originalId }) {
 }
 
 /* ─── Novo / Editar produto (padrão Object Page) ─── */
+// o formulário só monta com o produto em mãos: com a API, o catálogo pode ainda estar carregando (F5 / link direto)
 export function ProductForm({ navigate, editId }) {
-  const { products, drinks, saveProduct } = useStore()
-  const toast = useToast()
+  const { products, drinks, catalog } = useStore()
   const editData = editId ? [...products, ...drinks].find(p => p.id === editId) : null
+
+  if (editId && !editData && catalog.status === 'loading') {
+    return <article className="card" style={{ padding: 40 }} role="status">Carregando produto…</article>
+  }
+  if (editId && !editData) {
+    return (
+      <article className="card" style={{ textAlign: 'center', padding: 40 }}>
+        <p>Produto <b>{editId}</b> não encontrado.</p>
+        <button onClick={() => navigate('produtos')}><ArrowLeft size={13} aria-hidden="true" /> Voltar para produtos</button>
+      </article>
+    )
+  }
+  return <ProductFormBody key={editId || 'novo'} navigate={navigate} editData={editData} />
+}
+
+function ProductFormBody({ navigate, editData }) {
+  const { products, drinks, saveProduct, catalog } = useStore()
+  const toast = useToast()
+  const categorias = useResource(() => api.categorias.listar(), [])
+  const [busy, setBusy] = useState(false)
+  const remote = catalog.remote
   const isEdit = !!editData
 
   const [tipo, setTipo]         = useState(editData?.tipo || null)
@@ -117,15 +139,6 @@ export function ProductForm({ navigate, editId }) {
   const [dirty, setDirty]       = useState(false)
   const [confirmLeave, setConfirmLeave] = useState(false)
   const formRef = useRef(null)
-
-  if (editId && !editData) {
-    return (
-      <article className="card" style={{ textAlign: 'center', padding: 40 }}>
-        <p>Produto <b>{editId}</b> não encontrado.</p>
-        <button onClick={() => navigate('produtos')}><ArrowLeft size={13} aria-hidden="true" /> Voltar para produtos</button>
-      </article>
-    )
-  }
 
   if (!tipo) {
     return (
@@ -138,7 +151,11 @@ export function ProductForm({ navigate, editId }) {
     )
   }
 
-  const ctx = { products, drinks, originalId: editData?.id }
+  const ctx = { products, drinks, originalId: editData?.id, remote }
+  const lockFrac = remote && isEdit // o back não permite mudar fracionamento/volume após o cadastro
+  // categorias ativas (+ a atual, se estiver inativa); no mock, produtos antigos guardam só o nome
+  const catOptions = (categorias.data || []).filter(c => c.ativo || String(c.id) === form.cat || c.nome === form.cat)
+  const catSel = catOptions.find(c => String(c.id) === form.cat || c.nome === form.cat)
 
   function upd(k, v) {
     const next = { ...form, [k]: v }
@@ -155,8 +172,9 @@ export function ProductForm({ navigate, editId }) {
 
   const bind = (k) => ({ value: form[k], onChange: e => upd(k, e.target.value) })
 
-  function save(e) {
+  async function save(e) {
     e?.preventDefault()
+    if (busy) return
     setSubmitted(true)
     const errs = validate(tipo, form, receita, ctx)
     setErrors(errs)
@@ -168,11 +186,11 @@ export function ProductForm({ navigate, editId }) {
     }
     const base = {
       ...(editData || {}),
-      id: form.id.trim().toUpperCase(),
+      id: remote ? editData?.id : form.id.trim().toUpperCase(),
       name: form.name.trim(),
-      cat: form.cat,
+      cat: catSel?.nome ?? form.cat,
+      categoriaId: catSel?.id ?? null,
       unit: form.unit,
-      local: form.local,
       price: Number(form.price),
       tipo,
     }
@@ -183,17 +201,26 @@ export function ProductForm({ navigate, editId }) {
           cost: Number(form.cost),
           min: Number(form.min),
           qty: isEdit ? editData.qty : Number(form.qty),
-          fornecedor: form.fornecedor,
           lote: form.lote,
           validade: form.validade,
           volumeEmbalagem: num(form.volumeEmbalagem) > 0 ? Number(form.volumeEmbalagem) : null,
-          doseMl: form.vendaDose === 'Sim' ? Number(form.doseMl) : null,
+          fracionado: form.vendaDose === 'Sim',
+          doseMl: form.vendaDose === 'Sim' && num(form.doseMl) > 0 ? Number(form.doseMl) : null,
           unidadesFardo: form.fardo === 'Sim' ? Number(form.unidadesFardo) : null,
           saidas30d: editData?.saidas30d ?? 0,
         }
-    saveProduct(product, editData?.id)
-    toast(`${product.name} ${isEdit ? 'atualizado' : 'cadastrado'} com sucesso.`, { title: isEdit ? 'Alterações salvas' : 'Produto criado' })
-    navigate('produtos')
+    setBusy(true)
+    try {
+      await saveProduct(product, editData?.id)
+      setDirty(false)
+      toast(`${product.name} ${isEdit ? 'atualizado' : 'cadastrado'} com sucesso.`, { title: isEdit ? 'Alterações salvas' : 'Produto criado' })
+      navigate('produtos')
+    } catch (ex) {
+      if (ex.fieldErrors && Object.keys(ex.fieldErrors).length) setErrors(ex.fieldErrors)
+      toast(ex.message, { type: 'error', title: 'Não foi possível salvar' })
+    } finally {
+      setBusy(false)
+    }
   }
 
   function cancel() {
@@ -233,8 +260,8 @@ export function ProductForm({ navigate, editId }) {
         </nav>
         <div className={s.tabsActions}>
           <button type="button" onClick={cancel}>Cancelar</button>
-          <button type="submit" className="gold">
-            {isEdit ? 'Salvar alterações' : 'Salvar produto'} <CheckCircle size={13} aria-hidden="true" />
+          <button type="submit" className="gold" disabled={busy} aria-busy={busy || undefined}>
+            {busy ? 'Salvando…' : isEdit ? 'Salvar alterações' : 'Salvar produto'} <CheckCircle size={13} aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -252,15 +279,20 @@ export function ProductForm({ navigate, editId }) {
           <Field name="name" label="Nome do produto" required error={errors.name}>
             <input placeholder={tipo === 'drink' ? 'Ex.: Copo Jack Rocks' : 'Ex.: Heineken 600ml'} {...bind('name')} />
           </Field>
-          <Field name="id" label="Código / SKU" required error={errors.id} hint={isEdit ? 'Alterar o código não afeta o histórico de movimentações.' : undefined}>
-            <input placeholder={tipo === 'drink' ? 'DRK-001' : 'BEB-001'} {...bind('id')} autoCapitalize="characters" />
-          </Field>
-          <Field name="cat" label="Categoria" required error={errors.cat}>
-            <select {...bind('cat')}>
-              <option value="">Selecione</option>
-              {tipo === 'drink'
-                ? <option value="Drinks">Drinks</option>
-                : [...new Set([...cats.map(c => c[0]), ...products.map(p => p.cat)])].map(c => <option key={c}>{c}</option>)}
+          {remote ? (
+            <Field name="sku" label="Código / SKU" hint={isEdit ? undefined : 'Gerado automaticamente ao salvar.'}>
+              <input value={editData?.sku || ''} placeholder="Automático" readOnly />
+            </Field>
+          ) : (
+            <Field name="id" label="Código / SKU" required error={errors.id} hint={isEdit ? 'Alterar o código não afeta o histórico de movimentações.' : undefined}>
+              <input placeholder={tipo === 'drink' ? 'DRK-001' : 'BEB-001'} {...bind('id')} autoCapitalize="characters" />
+            </Field>
+          )}
+          <Field name="cat" label="Categoria" required error={errors.cat} hint={categorias.data && !catOptions.length ? 'Cadastre uma categoria antes (Catálogo › Categorias).' : undefined}>
+            <select value={catSel ? String(catSel.id) : form.cat} onChange={e => upd('cat', e.target.value)} disabled={!categorias.data}>
+              <option value="">{categorias.data ? 'Selecione' : 'Carregando…'}</option>
+              {!catSel && form.cat && <option value={form.cat}>{form.cat}</option>}
+              {catOptions.map(c => <option key={c.id} value={String(c.id)}>{c.nome}{c.ativo ? '' : ' (inativa)'}</option>)}
             </select>
           </Field>
           <Field name="unit" label="Unidade de venda" required>
@@ -270,20 +302,8 @@ export function ProductForm({ navigate, editId }) {
                 : <><option value="un">Unidade (un)</option><option value="garrafa">Garrafa</option><option value="cx">Caixa</option><option value="fardo">Fardo</option><option value="kit">Kit</option><option value="L">Litro (L)</option></>}
             </select>
           </Field>
-          <Field name="local" label="Localização">
-            <select {...bind('local')}>
-              <option value="">Selecione</option>
-              {stores.map(st => <option key={st[0]}>{st[0]}</option>)}
-            </select>
-          </Field>
           {tipo === 'padrao' && (
             <>
-              <Field name="fornecedor" label="Fornecedor">
-                <select {...bind('fornecedor')}>
-                  <option value="">Selecione</option>
-                  {fornecedoresData.map(f => <option key={f.nome}>{f.nome}</option>)}
-                </select>
-              </Field>
               <Field name="lote" label="Número do lote"><input placeholder="Ex.: LOTE-2026-09" {...bind('lote')} /></Field>
               <Field name="validade" label="Data de validade"><input type="date" {...bind('validade')} /></Field>
             </>
@@ -329,15 +349,18 @@ export function ProductForm({ navigate, editId }) {
           <h3>Fracionamento</h3>
           <p className={s.sectionDesc}>Configure como este produto pode ser vendido fracionado (doses) ou em fardos.</p>
           <div className="two">
-            <Field name="volumeEmbalagem" label="Volume da embalagem (ml)" error={errors.volumeEmbalagem} hint="Preenchido, este produto pode ser usado como insumo em drinks.">
-              <input type="number" inputMode="numeric" min="0" placeholder="Ex.: 750" {...bind('volumeEmbalagem')} />
+            <Field
+              name="volumeEmbalagem" label="Volume da embalagem (ml)" error={errors.volumeEmbalagem}
+              hint={lockFrac ? 'Não pode mudar depois do cadastro: o saldo e o histórico dependem dele.' : 'Preenchido, este produto pode ser usado como insumo em drinks.'}
+            >
+              <input type="number" inputMode="numeric" min="0" placeholder="Ex.: 750" {...bind('volumeEmbalagem')} disabled={lockFrac} />
             </Field>
-            <Field name="vendaDose" label="Venda por dose?">
-              <select {...bind('vendaDose')}><option>Não</option><option>Sim</option></select>
+            <Field name="vendaDose" label="Venda por dose?" hint={form.vendaDose === 'Sim' ? 'Produto fracionado: o estoque é controlado em ml.' : undefined}>
+              <select {...bind('vendaDose')} disabled={lockFrac}><option>Não</option><option>Sim</option></select>
             </Field>
             {form.vendaDose === 'Sim' && (
               <Field
-                name="doseMl" label="Volume por dose (ml)" required error={errors.doseMl}
+                name="doseMl" label="Volume por dose (ml)" required={!remote} error={errors.doseMl}
                 hint={num(form.doseMl) > 0 && num(form.volumeEmbalagem) > 0 ? `≈ ${Math.floor(form.volumeEmbalagem / form.doseMl)} doses por embalagem` : undefined}
               >
                 <input type="number" inputMode="numeric" min="1" placeholder="Ex.: 50" {...bind('doseMl')} />
@@ -370,18 +393,29 @@ export function ProductForm({ navigate, editId }) {
                 const rendIngr = r.quantidade > 0 && ins?.volumeEmbalagem ? Math.floor(mlDisp / r.quantidade) : null
                 const custoDose = ins?.volumeEmbalagem ? (ins.cost / ins.volumeEmbalagem) * r.quantidade : null
                 const set = (k, v) => updReceita(list => list.map((x, i) => i === idx ? { ...x, [k]: v } : x))
-
+                // insumo não fracionado é consumido em unidades (UN); internamente a receita segue em ml
+                const emUn = (p) => p?.fracionado === false && p.volumeEmbalagem > 0
+                const un = emUn(ins)
+                const escolher = (id) => {
+                  const novo = products.find(p => p.id === id)
+                  updReceita(list => list.map((x, i) => i === idx ? { ...x, produtoId: id, quantidade: emUn(novo) ? novo.volumeEmbalagem : x.quantidade } : x))
+                }
                 return (
                   <div key={idx} className={s.receitaRow}>
-                    <select value={r.produtoId} onChange={e => set('produtoId', e.target.value)} disabled={r.livre} aria-label={`Insumo da linha ${idx + 1}`}>
+                    <select value={r.produtoId} onChange={e => escolher(e.target.value)} disabled={r.livre} aria-label={`Insumo da linha ${idx + 1}`}>
                       <option value="">Selecione o insumo...</option>
                       {products.filter(p => p.volumeEmbalagem).map(p => (
                         <option key={p.id} value={p.id}>{p.name} ({fmtNum(p.qty)} un · {fmtNum(p.qty * p.volumeEmbalagem)}ml)</option>
                       ))}
                     </select>
                     <div className={s.receitaQtd}>
-                      <input type="number" min="1" value={r.livre ? '' : r.quantidade} disabled={r.livre} onChange={e => set('quantidade', Number(e.target.value))} aria-label={`Dose em ml da linha ${idx + 1}`} />
-                      <span>ml</span>
+                      <input
+                        type="number" min={un ? 0.01 : 1} step={un ? 'any' : 1} disabled={r.livre}
+                        value={r.livre ? '' : un ? Math.round((r.quantidade / ins.volumeEmbalagem) * 1000) / 1000 : r.quantidade}
+                        onChange={e => set('quantidade', un ? Number(e.target.value) * ins.volumeEmbalagem : Number(e.target.value))}
+                        aria-label={`Dose em ${un ? 'unidades' : 'ml'} da linha ${idx + 1}`}
+                      />
+                      <span>{un ? 'un' : 'ml'}</span>
                     </div>
                     <div className={s.receitaCusto}>
                       <b>{custoDose != null && !r.livre ? fmtBRL(custoDose) : '—'}</b>

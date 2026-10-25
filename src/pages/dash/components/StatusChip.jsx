@@ -13,6 +13,7 @@ const chipClass = {
   Cancelada:     s.chipBad,
   Expirado:      s.chipBad,
   Ativo:         s.chipOk,
+  Inativa:       s.chipWarn,
   Revisão:       s.chipWarn,
   'Em trânsito': s.chipWarn,
   Recebida:      s.chipOk,
