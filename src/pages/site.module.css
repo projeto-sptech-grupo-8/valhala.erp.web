@@ -326,6 +326,10 @@
   max-width: var(--max);
   margin: auto;
   padding: 110px 24px 90px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
 }
 
 .stepsHeader {
@@ -377,7 +381,7 @@
 }
 .numberGrid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   margin-top: 48px;
 }
 .numberItem { padding: 10px 0; border-right: 1px solid var(--line); }
