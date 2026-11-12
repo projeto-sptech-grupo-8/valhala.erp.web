@@ -127,6 +127,8 @@ function ProductFormBody({ navigate, editData }) {
   const { products, drinks, saveProduct, catalog } = useStore()
   const toast = useToast()
   const categorias = useResource(() => api.categorias.listar(), [])
+  // insumos da receita: direto do banco (produtos padrão ativos com volume de embalagem), não do cache local
+  const insumosApi = useResource(() => api.produtos.listar({ tipo: 'PADRAO', ativo: true }), [])
   const [busy, setBusy] = useState(false)
   const remote = catalog.remote
   const isEdit = !!editData
@@ -156,6 +158,16 @@ function ProductFormBody({ navigate, editData }) {
   // categorias ativas (+ a atual, se estiver inativa); no mock, produtos antigos guardam só o nome
   const catOptions = (categorias.data || []).filter(c => c.ativo || String(c.id) === form.cat || c.nome === form.cat)
   const catSel = catOptions.find(c => String(c.id) === form.cat || c.nome === form.cat)
+  // na edição, mantém visível um insumo já usado na receita mesmo que tenha sido inativado
+  const insumos = (() => {
+    const ativos = (insumosApi.data || []).filter(p => p.volumeEmbalagem)
+    const usados = receita
+      .filter(r => r.produtoId && !ativos.some(p => p.id === r.produtoId))
+      .map(r => products.find(p => p.id === r.produtoId))
+      .filter(Boolean)
+    return [...ativos, ...usados]
+  })()
+  const findInsumo = (id) => insumos.find(p => p.id === id)
 
   function upd(k, v) {
     const next = { ...form, [k]: v }
@@ -211,7 +223,7 @@ function ProductFormBody({ navigate, editData }) {
         }
     setBusy(true)
     try {
-      await saveProduct(product, editData?.id)
+      await saveProduct(product, editData?.id, { insumos })
       setDirty(false)
       toast(`${product.name} ${isEdit ? 'atualizado' : 'cadastrado'} com sucesso.`, { title: isEdit ? 'Alterações salvas' : 'Produto criado' })
       navigate('produtos')
@@ -235,10 +247,10 @@ function ProductFormBody({ navigate, editData }) {
   const errCount = Object.keys(errors).length
 
   /* prévia da receita */
-  const custoPorCopo = getCustoDrink(receita, products)
+  const custoPorCopo = getCustoDrink(receita, insumos)
   const rendimentoPreview = (() => {
     const limits = receita.filter(r => !r.livre && r.produtoId && r.quantidade > 0).map(r => {
-      const ins = products.find(p => p.id === r.produtoId)
+      const ins = findInsumo(r.produtoId)
       return ins?.volumeEmbalagem ? Math.floor((ins.qty * ins.volumeEmbalagem) / r.quantidade) : null
     }).filter(l => l !== null)
     return limits.length ? Math.min(...limits) : null
@@ -388,7 +400,7 @@ function ProductFormBody({ navigate, editData }) {
               </div>
 
               {receita.map((r, idx) => {
-                const ins = products.find(p => p.id === r.produtoId)
+                const ins = findInsumo(r.produtoId)
                 const mlDisp = ins?.volumeEmbalagem ? ins.qty * ins.volumeEmbalagem : 0
                 const rendIngr = r.quantidade > 0 && ins?.volumeEmbalagem ? Math.floor(mlDisp / r.quantidade) : null
                 const custoDose = ins?.volumeEmbalagem ? (ins.cost / ins.volumeEmbalagem) * r.quantidade : null
@@ -397,14 +409,14 @@ function ProductFormBody({ navigate, editData }) {
                 const emUn = (p) => p?.fracionado === false && p.volumeEmbalagem > 0
                 const un = emUn(ins)
                 const escolher = (id) => {
-                  const novo = products.find(p => p.id === id)
+                  const novo = findInsumo(id)
                   updReceita(list => list.map((x, i) => i === idx ? { ...x, produtoId: id, quantidade: emUn(novo) ? novo.volumeEmbalagem : x.quantidade } : x))
                 }
                 return (
                   <div key={idx} className={s.receitaRow}>
-                    <select value={r.produtoId} onChange={e => escolher(e.target.value)} disabled={r.livre} aria-label={`Insumo da linha ${idx + 1}`}>
-                      <option value="">Selecione o insumo...</option>
-                      {products.filter(p => p.volumeEmbalagem).map(p => (
+                    <select value={r.produtoId} onChange={e => escolher(e.target.value)} disabled={r.livre || !insumosApi.data} aria-label={`Insumo da linha ${idx + 1}`}>
+                      <option value="">{insumosApi.data ? 'Selecione o insumo...' : insumosApi.error ? 'Erro ao carregar insumos' : 'Carregando…'}</option>
+                      {insumos.map(p => (
                         <option key={p.id} value={p.id}>{p.name} ({fmtNum(p.qty)} un · {fmtNum(p.qty * p.volumeEmbalagem)}ml)</option>
                       ))}
                     </select>

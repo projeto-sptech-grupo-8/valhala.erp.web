@@ -127,15 +127,17 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
   const receitaMudou = (a = [], b = []) =>
     JSON.stringify(fromReceita(a, ref.current.products)) !== JSON.stringify(fromReceita(b, ref.current.products))
 
-  async function saveProductRemote(product, originalId) {
+  // `insumos`: produtos usados na conversão da receita (ML/UN); por padrão, o catálogo sincronizado
+  async function saveProductRemote(product, originalId, insumos) {
     const st = ref.current
+    const base = insumos?.length ? insumos : st.products
     const antes = originalId ? [...st.products, ...st.drinks].find(p => p.id === originalId) : null
     let salvo
     if (!antes) {
       salvo = await api.produtos.criar(product)
       if (product.tipo === 'drink') {
         try {
-          await api.receitas.substituir(salvo.id, fromReceita(product.receita, st.products))
+          await api.receitas.substituir(salvo.id, fromReceita(product.receita, base))
         } catch (e) {
           await api.produtos.excluir(salvo.id).catch(() => {}) // não deixa drink sem receita
           throw e
@@ -145,7 +147,7 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
       const patch = patchProduto(antes, product)
       salvo = Object.keys(patch).length ? await api.produtos.atualizar(antes.id, patch) : antes
       if (product.tipo === 'drink' && receitaMudou(antes.receita, product.receita)) {
-        await api.receitas.substituir(antes.id, fromReceita(product.receita, st.products))
+        await api.receitas.substituir(antes.id, fromReceita(product.receita, base))
       }
     }
     // guarda os campos locais e a parte "livre" da receita antes de sincronizar
@@ -184,8 +186,8 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
 
   const actions = {
     /* ─── Produtos ─── */
-    saveProduct(product, originalId) {
-      return saveProductRemote(product, originalId)
+    saveProduct(product, originalId, opts) {
+      return saveProductRemote(product, originalId, opts?.insumos)
     },
 
     /* ─── Movimentações manuais (RF07) — com lote e FEFO ─── */
