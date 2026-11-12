@@ -1,0 +1,5 @@
+.muted { color: var(--dim); font-size: 13px; }
+.dangerSolid { background: #a9483a; border-color: #a9483a; color: #fff; font-weight: 700; }
+.dangerSolid:hover:not(:disabled) { background: #c0503f; border-color: #c0503f; color: #fff; }
+.modalForm { display: grid; gap: 14px; }
+.modalForm label { display: grid; gap: 6px; }

@@ -2,12 +2,12 @@
 
 O **Valhalla ERP** é uma interface web de gestão empresarial desenvolvida para centralizar as principais rotinas de um estabelecimento. O projeto reúne controle de estoque, vendas, pedidos, financeiro, relatórios e configurações de segurança em um painel responsivo e de fácil utilização.
 
-> Este repositório contém o protótipo front-end da aplicação. Os dados exibidos nas telas são demonstrativos e ainda não há integração com API ou banco de dados.
+> O frontend combina telas demonstrativas com integração à API para os fluxos já conectados. Algumas telas e dados continuam sendo simulados no navegador.
 
 ## Funcionalidades
 
 - Site institucional com apresentação da solução e de seus recursos;
-- Fluxos de login e criação de conta com validação de formulário;
+- Fluxos de login e recuperação de acesso com validação de formulário;
 - Dashboard com indicadores, movimentações e alertas de estoque;
 - Cadastro e consulta de produtos, categorias e fornecedores;
 - Controle de movimentações, locais de estocagem e inventário;
@@ -21,6 +21,7 @@ O **Valhalla ERP** é uma interface web de gestão empresarial desenvolvida para
 ## Tecnologias utilizadas
 
 - [React 19](https://react.dev/)
+- [React Router DOM 7](https://reactrouter.com/)
 - [Vite 8](https://vite.dev/)
 - JavaScript com JSX
 - CSS Modules
@@ -71,12 +72,13 @@ O terminal exibirá o endereço local da aplicação, normalmente `http://localh
 Valhalla/
 ├── public/                 # Arquivos estáticos e identidade visual
 ├── src/
-│   ├── components/         # Componentes compartilhados
-│   ├── pages/              # Páginas e módulos da aplicação
-│   ├── App.jsx             # Controle principal das telas
-│   ├── App.module.css      # Estilos globais da aplicação
-│   ├── index.module.css    # Estilos básicos e componentes visuais
-│   └── main.jsx            # Ponto de entrada do React
+│   ├── app/                 # Inicialização, roteamento, providers e configuração global
+│   ├── pages/               # Páginas de rota organizadas por domínio
+│   ├── widgets/             # Blocos compostos, como menu lateral e cabeçalho
+│   ├── features/            # Fluxos e ações do usuário por domínio
+│   ├── entities/            # Modelos, regras e componentes de entidades de negócio
+│   ├── shared/              # API base, UI genérica, hooks, utilitários e estilos globais
+│   └── main.jsx             # Ponto de entrada do React
 ├── index.html
 ├── package.json
 └── vite.config.js
@@ -84,12 +86,11 @@ Valhalla/
 
 ## Estado atual
 
-A navegação é controlada no cliente por estado do React. A autenticação, o QR Code de 2FA e as operações de cadastro, edição e exclusão são simulações visuais. Para uso em produção, o projeto ainda precisa de um back-end, persistência de dados, autenticação real, autorização por perfil e integrações fiscais e financeiras.
+A navegação usa React Router com `HashRouter`, preservando URLs do painel no formato `#/produtos`. As telas privadas passam por uma proteção de sessão e mantêm as checagens de permissão existentes. A estrutura de pastas segue uma organização baseada em Feature-Sliced Design, com APIs públicas para as principais fatias. A integração com API e as simulações ainda variam por módulo; consulte [docs/ARQUITETURA_FSD.md](docs/ARQUITETURA_FSD.md) para os limites e pontos de evolução da arquitetura.
 
 ## Próximos passos sugeridos
 
 - Integrar a aplicação a uma API;
-- Adicionar roteamento com URLs próprias para cada página;
 - Implementar autenticação e controle de sessão;
 - Persistir cadastros e movimentações em banco de dados;
 - Adicionar testes automatizados;
