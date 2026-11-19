@@ -1,3 +1,5 @@
+import { Notice } from '@/shared/ui/feedback/ManagementFeedback.jsx'
+import { Eye, EyeOff, LoaderCircle } from 'lucide-react'
 import { useState } from 'react'
 import Brand from '@/shared/ui/brand/Brand.jsx'
 import { api } from '@/shared/api/api.js'
@@ -8,11 +10,13 @@ const isEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())
 export default function Login({ go, onSuccess }) {
   const [email, setEmail]     = useState('')
   const [pass, setPass]       = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [errors, setErrors]   = useState({})
   const [loading, setLoading] = useState(false)
 
   async function submit(e) {
     e.preventDefault()
+    if (loading) return
     const err = {}
     if (!email.trim())        err.email = 'Informe seu e-mail.'
     else if (!isEmail(email)) err.email = 'E-mail inválido.'
@@ -61,13 +65,13 @@ export default function Login({ go, onSuccess }) {
       <div className={styles.formSide}>
         <button className={styles.back} onClick={() => go('landing')}>← Voltar</button>
 
-        <form onSubmit={submit} noValidate className={styles.form}>
+        <form onSubmit={submit} noValidate className={styles.form} aria-busy={loading}>
           <h2 style={{ fontFamily: 'Inter, sans-serif', fontSize: 24, fontWeight: 700, letterSpacing: '-0.3px', margin: '0 0 4px' }}>
             Bem-vindo de volta
           </h2>
           <p className={styles.sub}>Entre com sua conta para acessar o painel.</p>
 
-          {errors.general && <p className={styles.err} style={{ marginBottom: 12 }}>{errors.general}</p>}
+          {errors.general && <Notice title="Não foi possível entrar" focus>{errors.general}</Notice>}
 
           <label className={styles.field}>
             E-mail
@@ -84,14 +88,21 @@ export default function Login({ go, onSuccess }) {
 
           <label className={styles.field}>
             Senha
+            <div className={styles.passwordField}>
             <input
-              type="password"
+              type={showPassword ? 'text' : 'password'}
+              aria-label="Senha"
+              autoComplete="current-password"
               placeholder="••••••••"
               value={pass}
               onChange={(e) => setPass(e.target.value)}
               className={errors.pass ? styles.invalid : ''}
               disabled={loading}
             />
+            <button type="button" className={styles.passwordToggle} aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'} title={showPassword ? 'Ocultar senha' : 'Mostrar senha'} aria-pressed={showPassword} disabled={loading} onClick={() => setShowPassword(value => !value)}>
+              {showPassword ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
+            </button>
+            </div>
             {errors.pass && <em className={styles.err}>{errors.pass}</em>}
           </label>
 
@@ -103,7 +114,7 @@ export default function Login({ go, onSuccess }) {
           </div>
 
           <button type="submit" className={'gold ' + styles.submit} disabled={loading}>
-            {loading ? 'Entrando…' : 'Entrar'}
+            {loading ? <><LoaderCircle size={16} aria-hidden="true" />Entrando…</> : 'Entrar'}
           </button>
         </form>
       </div>

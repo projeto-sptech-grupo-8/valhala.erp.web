@@ -3,7 +3,7 @@ import { Eye, Pencil, KeyRound, UserX, UserCheck, Trash2 } from 'lucide-react'
 import { api } from '@/shared/api/api.js'
 import { useToast } from '@/shared/ui/notifications/useToast.js'
 import { useStore } from '@/entities/store'
-import { ConfirmModal } from '@/shared/ui/feedback/FeedbackBlocks.jsx'
+import { ConfirmModal } from '@/shared/ui/feedback/ManagementFeedback.jsx'
 import { ChangeProfileModal } from '@/features/access-management/user-editor/ui/ChangeProfileModal.jsx'
 import a from '@/entities/access/ui/access.module.css'
 
@@ -11,16 +11,20 @@ import a from '@/entities/access/ui/access.module.css'
  * Ações sobre usuários (lista e detalhe compartilham as mesmas regras e confirmações).
  * Retorna { menuItems(user, opts), open, modals }.
  */
-export function useUserActions({ navigate, perfis = [], funcionalidades = [], overrides, onChanged, onDeleted }) {
+export function useUserActions({ navigate, onView, onEdit, perfis = [], funcionalidades = [], overrides, onChanged, onDeleted }) {
   const { user: me, can, session } = useStore()
   const toast = useToast()
   const [modal, setModal] = useState(null) // { type, user | users }
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const showModal = value => { setError(''); setModal(value) }
 
   const isSelf = (u) => u?.id === me?.id
-  const close = () => setModal(null)
+  const close = () => { if (!busy) { setError(''); setModal(null) } }
 
   async function run(fn, { title, message }) {
+    if (busy) return
+    setError('')
     setBusy(true)
     try {
       const result = await fn()
@@ -28,7 +32,7 @@ export function useUserActions({ navigate, perfis = [], funcionalidades = [], ov
       setModal(null)
       return result
     } catch (e) {
-      toast(e.message, { type: 'error', title: 'Não foi possível concluir' })
+      setError(e.message)
       return undefined
     } finally {
       setBusy(false)
@@ -36,17 +40,17 @@ export function useUserActions({ navigate, perfis = [], funcionalidades = [], ov
   }
 
   const open = {
-    changeProfile: (user) => setModal({ type: 'perfil', user }),
-    toggleActive: (user) => setModal({ type: user.active ? 'inativar' : 'reativar', user }),
-    remove: (user) => setModal({ type: 'excluir', user }),
-    bulkActive: (users, active) => setModal({ type: 'lote', users: users.filter(u => !isSelf(u) && u.active !== active), active }),
+    changeProfile: (user) => showModal({ type: 'perfil', user }),
+    toggleActive: (user) => showModal({ type: user.active ? 'inativar' : 'reativar', user }),
+    remove: (user) => showModal({ type: 'excluir', user }),
+    bulkActive: (users, active) => showModal({ type: 'lote', users: users.filter(u => !isSelf(u) && u.active !== active), active }),
   }
 
   function menuItems(u, { view = true, edit = true } = {}) {
     const self = isSelf(u)
     return [
-      view && { label: 'Ver detalhes', icon: Eye, onClick: () => navigate('usuario', { id: u.id }) },
-      edit && can('USUARIOS_EDITAR') && { label: 'Editar dados', icon: Pencil, onClick: () => navigate('editarusuario', { id: u.id }) },
+      view && { label: 'Ver detalhes', icon: Eye, onClick: () => onView ? onView(u) : navigate('usuario', { id: u.id }) },
+      edit && can('USUARIOS_EDITAR') && { label: 'Editar dados', icon: Pencil, onClick: () => onEdit ? onEdit(u) : navigate('editarusuario', { id: u.id }) },
       can('USUARIOS_EDITAR') && { label: 'Mudar perfil', icon: KeyRound, onClick: () => open.changeProfile(u) },
       (can('USUARIOS_EDITAR') || can('USUARIOS_EXCLUIR')) && { divider: true },
       can('USUARIOS_EDITAR') && {
@@ -65,7 +69,7 @@ export function useUserActions({ navigate, perfis = [], funcionalidades = [], ov
     <>
       {m?.type === 'perfil' && (
         <ChangeProfileModal
-          user={m.user} perfis={perfis} funcionalidades={funcionalidades} overrides={overrides} isSelf={isSelf(m.user)} busy={busy} onClose={close}
+          user={m.user} perfis={perfis} funcionalidades={funcionalidades} overrides={overrides} isSelf={isSelf(m.user)} busy={busy} error={error} onClose={close}
           onConfirm={(novo) => run(async () => {
             const u = await api.usuarios.atualizar(m.user.id, { profileId: novo.id })
             if (isSelf(m.user)) session.updateSelf({ profileId: novo.id, profileName: novo.nome })
@@ -77,7 +81,7 @@ export function useUserActions({ navigate, perfis = [], funcionalidades = [], ov
       {m?.type === 'inativar' && (
         <ConfirmModal
           title={`Inativar ${m.user.name}?`}
-          confirmLabel="Inativar acesso" danger busy={busy} onClose={close}
+          confirmLabel="Inativar acesso" danger busy={busy} error={error} onClose={close}
           onConfirm={() => run(async () => onChanged?.(await api.usuarios.atualizar(m.user.id, { active: false })),
             { title: 'Usuário inativado', message: `${m.user.name} não consegue mais entrar no sistema.` })}
         >
@@ -91,7 +95,7 @@ export function useUserActions({ navigate, perfis = [], funcionalidades = [], ov
 
       {m?.type === 'reativar' && (
         <ConfirmModal
-          title={`Reativar ${m.user.name}?`} confirmLabel="Reativar acesso" busy={busy} onClose={close}
+          title={`Reativar ${m.user.name}?`} confirmLabel="Reativar acesso" busy={busy} error={error} onClose={close}
           onConfirm={() => run(async () => onChanged?.(await api.usuarios.atualizar(m.user.id, { active: true })),
             { title: 'Usuário reativado', message: `${m.user.name} pode entrar novamente.` })}
         >
@@ -103,7 +107,7 @@ export function useUserActions({ navigate, perfis = [], funcionalidades = [], ov
         <ConfirmModal
           title={`Excluir ${m.user.name}?`}
           subtitle="Esta ação é permanente e não pode ser desfeita."
-          confirmLabel="Excluir definitivamente" danger busy={busy} requireText={m.user.email} onClose={close}
+          confirmLabel="Excluir definitivamente" danger busy={busy} error={error} requireText={m.user.email} onClose={close}
           extraActions={can('USUARIOS_EDITAR') && m.user.active && (
             <button type="button" className={a.linkBtn} disabled={busy} onClick={() => open.toggleActive(m.user)}>Inativar em vez disso</button>
           )}
@@ -121,12 +125,16 @@ export function useUserActions({ navigate, perfis = [], funcionalidades = [], ov
       {m?.type === 'lote' && (
         <ConfirmModal
           title={`${m.active ? 'Reativar' : 'Inativar'} ${m.users.length} usuário${m.users.length === 1 ? '' : 's'}?`}
-          confirmLabel={m.active ? 'Reativar todos' : 'Inativar todos'} danger={!m.active} busy={busy} disabled={m.users.length === 0} onClose={close}
+          confirmLabel={m.active ? 'Reativar todos' : 'Inativar todos'} danger={!m.active} busy={busy} error={error} disabled={m.users.length === 0} onClose={close}
           onConfirm={() => run(async () => {
-            const res = await Promise.allSettled(m.users.map(u => api.usuarios.atualizar(u.id, { active: m.active })))
+            const res = []
+            for (const u of m.users) {
+              try { res.push({ status: 'fulfilled', value: await api.usuarios.atualizar(u.id, { active: m.active }) }) }
+              catch (reason) { res.push({ status: 'rejected', reason, user: u }) }
+            }
             const failed = res.filter(r => r.status === 'rejected').length
             res.forEach(r => r.status === 'fulfilled' && onChanged?.(r.value))
-            if (failed) throw new Error(`${failed} de ${m.users.length} não puderam ser atualizados.`)
+            if (failed) { setModal(current => ({ ...current, users: res.filter(r => r.status === 'rejected').map(r => r.user) })); throw new Error(`${failed} de ${m.users.length} não puderam ser atualizados. Os concluídos foram retirados desta operação.`) }
           }, { title: 'Status atualizado', message: `${m.users.length} usuário(s) ${m.active ? 'reativado(s)' : 'inativado(s)'}.` })}
         >
           {m.users.length === 0

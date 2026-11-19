@@ -41,7 +41,8 @@ async function request(path, options = {}, isRetry = false) {
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', ...csrf, ...options.headers },
     })
-  } catch {
+  } catch (error) {
+    if (error.name === 'AbortError') throw error
     throw Object.assign(
       new Error('Não foi possível conectar ao servidor. Verifique sua conexão.'),
       { status: 0 }
@@ -64,6 +65,7 @@ async function request(path, options = {}, isRetry = false) {
   }
 
   if (res.status === 204) return null
+  if (options.responseType === 'blob') return { blob: await res.blob() }
   return res.json().catch(() => null)
 }
 
@@ -71,6 +73,50 @@ const send = (method, body) => ({ method, body: body === undefined ? undefined :
 
 /* ─── Normalizadores: aceitam campos em PT ou EN e listas paginadas ─── */
 const list = (r) => (Array.isArray(r) ? r : r?.itens ?? r?.content ?? r?.items ?? [])
+
+// Share only pending catalog reads, not persisted data. Each consumer can cancel;
+// the network request is aborted when its last consumer leaves.
+const pendingReads = new Map()
+function catalogRead(path, signal) {
+  if (signal?.aborted) return Promise.reject(new DOMException('Consulta cancelada', 'AbortError'))
+  let entry = pendingReads.get(path)
+  if (!entry) {
+    const controller = new AbortController()
+    entry = { controller, consumers: 0, promise: null }
+    entry.promise = request(path, { signal: controller.signal }).finally(() => {
+      if (pendingReads.get(path) === entry) pendingReads.delete(path)
+    })
+    pendingReads.set(path, entry)
+  }
+  entry.consumers++
+  return new Promise((resolve, reject) => {
+    let done = false
+    function finish(callback, value) {
+      if (done) return
+      done = true
+      signal?.removeEventListener('abort', abort)
+      entry.consumers--
+      callback(value)
+    }
+    function abort() {
+      finish(reject, new DOMException('Consulta cancelada', 'AbortError'))
+      if (!entry.consumers) {
+        if (pendingReads.get(path) === entry) pendingReads.delete(path)
+        entry.controller.abort()
+      }
+    }
+    signal?.addEventListener('abort', abort, { once: true })
+    entry.promise.then(value => finish(resolve, value), error => finish(reject, error))
+  })
+}
+
+// Consultas de tela preservam o envelope e nunca percorrem páginas implicitamente.
+async function paginaDe(path, params = {}, signal, map = x => x) {
+  const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null))
+  query.sort()
+  const result = await catalogRead(`${path}?${query}`, signal)
+  return { ...result, itens: list(result).map(map) }
+}
 
 export const toFuncionalidade = (f) => {
   const codigo = typeof f === 'string' ? f : f.codigo ?? f.code ?? f.codigoFuncionalidade
@@ -180,18 +226,23 @@ export const toProduto = (r) => {
     id: r.id,
     sku: r.sku ?? '',
     name: r.nome ?? '',
-    descricao: r.descricao ?? '',
     tipo: r.tipo === 'DRINK' ? 'drink' : 'padrao',
     categoriaId: r.categoriaId ?? null,
     cat: r.categoriaNome ?? '',
     unit: r.unidadeMedida ?? 'un',
-    ean: r.codigoBarras ?? '',
+    lote: r.lote ?? null,
+    validade: r.validade ?? null,
     cost: n(r.precoCusto) ?? 0,
     price: n(r.precoVenda) ?? 0,
     margem: n(r.margemPercentual),
     fracionado,
     volumeEmbalagem: volume,
+    vendaFardo: !!r.fardo,
+    unidadesFardo: r.unidadesPorFardo ?? null,
+    atualizadoEm: r.atualizadoEm ?? null,
     ativo: r.ativo ?? true,
+    quantidadeEstoqueBase: n(r.quantidadeEstoque),
+    estoqueMinimoBase: n(r.estoqueMinimo),
     qty: round3((n(r.quantidadeEstoque) ?? 0) / base),
     min: round3((n(r.estoqueMinimo) ?? 0) / base),
   }
@@ -207,14 +258,18 @@ export function fromProduto(p, { criar = false } = {}) {
     unidadeMedida: p.unit,
     precoVenda: p.price,
     precoCusto: drink ? undefined : p.cost,
-    codigoBarras: p.ean || undefined,
-    descricao: p.descricao || undefined,
   }
   if (!drink) {
+    body.fardo = !!p.vendaFardo
+    if (p.vendaFardo) body.unidadesPorFardo = Number(p.unidadesFardo)
     body.fracionado = !!p.fracionado
     body.volumeEmbalagemMl = p.volumeEmbalagem ?? undefined
     if (p.min != null) body.estoqueMinimo = round3(p.min * base)
-    if (criar) body.quantidadeInicial = round3((p.qty ?? 0) * base)
+    if (criar) {
+      body.quantidadeInicial = round3((p.qty ?? 0) * base)
+      if (p.validade) body.validade = p.validade
+      if (p.lote) body.lote = p.lote
+    }
   }
   if (criar) body.tipo = drink ? 'DRINK' : 'PADRAO'
   return Object.fromEntries(Object.entries(body).filter(([, v]) => v !== undefined))
@@ -290,26 +345,31 @@ export function fromMovimento(m, produtos, { semLote = 'SEM-LOTE' } = {}) {
     motivo: m.obs || undefined,
     lote: tipo === 'ENTRADA' && m.lote && m.lote !== semLote ? m.lote.slice(0, 100) : undefined,
     numeroNotaFiscal: m.nf ? String(m.nf).slice(0, 50) : undefined,
+      validade: ['ENTRADA', 'AJUSTE_POSITIVO'].includes(tipo) ? m.validade || undefined : undefined,
   }).filter(([, v]) => v !== undefined))
 }
 
 const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 export const toResumoDashboard = (r) => ({
   geradoEm: r?.referencia?.geradoEm ?? null,
-  // mes vem como "2026-10"
-  serieMensal: (r?.movimentacoes?.serieMensal ?? []).map(x => ({
-    m: MESES[Number(String(x.mes).slice(5, 7)) - 1] ?? x.mes,
+  referencia: r?.referencia ?? null,
+  serieMensal: (Array.isArray(r?.movimentacoes?.serieMensal) ? r.movimentacoes.serieMensal : []).map(x => ({
+    m: (MESES[Number(String(x.mes).slice(5, 7)) - 1] ?? x.mes) + '/' + String(x.mes).slice(2, 4),
     mes: x.mes,
-    entradas: Number(x.entradas) || 0,
-    saidas: Number(x.saidas) || 0,
+    entradas: x.entradas == null ? null : Number(x.entradas),
+    saidas: x.saidas == null ? null : Number(x.saidas),
   })),
   estoque: r?.estoque ?? null,
+  movimentacoes: r?.movimentacoes ?? null,
+  ultimasMovimentacoes: Array.isArray(r?.movimentacoes?.ultimas) ? r.movimentacoes.ultimas : [],
+  financeiro: r?.financeiro ?? null,
+  caixa: r?.caixa ?? null,
 })
 
 // erros de campo do back → campos do formulário de produto
 const CAMPOS_PRODUTO = {
   nome: 'name', categoriaId: 'cat', unidadeMedida: 'unit', precoVenda: 'price', precoCusto: 'cost',
-  estoqueMinimo: 'min', quantidadeInicial: 'qty', volumeEmbalagemMl: 'volumeEmbalagem', ingredientes: 'receita',
+    estoqueMinimo: 'min', quantidadeInicial: 'qty', volumeEmbalagemMl: 'volumeEmbalagem', ingredientes: 'receita', fardo: 'vendaFardo', unidadesPorFardo: 'unidadesFardo', validade: 'validade', lote: 'lote',
 }
 const camposDoProduto = (err) => {
   if (err?.fieldErrors) err.fieldErrors = Object.fromEntries(Object.entries(err.fieldErrors).map(([k, v]) => [CAMPOS_PRODUTO[k.split(/[.[]/)[0]] ?? k, v]))
@@ -323,7 +383,7 @@ const realApi = {
   me:     () => request('/usuario/me').then(toUsuario),
 
   usuarios: {
-    listar:    () => request('/usuario').then(r => list(r).map(toUsuario)),
+    listar:    (signal) => catalogRead('/usuario', signal).then(r => list(r).map(toUsuario)),
     obter:     (id) => request(`/usuario/${id}`).then(toUsuario),
     criar:     async (data) => request('/usuario', send('POST', await comNomePerfil(data))).then(toUsuario).catch(camposDoUsuario),
     atualizar: async (id, patch) => request(`/usuario/${id}`, send('PATCH', await comNomePerfil(patch)))
@@ -348,6 +408,8 @@ const realApi = {
   },
 
   categorias: {
+    pagina: (params, signal) => paginaDe('/categorias', params, signal, toCategoria),
+    obter: (id, signal) => catalogRead(`/categorias/${id}`, signal).then(toCategoria),
     listar:    () => todasAsPaginas('/categorias').then(r => r.map(toCategoria)),
     criar:     ({ nome, descricao }) => request('/categorias', send('POST', { nome, descricao })).then(toCategoria),
     atualizar: (id, patch) => request(`/categorias/${id}`, send('PATCH', patch)).then(toCategoria),
@@ -355,8 +417,15 @@ const realApi = {
   },
 
   produtos: {
+    exportar: (params, ids) => {
+      const { busca, categoriaId, tipo, ativo, ordenarPor, direcao } = params
+      const query = new URLSearchParams(Object.entries({ busca, categoriaId, tipo, ativo, ordenarPor, direcao }).filter(([, value]) => value !== '' && value != null))
+      for (const id of ids) query.append('ids', id)
+      return request('/produtos/exportar?' + query, { responseType: 'blob' })
+    },
+    pagina: (params, signal) => paginaDe('/produtos', params, signal, toProduto),
     listar:    (params) => todasAsPaginas('/produtos', params).then(r => r.map(toProduto)),
-    obter:     (id) => request(`/produtos/${id}`).then(toProduto),
+    obter:     (id, signal) => catalogRead(`/produtos/${id}`, signal).then(toProduto),
     criar:     (p) => request('/produtos', send('POST', fromProduto(p, { criar: true }))).then(toProduto).catch(camposDoProduto),
     atualizar: (id, patch) => request(`/produtos/${id}`, send('PATCH', patch)).then(toProduto).catch(camposDoProduto),
     excluir:   (id) => request(`/produtos/${id}`, { method: 'DELETE' }),
@@ -364,11 +433,22 @@ const realApi = {
 
   // série mensal = quantidade de movimentações (entradas/saídas) por mês, já com os meses sem movimento
   dashboard: {
-    resumo: (meses = 6) => request(`/dashboard/resumo?meses=${meses}`).then(toResumoDashboard),
+    resumo: (meses = 6, signal) => catalogRead(`/dashboard/resumo?meses=${meses}`, signal).then(toResumoDashboard),
+  },
+
+  lotes: {
+    pagina: (params, signal) => paginaDe('/lotes', params, signal),
+    resumo: signal => catalogRead('/lotes/resumo', signal),
   },
 
   // corpo/resposta no formato do back; a conversão para a interface é feita por toMovimento/fromMovimento
   movimentacoes: {
+    exportar: (params, signal) => {
+      const { produtoId, tipo, usuarioId, dataInicial, dataFinal, ordenarPor, direcao } = params
+      const query = new URLSearchParams(Object.entries({ produtoId, tipo, usuarioId, dataInicial, dataFinal, ordenarPor, direcao }).filter(([, value]) => value !== '' && value != null))
+      return request('/movimentacoes-estoque/exportar?' + query, { signal, responseType: 'blob' })
+    },
+    pagina: (params, signal) => paginaDe('/movimentacoes-estoque', params, signal),
     // mais recentes primeiro; limita a quantidade de páginas para não carregar o histórico inteiro
     listar: async (params = {}, maxPaginas = 3) => {
       const itens = []
@@ -385,7 +465,7 @@ const realApi = {
 
   // ingredientes no formato do back; a conversão ml ↔ UN é feita por toReceita/fromReceita
   receitas: {
-    obter:      (drinkId) => request(`/drinks/${drinkId}/receita`),
+    obter:      (drinkId, signal) => catalogRead(`/drinks/${drinkId}/receita`, signal),
     substituir: (drinkId, ingredientes) =>
       request(`/drinks/${drinkId}/receita`, send('PUT', { ingredientes })).catch(camposDoProduto),
   },
@@ -398,3 +478,5 @@ const realApi = {
 }
 
 export const api = realApi
+
+export { request as authenticatedRequest }

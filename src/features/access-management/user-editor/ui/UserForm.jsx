@@ -1,17 +1,19 @@
+import { Notice } from '@/shared/ui/feedback/ManagementFeedback.jsx'
 import { cloneElement, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, CheckCircle, AlertTriangle, Eye, EyeOff, KeyRound } from 'lucide-react'
+import { ArrowLeft, CheckCircle, AlertTriangle, Eye, EyeOff, KeyRound, UserRound, ShieldCheck } from 'lucide-react'
 import { api } from '@/shared/api/api.js'
 import { useResource } from '@/shared/lib/hooks/useResource.js'
 import { useToast } from '@/shared/ui/notifications/useToast.js'
 import { useStore } from '@/entities/store'
-import { Modal } from '@/shared/ui/modal/Modal.jsx'
+import { Modal } from '@/shared/ui/feedback/ManagementFeedback.jsx'
 import { ProfileChip } from '@/entities/access/ui'
-import { ErrorBlock, LoadingBlock } from '@/shared/ui/feedback/FeedbackBlocks.jsx'
+import { ErrorBlock, LoadingBlock } from '@/shared/ui/feedback/ManagementFeedback.jsx'
 import { FuncionalidadesPicker } from '@/features/access-management/permissions/ui/PermissionsEditor.jsx'
 import { useUserActions } from '@/features/access-management/users/model/useUserActions.jsx'
 import { fmtPhone, onlyDigits, isEmail, passwordScore } from '@/entities/access'
 import s from '@/shared/styles/panel.module.css'
 import a from '@/entities/access/ui/access.module.css'
+import layout from './UserForm.module.css'
 
 function Field({ name, label, error, hint, required, children }) {
   const ids = [error && `${name}-err`, hint && `${name}-hint`].filter(Boolean).join(' ') || undefined
@@ -60,6 +62,8 @@ export function UserForm({ navigate, userId, setTitle }) {
   const [errors, setErrors] = useState({})
   const [submitted, setSubmitted] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const [uncertain, setUncertain] = useState(false)
   const [showPass, setShowPass] = useState(false)
   const [leave, setLeave] = useState(false)
   const formRef = useRef(null)
@@ -101,12 +105,13 @@ export function UserForm({ navigate, userId, setTitle }) {
 
   async function submit(e) {
     e.preventDefault()
-    if (busy) return
+    if (busy || uncertain || (!isEdit && (perfis.loading || perfis.error || !perfis.data))) return
     setSubmitted(true)
     const errs = validate(form, isEdit)
     setErrors(errs)
     if (Object.keys(errs).length) { focusFirstError(); return }
 
+    setSaveError('')
     setBusy(true)
     try {
       if (isEdit) {
@@ -129,7 +134,7 @@ export function UserForm({ navigate, userId, setTitle }) {
           password: form.password, profileId: form.profileId,
         })
         toast(`${u.name} já pode entrar com o e-mail ${u.email}.`, { title: 'Usuário criado' })
-        navigate('usuario', { id: u.id })
+        navigate('usuarios', { detalhe: u.id })
       }
     } catch (err) {
       const fe = err.fieldErrors || {}
@@ -137,7 +142,8 @@ export function UserForm({ navigate, userId, setTitle }) {
         setErrors(prev => ({ ...prev, ...fe }))
         focusFirstError()
       }
-      toast(err.message, { type: 'error', title: 'Não foi possível salvar' })
+      setSaveError(err.message)
+      if (err.status === 0 && !isEdit) setUncertain(true)
     } finally {
       setBusy(false)
     }
@@ -150,7 +156,7 @@ export function UserForm({ navigate, userId, setTitle }) {
 
   return (
     <form ref={formRef} onSubmit={submit} noValidate aria-busy={busy || undefined}>
-      <div className={s.objBar}>
+      {isEdit && <div className={s.objBar}>
         <button type="button" onClick={cancel} className={a.backBtn}><ArrowLeft size={14} aria-hidden="true" /> {isEdit ? 'Voltar ao usuário' : 'Voltar para usuários'}</button>
         <div className={s.tabsActions}>
           <button type="button" onClick={cancel} disabled={busy}>Cancelar</button>
@@ -158,8 +164,10 @@ export function UserForm({ navigate, userId, setTitle }) {
             {busy ? 'Salvando…' : isEdit ? 'Salvar alterações' : 'Criar usuário'} {!busy && <CheckCircle size={13} aria-hidden="true" />}
           </button>
         </div>
-      </div>
+      </div>}
 
+      {uncertain && <Notice tone="warning" title="Cadastro sem confirmação">A conexão caiu antes da confirmação. Consulte a lista antes de tentar cadastrar novamente. <button type="button" onClick={() => navigate('usuarios')}>Consultar usuários</button></Notice>}
+      {saveError && <Notice title="Não foi possível salvar o usuário" focus>{saveError}</Notice>}
       {errCount > 0 && (
         <div className={s.errSummary} role="alert">
           <AlertTriangle size={15} aria-hidden="true" />
@@ -167,11 +175,12 @@ export function UserForm({ navigate, userId, setTitle }) {
         </div>
       )}
 
-      <div className={a.formGrid}>
+      <fieldset disabled={busy || uncertain} style={{ border: 0, padding: 0, margin: 0 }}>
+      <div className={isEdit ? a.formGrid : layout.cards}>
         <div>
           <section className={`card form ${s.objSection}`} aria-labelledby="sec-dados">
-            <h3 id="sec-dados">Dados da conta</h3>
-            <div className="two">
+            <h3 id="sec-dados">{!isEdit && <UserRound size={19} aria-hidden="true" />}Dados da conta</h3>
+            <div className={'two' + (!isEdit ? ' ' + layout.accountFields : '')}>
               <Field name="name" label="Nome completo" required error={errors.name}>
                 <input value={form.name} onChange={e => upd('name', e.target.value)} placeholder="Ex.: Mariana Costa" autoComplete="off" autoFocus={!isEdit} maxLength={120} />
               </Field>
@@ -187,7 +196,7 @@ export function UserForm({ navigate, userId, setTitle }) {
 
           {!isEdit && (
             <section className={`card form ${s.objSection}`} aria-labelledby="sec-senha">
-              <h3 id="sec-senha">Senha inicial</h3>
+              <h3 id="sec-senha"><KeyRound size={19} aria-hidden="true" />Senha inicial</h3>
               <p className={s.sectionDesc}>Repasse a senha ao usuário por um canal seguro. Ele poderá alterá-la em Segurança.</p>
               <div className="two">
                 <Field name="password" label="Senha" required error={errors.password}>
@@ -214,7 +223,7 @@ export function UserForm({ navigate, userId, setTitle }) {
 
         <aside>
           <section className={`card form ${s.objSection}`} aria-labelledby="sec-acesso">
-            <h3 id="sec-acesso">Perfil de acesso</h3>
+            <h3 id="sec-acesso">{!isEdit && <ShieldCheck size={19} aria-hidden="true" />}Perfil de acesso</h3>
             {isEdit ? (
               <>
                 <p className={s.sectionDesc}>A troca de perfil altera as permissões, por isso tem confirmação própria.</p>
@@ -250,6 +259,9 @@ export function UserForm({ navigate, userId, setTitle }) {
           </section>
         </aside>
       </div>
+
+      </fieldset>
+      {!isEdit && <div className={layout.footer}><button type="button" onClick={cancel} disabled={busy}>Cancelar</button><button type="submit" className="gold" disabled={busy || uncertain || perfis.loading || !!perfis.error}>{busy ? 'Salvando…' : 'Criar usuário'}{!busy && <CheckCircle size={15} aria-hidden="true" />}</button></div>}
 
       {leave && (
         <Modal

@@ -1,4 +1,7 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { Navigate } from 'react-router-dom'
+import { useQueryResource } from '@/shared/lib/hooks/usePagedQuery.js'
+import { ErrorBlock, LoadingBlock, ConfirmModal } from '@/shared/ui/feedback/FeedbackBlocks.jsx'
 import { FileUp, FileCode2, Download, CheckCircle2, AlertTriangle, ArrowLeft, Link2, Ban, PackageCheck } from 'lucide-react'
 import { ToneBadge } from '@/shared/ui/primitives/ui.jsx'
 import { useToast } from '@/shared/ui/notifications/useToast.js'
@@ -16,9 +19,8 @@ function montarItens(parsed, products, vinculos) {
   const { nf, itens } = parsed
   return itens.map(it => {
     const salvo = vinculos[`${nf.cnpj}|${it.cProd}`]
-    const porEan = it.cEAN && products.find(p => p.ean === it.cEAN)
-    const produtoId = salvo?.produtoId || porEan?.id || ''
-    const origem = salvo ? 'vinculo' : porEan ? 'ean' : 'nenhum'
+    const produtoId = products.some(p => p.id === salvo?.produtoId) ? salvo.produtoId : ''
+    const origem = produtoId ? 'vinculo' : 'nenhum'
     const fatorSug = fatorPelaUnidade(it.uCom, it.xProd)
     return {
       ...it,
@@ -34,7 +36,31 @@ function montarItens(parsed, products, vinculos) {
 }
 
 /* ─── Entrada de mercadoria por XML da NF-e ─── */
-export function EntradaNF({ navigate }) {
+export function EntradaNF() {
+  return <Navigate replace to="/produtos?importar=1" />
+}
+
+export function ImportProductsModal({ navigate, onClose }) {
+  const { catalog, can } = useStore()
+  const load = useQueryResource(async () => { await catalog.reload(); return true }, [])
+  const [progress, setProgress] = useState({ etapa: 'upload', busy: false })
+  const [confirmClose, setConfirmClose] = useState(false)
+  function close() {
+    if (progress.busy) return
+    if (progress.etapa === 'conferencia') setConfirmClose(true)
+    else onClose()
+  }
+  if (!can('MOVIMENTAR_ESTOQUE')) return null
+  return <>
+    <Modal title="Importar produtos" subtitle="Arraste o XML de uma NF-e, vincule os itens aos produtos cadastrados e confira as quantidades antes de confirmar a entrada." width={1040} onClose={close}>
+      <p className={s.ruleNote}>A importação registra entradas para produtos já cadastrados; não cria produtos automaticamente. Envie um XML de até 5 MB. Lotes e validade são enviados nas entradas. Vincule os itens manualmente ou por vínculo salvo; o catálogo atual não permite associação por EAN. Vínculos com fornecedores e controle da NF são locais; custo médio não é persistido. Em falha, confira o histórico antes de repetir.</p>
+      {load.loading || catalog.status === 'loading' ? <LoadingBlock label="Preparando a importação" /> : catalog.status === 'error' ? <ErrorBlock error={catalog.error} onRetry={load.reload} /> : <LocalEntradaNF onStateChange={setProgress} navigate={(page, params) => { onClose(); navigate(page, params) }} />}
+    </Modal>
+    {confirmClose && <ConfirmModal title="Descartar a conferência?" confirmLabel="Descartar e fechar" onClose={() => setConfirmClose(false)} onConfirm={onClose}><p>Os itens ainda não confirmados serão descartados. Nenhuma entrada será enviada.</p></ConfirmModal>}
+  </>
+}
+
+function LocalEntradaNF({ navigate, onStateChange }) {
   const { products, vinculos, nfsImportadas, importarNF } = useStore()
   const toast = useToast()
   const [etapa, setEtapa] = useState('upload') // upload | conferencia | concluido
@@ -46,6 +72,7 @@ export function EntradaNF({ navigate }) {
   const [resultado, setResultado] = useState(null)
   const [sair, setSair] = useState(false)
   const fileRef = useRef(null)
+  useEffect(() => { onStateChange?.({ etapa, busy }) }, [etapa, busy, onStateChange])
 
   function carregar(xml, nome) {
     setErro('')
@@ -66,6 +93,7 @@ export function EntradaNF({ navigate }) {
 
   function lerArquivo(file) {
     if (!file) return
+    if (file.size > 5 * 1024 * 1024) { setErro('O XML deve ter no máximo 5 MB.'); return }
     if (!/\.xml$/i.test(file.name) && file.type !== 'text/xml' && file.type !== 'application/xml') {
       setErro('Envie o arquivo .xml da NF-e (não o PDF/DANFE).')
       return
@@ -104,7 +132,7 @@ export function EntradaNF({ navigate }) {
     const avisos = []
     if (!it.ignorar && prod) {
       if (variacao != null && Math.abs(variacao) > VAR_LIMITE) avisos.push(`Custo ${variacao > 0 ? 'subiu' : 'caiu'} ${Math.abs(variacao)}% em relação ao atual (${fmtBRL(prod.cost)}).`)
-      if (!it.validade && PERECIVEIS.includes(prod.cat)) avisos.push('Sem validade: este lote não entra no controle de vencimento (FEFO).')
+      if (!it.validade && PERECIVEIS.includes(prod.cat)) avisos.push('Sem validade: este lote não gera alerta de vencimento e fica por último no FEFO.')
       if (it.validade && dias <= 30 && dias >= 0) avisos.push(`Validade curta: vence em ${dias} dia(s).`)
       if (it.fatorConfirmar) avisos.push(`Unidade "${it.uCom}" sem fator conhecido — confirme quantas unidades vêm em cada ${it.uCom}.`)
     }
@@ -152,7 +180,7 @@ export function EntradaNF({ navigate }) {
         >
           <FileUp size={30} aria-hidden="true" />
           <h3>Arraste o XML da NF-e</h3>
-          <p>O sistema lê itens, quantidades, custo, lote e validade. Você confere tudo antes de entrar no estoque.</p>
+          <p>Ou selecione o arquivo no computador. Depois, escolha os produtos correspondentes e confira os dados antes de confirmar.</p>
           <div className={s.dropActions}>
             <button className="gold" onClick={() => fileRef.current?.click()}><FileCode2 size={14} aria-hidden="true" /> Selecionar arquivo .xml</button>
             <button onClick={() => carregar(sampleNFe(), 'XML de exemplo')}>Usar XML de exemplo</button>
@@ -194,7 +222,7 @@ export function EntradaNF({ navigate }) {
       <article className={`card ${s.doneCard}`}>
         <PackageCheck size={30} aria-hidden="true" />
         <h3>NF-e {resultado.reg.numero} importada</h3>
-        <p>{resultado.reg.itens} item(ns) de {resultado.reg.emitente} deram entrada, com lote, validade e custo médio atualizado.</p>
+        <p>{resultado.reg.itens} item(ns) de {resultado.reg.emitente} tiveram entradas registradas. Lote e validade foram enviados ao servidor nas entradas; vínculos da NF são locais e o custo médio não é atualizado.</p>
         <ul className={s.confirmList}>
           {resultado.linhas.map(l => (
             <li key={l.it.nItem}><b>{l.prod.name}</b> · +{fmtNum(l.qty)} {l.prod.unit} · {fmtBRL(l.custo)}/un · lote {l.it.lote || 'SEM-LOTE'}</li>
@@ -255,7 +283,7 @@ export function EntradaNF({ navigate }) {
               {!it.ignorar && (
                 <div className={s.nfGrid}>
                   <label>
-                    <span>Produto no catálogo {it.origem === 'ean' && <ToneBadge tone="ok" label="pelo EAN" />}{it.origem === 'vinculo' && <ToneBadge tone="ok" label="vínculo salvo" />}{it.origem === 'nenhum' && !it.produtoId && <ToneBadge tone="warn" label="sem vínculo" />}</span>
+                    <span>Produto no catálogo {it.origem === 'vinculo' && <ToneBadge tone="ok" label="vínculo salvo" />}{it.origem === 'nenhum' && !it.produtoId && <ToneBadge tone="warn" label="sem vínculo" />}</span>
                     <select value={it.produtoId} onChange={e => upd(i, { produtoId: e.target.value, origem: e.target.value ? 'manual' : 'nenhum' })} aria-invalid={!prod || undefined}>
                       <option value="">Selecione o produto…</option>
                       {products.map(p => <option key={p.id} value={p.id}>{p.name} ({p.sku || p.id})</option>)}
@@ -296,7 +324,7 @@ export function EntradaNF({ navigate }) {
       </div>
 
       <p className={s.ruleNote}>
-        Ao confirmar: entradas com o número da NF, lotes criados para o FEFO, <b>custo médio ponderado</b> atualizado
+        Ao confirmar: entradas com o número da NF são enviadas ao servidor. Lotes e validade são enviados ao servidor; vínculos e controle da NF são locais e o custo médio de entrada não é persistido
         e vínculo código do item do emitente → produto salvo para as próximas notas.
         {linhas.some(l => l.it.ignorar) && <> Itens ignorados somam {fmtBRL(somaItens - somaAtivos)} e ficam fora da entrada.</>}
       </p>

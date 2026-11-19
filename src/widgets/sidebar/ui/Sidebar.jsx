@@ -29,6 +29,7 @@ function Flyout({ domain, anchor, current, onPick, onClose, footer }) {
       if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && e.target.type !== 'radio') {
         e.preventDefault()
         const links = [...el.querySelectorAll('a')]
+        if (!links.length) return
         const i = links.indexOf(document.activeElement)
         links[e.key === 'ArrowDown' ? (i + 1) % links.length : (i - 1 + links.length) % links.length]?.focus()
       }
@@ -45,7 +46,9 @@ function Flyout({ domain, anchor, current, onPick, onClose, footer }) {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // na metade de baixo da tela, a caixa cresce para cima (nunca sai da viewport)
-  const pos = anchor.top > window.innerHeight / 2
+  const pos = domain.id === 'conta'
+    ? { left: Math.max(8, Math.min(anchor.profileLeft, window.innerWidth - 328)), bottom: Math.max(8, window.innerHeight - anchor.top + 6) }
+    : anchor.top > window.innerHeight / 2
     ? { left: anchor.left, bottom: Math.max(8, window.innerHeight - anchor.bottom) }
     : { left: anchor.left, top: Math.max(8, anchor.top) }
 
@@ -96,7 +99,7 @@ function Flyout({ domain, anchor, current, onPick, onClose, footer }) {
 export function Sidebar({ page, navigate, exit, user, role, can, collapsed, onToggle, mobile, open, onClose }) {
   const current = pages[page]?.parent || page
   const mainDomains = visibleDomains(role, can)
-  const account = visibleDomains(role, can, [accountDomain])[0]
+  const account = accountDomain
   // no mobile a conta vira o último item do acordeão; no desktop abre pelo rodapé
   const domains = mobile && account ? [...mainDomains, account] : mainDomains
   const allDomains = account ? [...mainDomains, account] : mainDomains
@@ -137,7 +140,7 @@ export function Sidebar({ page, navigate, exit, user, role, can, collapsed, onTo
     const r = btn.getBoundingClientRect()
     const asideRight = asideRef.current.getBoundingClientRect().right
     // a caixa pertence à página em que foi aberta: mudou de rota (voltar, link interno), ela some
-    setFlyout({ id: d.id, page, anchor: { btn, top: r.top - 6, bottom: r.bottom + 6, left: asideRight + 8 } })
+    setFlyout({ id: d.id, page, anchor: { btn, top: r.top - 6, bottom: r.bottom + 6, left: asideRight + 8, profileLeft: r.left } })
   }
 
   function toggleSection(id) {
@@ -255,7 +258,7 @@ export function Sidebar({ page, navigate, exit, user, role, can, collapsed, onTo
               className={[s.accountBtn, activeDomain === account.id && s.domainOn, flyout?.id === account.id && s.domainOpen].filter(Boolean).join(' ')}
               aria-expanded={flyout?.id === account.id}
               aria-controls={`flyout-${account.id}`}
-              aria-label={`${user?.name || 'Usuário'} — conta e sistema`}
+              aria-label={`${user?.name || 'Usuário'} — aparência`}
               onClick={e => openFlyout(account, e.currentTarget)}
             >
               <i aria-hidden="true">{initials(user?.name)}</i>

@@ -20,13 +20,16 @@ export function DataTable({
   emptyText = 'Nenhum registro encontrado.',
   caption,
   onRowClick,
+  rowClassName,
+  remote,
 }) {
-  const [sort, setSort] = useState(initialSort || null) // { key, dir: 'asc' | 'desc' }
+  const [localSort, setSort] = useState(initialSort || null) // { key, dir: 'asc' | 'desc' }
   const [rawPage, setPage] = useState(0)
   const [selected, setSelected] = useState(() => new Set())
 
+  const sort = remote ? remote.sort : localSort
   const sorted = useMemo(() => {
-    if (!sort) return rows
+    if (remote || !sort) return rows
     const col = columns.find(c => c.key === sort.key)
     if (!col) return rows
     const get = typeof col.sort === 'function' ? col.sort : (r) => r[col.key]
@@ -38,17 +41,19 @@ export function DataTable({
       if (typeof x === 'number' && typeof y === 'number') return (x - y) * dir
       return String(x).localeCompare(String(y), 'pt-BR', { numeric: true }) * dir
     })
-  }, [rows, columns, sort])
+  }, [rows, columns, sort, remote])
 
-  const pages = Math.max(1, Math.ceil(sorted.length / pageSize))
-  const page = Math.min(rawPage, pages - 1) // filtro reduziu a lista → volta para a última página válida
-  const visible = sorted.slice(page * pageSize, page * pageSize + pageSize)
+  const total = remote ? remote.total : sorted.length
+  const pages = Math.max(1, Math.ceil(total / pageSize))
+  const page = remote ? remote.page : Math.min(rawPage, pages - 1) // filtro reduziu a lista → volta para a última página válida
+  const visible = remote ? rows : sorted.slice(page * pageSize, page * pageSize + pageSize)
 
   // só conta como selecionado o que ainda está na lista filtrada
   const selectedRows = rows.filter(r => selected.has(rowKey(r)))
 
   function toggleSort(col) {
     if (col.sort === false) return
+    if (remote) { remote.onSort({ key: col.key, dir: sort?.key === col.key && sort.dir === 'asc' ? 'desc' : 'asc' }); return }
     setSort(prev => prev?.key === col.key
       ? (prev.dir === 'asc' ? { key: col.key, dir: 'desc' } : null)
       : { key: col.key, dir: 'asc' })
@@ -72,8 +77,8 @@ export function DataTable({
     })
   }
 
-  const from = sorted.length ? page * pageSize + 1 : 0
-  const to = Math.min(sorted.length, (page + 1) * pageSize)
+  const from = visible.length ? page * pageSize + 1 : 0
+  const to = Math.min(total, page * pageSize + visible.length)
 
   return (
     <div className={s.wrap}>
@@ -125,7 +130,7 @@ export function DataTable({
               const key = rowKey(row)
               const isSel = selected.has(key)
               return (
-                <tr key={key} className={`${isSel ? s.selected : ''} ${onRowClick ? s.clickable : ''}`} onClick={onRowClick ? () => onRowClick(row) : undefined}>
+                <tr key={key} className={`${isSel ? s.selected : ''} ${onRowClick ? s.clickable : ''} ${rowClassName?.(row) || ''}`} onClick={onRowClick ? () => onRowClick(row) : undefined}>
                   {selectable && (
                     <td className={s.check} onClick={e => e.stopPropagation()}>
                       <input type="checkbox" checked={isSel} onChange={() => toggleRow(key)} aria-label="Selecionar linha" />
@@ -148,14 +153,14 @@ export function DataTable({
         </table>
       </div>
 
-      {sorted.length > 0 && (
+      {(total > 0 || remote?.page > 0) && (
         <div className={s.pager}>
-          <span>{from}–{to} de {sorted.length}</span>
-          {pages > 1 && (
+          <span>{from}–{to} de {total}</span>
+          {(pages > 1 || page > 0) && (
             <div>
-              <button onClick={() => setPage(page - 1)} disabled={page === 0} aria-label="Página anterior"><ChevronLeft size={14} /></button>
+              <button onClick={() => remote ? remote.onPage(page - 1) : setPage(page - 1)} disabled={page === 0 || remote?.loading} aria-label="Página anterior"><ChevronLeft size={14} /></button>
               <span>Página {page + 1} de {pages}</span>
-              <button onClick={() => setPage(page + 1)} disabled={page >= pages - 1} aria-label="Próxima página"><ChevronRight size={14} /></button>
+              <button onClick={() => remote ? remote.onPage(page + 1) : setPage(page + 1)} disabled={page >= pages - 1 || remote?.loading} aria-label="Próxima página"><ChevronRight size={14} /></button>
             </div>
           )}
         </div>

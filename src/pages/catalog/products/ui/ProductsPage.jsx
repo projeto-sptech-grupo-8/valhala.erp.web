@@ -1,218 +1,115 @@
+import { FilterActions, FilterHeader } from '@/shared/ui/filters/FilterActions.jsx'
+import { RecordAutocomplete } from '@/features/catalog/product-editor/ui/CategoryAutocomplete.jsx'
+import { ImportProductsModal } from '@/pages/inventory/invoice-import/ui/InvoiceImportPage.jsx'
 import { useState } from 'react'
-import {
-  Wine, TrendingUp, BarChart2, Download, Plus, Eye, ArrowDownToLine, Pencil,
-} from 'lucide-react'
-import { Sel } from '@/shared/ui/primitives/ui.jsx'
-import { useToast } from '@/shared/ui/notifications/useToast.js'
-import { fmtBRL, fmtNum } from '@/shared/lib/format.js'
-import { downloadCSV, stamp } from '@/shared/lib/csv.js'
+import { api } from '@/shared/api/api.js'
 import { useStore } from '@/entities/store'
-
-import { getStatusAny, getRendimentoDrink, getEstoqueML, rendColor } from '@/entities/inventory'
-import { StatusChip } from '@/entities/inventory'
-import { ErrorBlock, LoadingBlock } from '@/shared/ui/feedback/FeedbackBlocks.jsx'
+import { getStatus, StatusChip } from '@/entities/inventory'
+import { useListParams, useQueryResource } from '@/shared/lib/hooks/usePagedQuery.js'
 import { DataTable } from '@/shared/ui/data-table/DataTable.jsx'
-import { DrinkDrawer } from '@/features/catalog/product-details'
-import { InsumoDrawer } from '@/features/catalog/product-details'
+import { fmtBRL, fmtNum } from '@/shared/lib/format.js'
+import { useToast } from '@/shared/ui/notifications/useToast.js'
+import { stamp } from '@/shared/lib/csv.js'
 import { EtiquetasModal } from '@/features/catalog/product-labels'
-import { Printer } from 'lucide-react'
-import s from '@/shared/styles/panel.module.css'
+import { ProductDetail } from '@/features/catalog/remote/ProductDetail.jsx'
+import { SearchInput, QueryFeedback } from '@/features/catalog/remote/RemoteControls.jsx'
+import s from '@/features/catalog/remote/remote.module.css'
 
-const STATUS_ORDER = { Zerado: 0, Crítico: 1, Baixo: 2, Estável: 3 }
+import { Download, Printer, Plus, SlidersHorizontal, ChevronDown, Wine, Package, Boxes, GlassWater } from 'lucide-react'
+import { ProductRowActions } from './ProductRowActions.jsx'
+import ui from './ProductsPage.module.css'
+import { CatalogMetricControls, MarginCell, TurnoverCell } from '@/features/catalog/remote/CatalogMetricControls.jsx'
+import { useCatalogMetrics } from '@/features/catalog/remote/useCatalogMetrics.js'
 
-/* ─── Produtos ─── */
-export function Products({ navigate, pageParams }) {
-  const { products, drinks, can, catalog } = useStore()
+
+const sorts = { nome: 'name', sku: 'sku', precoVenda: 'price', precoCusto: 'cost' }
+export function Products({ navigate }) {
+  const { can } = useStore()
+  const { params, update, clear } = useListParams()
+  const [detail, setDetail] = useState(null)
+  const [showMargin, setShowMargin] = useState(false)
+  const [showTurnover, setShowTurnover] = useState(false)
+  const [metricRevision, setMetricRevision] = useState(0)
+  const [labels, setLabels] = useState(null)
+  const [filtersOpen, setFiltersOpen] = useState(true)
+  const [importOpen, setImportOpen] = useState(!!params.importar)
+  const request = { busca: params.busca, categoriaId: params.categoriaId, tipo: params.tipo, ativo: params.ativo,
+    pagina: params.pagina, tamanho: params.tamanho, ordenarPor: sorts[params.ordenarPor] ? params.ordenarPor : 'nome', direcao: params.direcao }
+  const query = useQueryResource(signal => api.produtos.pagina(request, signal), [request])
+  const rows = query.loading || query.error ? [] : query.data?.itens || []
+  const metrics = useCatalogMetrics(rows, { giro: showTurnover, margem: showMargin, enabled: !query.loading && !query.error, revision: metricRevision })
+  function refresh() { setMetricRevision(value => value + 1); query.reload() }
   const toast = useToast()
-  const [search, setSearch]             = useState('')
-  const [catFilter, setCatFilter]       = useState(pageParams?.cat || 'Todas')
-  const [statusFilter, setStatusFilter] = useState(pageParams?.status || 'Todos')
-  const [tipoFilter, setTipoFilter]     = useState('Todos')
-  const [showMargin, setShowMargin]     = useState(false)
-  const [showGiro, setShowGiro]         = useState(false)
-  const [selectedId, setSelectedId]     = useState(null)
-  const [etiquetas, setEtiquetas]       = useState(null) // produtos para imprimir etiqueta
-  const editable = can('GERENCIAR_ESTOQUE')
-  const codeOf = (p) => p.sku || p.id
-
-  const allCombined = [...products, ...drinks]
-  const allCats = ['Todas', ...new Set(allCombined.map(p => p.cat))]
-  const selectedProduct = allCombined.find(p => p.id === selectedId)
-
-  // filtros refletidos na URL → link compartilhável e F5 preserva a visão
-  function setFilter(setter, key, value, empty) {
-    setter(value)
-    const next = { ...pageParams, [key]: value === empty ? '' : value }
-    navigate('produtos', next, { replace: true })
+  const [exporting, setExporting] = useState(false)
+  async function exportRows(items) {
+    if (exporting || !items.length) return
+    setExporting(true)
+    try {
+      const { blob } = await api.produtos.exportar(request, items.map(item => item.id))
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'produtos-' + stamp() + '.xlsx'
+      link.click()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (error) {
+      toast(error.message, { type: 'error', title: 'Não foi possível exportar os produtos' })
+    } finally {
+      setExporting(false)
+    }
   }
-
-  const filtered = allCombined.filter(p => {
-    const st = getStatusAny(p, products)
-    const q = search.toLowerCase()
-    const byTipo =
-      tipoFilter === 'Padrão' ? p.tipo === 'padrao' :
-      tipoFilter === 'Drinks' ? p.tipo === 'drink' : true
-    return byTipo &&
-      (!q || p.name.toLowerCase().includes(q) || codeOf(p).toLowerCase().includes(q)) &&
-      (catFilter === 'Todas' || p.cat === catFilter) &&
-      (statusFilter === 'Todos' || st === statusFilter)
-  })
-
-  const stockPct = (p) => Math.min(100, Math.round((p.qty / (p.min * 2)) * 100))
-  const marginOf = (p) => p.tipo !== 'drink' && p.cost > 0 ? Math.round((p.price - p.cost) / p.price * 100) : null
-  const giroOf = (p) => p.qty > 0 && p.saidas30d > 0 ? p.saidas30d / p.qty : null
-  const coberturaOf = (p) => p.saidas30d > 0 ? Math.round(p.qty / (p.saidas30d / 30)) : null
-  const qtyOf = (p) => p.tipo === 'drink' ? getRendimentoDrink(p, products) : p.qty
-
-  function exportRows(rows, name) {
-    downloadCSV(`${name}-${stamp()}`,
-      ['Código', 'Produto', 'Tipo', 'Categoria', 'Quantidade', 'Mínimo', 'Unidade', 'Custo', 'Preço', 'Margem %', 'Status'],
-      rows.map(p => [codeOf(p), p.name, p.tipo === 'drink' ? 'Drink' : 'Padrão', p.cat, qtyOf(p) ?? '', p.min ?? '', p.unit, p.cost ?? '', p.price, marginOf(p) ?? '', getStatusAny(p, products)]))
-    toast(`${rows.length} produto${rows.length === 1 ? '' : 's'} exportado${rows.length === 1 ? '' : 's'}.`, { title: 'Exportação concluída' })
-  }
-
   const columns = [
-    { key: 'sku', header: 'Código', width: 90, render: p => <span className={s.stockCode}>{codeOf(p)}</span> },
-    {
-      key: 'name', header: 'Produto',
-      render: p => (
-        <button className={s.stockName} onClick={() => setSelectedId(p.id)} title="Ver detalhes">
-          {p.tipo === 'drink' && <Wine size={11} className={s.drinkIcon} aria-hidden="true" />}
-          {p.name}
-          {p.tipo === 'drink' && <em className={s.drinkBadge}>drink</em>}
-        </button>
-      ),
-    },
-    { key: 'cat', header: 'Categoria', width: 110 },
-    {
-      key: 'nivel', header: 'Nível de estoque', width: 130, sort: p => p.tipo === 'drink' ? (getRendimentoDrink(p, products) ?? 0) * 2 : stockPct(p),
-      render: p => {
-        const pct = p.tipo === 'drink' ? Math.min(100, (getRendimentoDrink(p, products) ?? 0) * 2) : stockPct(p)
-        return (
-          <div className={s.levelBar} role="meter" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`Nível ${pct}%`}>
-            <div style={{ width: pct + '%' }} />
-          </div>
-        )
-      },
-    },
-    {
-      key: 'qty', header: 'Qtd. / Mín.', width: 110, align: 'right', sort: qtyOf,
-      render: p => {
-        if (p.tipo === 'drink') {
-          const r = getRendimentoDrink(p, products)
-          return <span className={s.stockQty}><b style={{ color: rendColor(r) }}>{r !== null ? `~${r}` : '—'}</b><small>{p.unit}s possíveis</small></span>
-        }
-        const ml = getEstoqueML(p)
-        return (
-          <span className={s.stockQty}>
-            <span><b>{fmtNum(p.qty)}</b> <small>/ {p.min} {p.unit}</small></span>
-            {ml ? <small>{fmtNum(ml)}ml</small> : null}
-          </span>
-        )
-      },
-    },
-    { key: 'price', header: 'Preço', width: 100, align: 'right', render: p => <span className={s.stockPrice}>{fmtBRL(p.price)}</span> },
-    ...(showMargin ? [
-      { key: 'cost', header: 'Custo', width: 95, align: 'right', render: p => p.tipo !== 'drink' && p.cost > 0 ? fmtBRL(p.cost) : '—' },
-      {
-        key: 'margem', header: 'Margem', width: 85, align: 'right', sort: marginOf,
-        render: p => { const m = marginOf(p); return <b style={{ color: m >= 30 ? 'var(--green)' : 'var(--red)' }}>{m !== null ? m + '%' : '—'}</b> },
-      },
+    { key: 'sku', header: 'Código', width: 85 },
+    { key: 'name', header: 'Produto', width: 190, render: p => <div><button className={ui.name} title={p.name} onClick={() => setDetail(p.id)}>{p.name}</button></div> },
+    { key: 'cat', header: 'Categoria', width: 110, sort: false },
+    { key: 'tipo', header: 'Tipo / Venda', width: 120, sort: false, render: p => <div className={ui.kindTags}>{p.tipo === 'drink' ? <span className={ui.productKind} data-kind="drink"><Wine size={14} aria-hidden="true" />Drink</span> : <><span className={ui.productKind} data-kind="standard"><Package size={14} aria-hidden="true" />Padrão</span>{(p.fracionado || p.vendaFardo) && <span className={ui.saleIcons}>{p.fracionado && <span className={ui.packSale} data-sale="dose" role="img" tabIndex={0} aria-label={p.volumeEmbalagem ? `Venda por dose · volume da embalagem: ${fmtNum(p.volumeEmbalagem)} ml` : 'Venda por dose · volume não informado'} title={p.volumeEmbalagem ? `Venda por dose · volume da embalagem: ${fmtNum(p.volumeEmbalagem)} ml` : 'Venda por dose · volume não informado'}><GlassWater size={15} aria-hidden="true" />{!p.vendaFardo && <span>Dose{p.volumeEmbalagem ? ` · ${fmtNum(p.volumeEmbalagem)} ml` : ''}</span>}</span>}{p.vendaFardo && <span className={ui.packSale} role="img" tabIndex={0} aria-label={p.unidadesFardo ? `Fardo: ${fmtNum(p.unidadesFardo)} unidades` : 'Fardo · quantidade não informada'} title={p.unidadesFardo ? `Fardo: ${fmtNum(p.unidadesFardo)} unidades` : 'Fardo · quantidade não informada'}><Boxes size={15} aria-hidden="true" />{!p.fracionado && <span>Fardo{p.unidadesFardo ? ` · ${fmtNum(p.unidadesFardo)} un` : ''}</span>}</span>}</span>}</>}</div> },
+    { key: 'qty', header: 'Saldo / mínimo', width: 145, align: 'right', sort: false, render: p => p.tipo === 'drink' ? <button type="button" className={ui.recipeLink} onClick={() => setDetail(p.id)} aria-label={'Por receita · consultar ingredientes de ' + p.name}>Por receita</button> : p.fracionado ? <>{fmtNum(p.quantidadeEstoqueBase)} / {fmtNum(p.estoqueMinimoBase)} ml</> : <>{fmtNum(p.qty)} / {fmtNum(p.min)} {p.unit}</> },
+    { key: 'price', header: 'Preço', width: 95, align: 'right', render: p => fmtBRL(p.price) },
+    { key: 'cost', header: 'Custo', width: 95, align: 'right', render: p => p.tipo === 'drink' ? 'Na receita' : fmtBRL(p.cost) },
+    ...(showMargin ? [{ key: 'margem', header: 'Margem bruta', width: 155, align: 'right', sort: false, render: p => <MarginCell loading={metrics.loading || query.loading} data={metrics.data?.[p.id]} /> }] : []),
+    ...(showTurnover ? [
+      { key: 'giro', header: 'Giro (30 dias)', width: 155, align: 'right', sort: false, render: p => <TurnoverCell product={p} loading={metrics.loading || query.loading} data={metrics.data?.[p.id]} /> },
+      { key: 'cobertura', header: 'Cobertura estimada', width: 155, align: 'right', sort: false, render: p => <TurnoverCell coverage product={p} loading={metrics.loading || query.loading} data={metrics.data?.[p.id]} /> },
     ] : []),
-    ...(showGiro ? [
-      {
-        key: 'giro', header: 'Giro/mês', width: 85, align: 'right', sort: giroOf,
-        render: p => {
-          const g = giroOf(p)
-          const color = !g ? 'var(--faint)' : g >= 1 ? 'var(--green)' : g >= 0.5 ? 'var(--gold2)' : 'var(--red)'
-          return <b style={{ color }}>{g ? g.toFixed(1).replace('.', ',') + '×' : '—'}</b>
-        },
-      },
-      { key: 'cob', header: 'Cobertura', width: 90, align: 'right', sort: coberturaOf, render: p => { const c = coberturaOf(p); return c ? `${c} dias` : '—' } },
-    ] : []),
-    { key: 'status', header: 'Status', width: 95, sort: p => STATUS_ORDER[getStatusAny(p, products)], render: p => <StatusChip status={getStatusAny(p, products)} /> },
-    {
-      key: 'acoes', header: <span className={s.srOnly}>Ações</span>, width: 110, sort: false,
-      render: p => (
-        <span className={s.stockActionCell}>
-          <button className={s.iconBtn} title="Ver detalhes" aria-label={`Ver detalhes de ${p.name}`} onClick={() => setSelectedId(p.id)}>
-            <Eye size={14} />
-          </button>
-          {editable && p.tipo !== 'drink' && (
-            <button className={s.iconBtn} title="Registrar entrada" aria-label={`Registrar entrada de ${p.name}`} onClick={() => navigate('movimentacoes', { produto: p.id, novo: 1 })}>
-              <ArrowDownToLine size={14} />
-            </button>
-          )}
-          {editable && (
-            <button className={s.iconBtn} title={p.tipo === 'drink' ? 'Editar receita' : 'Editar produto'} aria-label={`Editar ${p.name}`} onClick={() => navigate('editar', { id: p.id })}>
-              <Pencil size={14} />
-            </button>
-          )}
-        </span>
-      ),
-    },
+    { key: 'stockStatus', header: 'Nível (estimado)', width: 130, sort: false, render: p => p.tipo === 'drink' ? 'Na receita' : p.quantidadeEstoqueBase > 0 && !p.estoqueMinimoBase ? 'Sem mínimo' : <StatusChip status={getStatus({ ...p, qty: p.quantidadeEstoqueBase ?? p.qty, min: p.estoqueMinimoBase ?? p.min })} /> },
+    { key: 'ativo', header: 'Status', width: 85, sort: false, render: p => p.ativo ? 'Ativo' : 'Inativo' },
+    { key: 'actions', header: 'Ações', width: 65, align: 'center', sort: false, render: p => <ProductRowActions product={p} can={can} onDetail={() => setDetail(p.id)} navigate={navigate} /> },
   ]
-
-  if (catalog.status === 'error' && !allCombined.length) return <ErrorBlock error={catalog.error} onRetry={catalog.reload} />
-  if (catalog.status === 'loading' && !allCombined.length) return <LoadingBlock lines={8} label="Carregando produtos" />
-
-  return (
-    <>
-      {catalog.status === 'error' && (
-        <p className={s.errSummary} role="alert">Não foi possível atualizar o catálogo: {catalog.error?.message}. Exibindo a última versão carregada.</p>
-      )}
-      <div className={s.prodToolbar}>
-        <Sel value={tipoFilter} onChange={e => setTipoFilter(e.target.value)} aria-label="Filtrar por tipo">
-          <option value="Todos">Tipo: Todos</option>
-          <option value="Padrão">Padrão</option>
-          <option value="Drinks">Drinks</option>
-        </Sel>
-        <input type="search" placeholder="Buscar por nome ou código..." value={search} onChange={e => setSearch(e.target.value)} aria-label="Buscar produto" />
-        <Sel value={catFilter} onChange={e => setFilter(setCatFilter, 'cat', e.target.value, 'Todas')} aria-label="Filtrar por categoria">
-          {allCats.map(c => <option key={c} value={c}>{c === 'Todas' ? 'Categoria: Todas' : c}</option>)}
-        </Sel>
-        <Sel value={statusFilter} onChange={e => setFilter(setStatusFilter, 'status', e.target.value, 'Todos')} aria-label="Filtrar por status">
-          <option value="Todos">Status: Todos</option>
-          <option>Estável</option><option>Baixo</option><option>Crítico</option><option>Zerado</option>
-        </Sel>
-        <div className={s.colToggles} role="group" aria-label="Colunas extras">
-          <button className={showMargin ? s.segActive : s.segBtn} onClick={() => setShowMargin(m => !m)} aria-pressed={showMargin} title="Mostrar custo e margem">
-            <TrendingUp size={14} aria-hidden="true" /> Margem
-          </button>
-          <button className={showGiro ? s.segActive : s.segBtn} onClick={() => setShowGiro(g => !g)} aria-pressed={showGiro} title="Mostrar giro e cobertura">
-            <BarChart2 size={14} aria-hidden="true" /> Giro
-          </button>
-        </div>
-        <div className={s.prodActions}>
-          <button onClick={() => setEtiquetas(filtered.filter(p => p.tipo !== 'drink'))} title="Etiquetas de gôndola dos produtos filtrados"><Printer size={13} aria-hidden="true" /> Etiquetas</button>
-          <button onClick={() => exportRows(filtered, 'produtos')}>Exportar <Download size={13} aria-hidden="true" /></button>
-          {editable && <button className="gold" onClick={() => navigate('novo')}>Novo produto <Plus size={13} aria-hidden="true" /></button>}
-        </div>
+  return <>
+    <section className={ui.panel} aria-labelledby="catalog-filter-title">
+      <FilterHeader className={ui.heading}>
+        <div><h2 id="catalog-filter-title"><button className={ui.collapse} aria-expanded={filtersOpen} aria-controls="product-filter-fields" onClick={() => setFiltersOpen(v => !v)}><SlidersHorizontal size={17} aria-hidden="true" />Filtros<ChevronDown size={17} aria-hidden="true" className={filtersOpen ? ui.expanded : undefined} /></button></h2><p>Encontre produtos e drinks e organize sua consulta.</p></div>
+        <FilterActions onClear={clear} onRefresh={refresh} refreshing={query.loading} compact={can('GERENCIAR_ESTOQUE')}>{can('GERENCIAR_ESTOQUE') && <button className="gold" onClick={() => navigate('novo')}><Plus size={15} aria-hidden="true" />Novo produto</button>}</FilterActions>
+      </FilterHeader>
+      <div id="product-filter-fields" hidden={!filtersOpen}><div className={ui.filters}>
+        <label className={ui.field}>Tipo<select aria-label="Filtrar por tipo" value={params.tipo || ''} onChange={e => update({ tipo: e.target.value })}><option value="">Todos os tipos</option><option value="PADRAO">Padrão</option><option value="DRINK">Drinks</option></select></label>
+        <label className={ui.field}>Status<select aria-label="Status" value={params.ativo ?? ''} onChange={e => update({ ativo: e.target.value })}><option value="">Todos</option><option value="true">Ativos</option><option value="false">Inativos</option></select></label>
+        <label className={ui.field}>Itens por página<select aria-label="Itens por página" value={params.tamanho} onChange={e => update({ tamanho: Number(e.target.value) })}>{[10,20,50].map(n => <option key={n}>{n}</option>)}</select></label>
       </div>
-
-      <DataTable
-        caption="Lista de produtos"
-        columns={columns}
-        rows={filtered}
-        pageSize={12}
-        initialSort={pageParams?.status ? { key: 'status', dir: 'asc' } : undefined}
-        selectable
-        bulkActions={(rows) => (
-          <>
-            {rows.some(p => p.tipo !== 'drink') && <button onClick={() => setEtiquetas(rows.filter(p => p.tipo !== 'drink'))}><Printer size={13} aria-hidden="true" /> Etiquetas</button>}
-            <button onClick={() => exportRows(rows, 'produtos-selecionados')}>Exportar selecionados <Download size={13} aria-hidden="true" /></button>
-          </>
-        )}
-        emptyText="Nenhum produto encontrado com os filtros aplicados."
-      />
-
-      {etiquetas && <EtiquetasModal products={etiquetas} onClose={() => setEtiquetas(null)} />}
-      {selectedProduct?.tipo === 'drink' && (
-        <DrinkDrawer drink={selectedProduct} onClose={() => setSelectedId(null)} navigate={navigate} />
-      )}
-      {selectedProduct && selectedProduct.tipo !== 'drink' && (
-        <InsumoDrawer product={selectedProduct} onClose={() => setSelectedId(null)} navigate={navigate} />
-      )}
-    </>
-  )
+      </div>
+      <div className={ui.bottom + ' ' + ui.bottomIndicators}>
+        <label className={ui.field}>Buscar nome<SearchInput label="Buscar nome" placeholder="Digite o nome ou código do produto" value={params.busca} onChange={busca => update({ busca })} /></label>
+        <RecordAutocomplete kind="categorias" active={false} label="Buscar categoria" placeholder="Digite o nome da categoria" value={params.categoriaId} onChange={categoriaId => update({ categoriaId })} />
+      <CatalogMetricControls period={metrics.period} margem={showMargin} giro={showTurnover} onMargin={() => setShowMargin(value => !value)} onTurnover={() => setShowTurnover(value => !value)} />
+        <div className={ui.field + ' ' + ui.actionField}><span>Ações</span><div className={ui.actions}>
+          <button title="Exportar os produtos desta página" disabled={exporting || !rows.length || query.loading || !!query.error} onClick={() => exportRows(rows)}><Download size={15} aria-hidden="true" />Exportar</button>
+          <button title="Gerar etiquetas dos produtos desta página" disabled={!rows.some(p => p.tipo === 'padrao') || query.loading || !!query.error} onClick={() => setLabels(rows.filter(p => p.tipo === 'padrao'))}><Printer size={15} aria-hidden="true" />Etiqueta</button>
+        </div></div>
+      </div>
+    </section>
+    {(params.status || params.cat) && <p className={s.notice}>O filtro antigo por nome/situação não foi aplicado. Busque uma categoria acima; a API ainda não oferece filtro global por nível de estoque.</p>}
+    <QueryFeedback query={query} />
+    <div className={ui.table} style={{ '--catalog-table-width': (1225 + (showMargin ? 155 : 0) + (showTurnover ? 310 : 0)) + 'px' }}>
+    <DataTable key={JSON.stringify(request)} caption="Lista de produtos" columns={columns} rows={rows} pageSize={params.tamanho}
+      rowClassName={p => p.tipo === 'drink' ? ui.drinkRow : undefined}
+      remote={{ page: params.pagina, total: query.data?.totalItens || 0, loading: query.loading,
+        sort: { key: sorts[request.ordenarPor], dir: params.direcao.toLowerCase() },
+        onPage: pagina => update({ pagina }, false), onSort: sort => update({ ordenarPor: Object.keys(sorts).find(k => sorts[k] === sort.key), direcao: sort.dir.toUpperCase() }) }}
+      selectable={!query.loading && !query.error} bulkActions={selected => <button disabled={exporting} onClick={() => exportRows(selected)}>Exportar selecionados desta página</button>}
+      emptyText={query.loading ? 'Carregando produtos…' : query.error ? 'Não foi possível carregar esta consulta.' : 'Nenhum produto encontrado com estes filtros.'} />
+    </div>
+    {importOpen && can('MOVIMENTAR_ESTOQUE') && <ImportProductsModal navigate={navigate} onClose={() => { setImportOpen(false); update({ importar: '' }, false); query.reload() }} />}
+    {detail && <ProductDetail key={detail} id={detail} onClose={() => setDetail(null)} navigate={navigate} />}
+    {labels && <EtiquetasModal products={labels} onClose={() => setLabels(null)} />}
+  </>
 }

@@ -1,11 +1,12 @@
+import { Notice } from '@/shared/ui/feedback/ManagementFeedback.jsx'
 import { useState } from 'react'
 import { Plus, Minus, AlertTriangle } from 'lucide-react'
 import { diffCodigos } from '@/shared/config/funcionalidades.js'
-import { Modal } from '@/shared/ui/modal/Modal.jsx'
+import { Modal } from '@/shared/ui/feedback/ManagementFeedback.jsx'
 import a from '@/entities/access/ui/access.module.css'
 
 /* ─── Mudar perfil: escolha + diferença de permissões ─── */
-export function ChangeProfileModal({ user, perfis, funcionalidades, overrides = {}, isSelf, busy, onClose, onConfirm }) {
+export function ChangeProfileModal({ user, perfis, funcionalidades, overrides = {}, isSelf, busy, error, onClose, onConfirm }) {
   const [perfilId, setPerfilId] = useState(user.profileId)
   const atual = perfis.find(p => p.id === user.profileId)
   const novo = perfis.find(p => p.id === perfilId)
@@ -20,7 +21,7 @@ export function ChangeProfileModal({ user, perfis, funcionalidades, overrides = 
     <Modal
       title="Mudar perfil de acesso"
       subtitle={`${user.name} · perfil atual: ${atual?.nome || 'nenhum'}`}
-      onClose={busy ? () => {} : onClose}
+      busy={busy} onClose={onClose}
       width={640}
       footer={<>
         <button type="button" onClick={onClose} disabled={busy}>Cancelar</button>
@@ -29,6 +30,9 @@ export function ChangeProfileModal({ user, perfis, funcionalidades, overrides = 
         </button>
       </>}
     >
+      {error && <Notice title="Não foi possível mudar o perfil" focus>{error}</Notice>}
+      {!perfis.length && <Notice tone="warning" title="Nenhum perfil disponível">Atualize a lista de perfis antes de alterar o acesso.</Notice>}
+      <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0 }}>
       <div className={a.profilePick} role="radiogroup" aria-label="Perfis disponíveis">
         {perfis.map(p => (
           <label key={p.id} className={`${a.profileCard} ${perfilId === p.id ? a.profileCardOn : ''}`}>
@@ -42,6 +46,7 @@ export function ChangeProfileModal({ user, perfis, funcionalidades, overrides = 
         ))}
       </div>
 
+      </fieldset>
       {changed && (
         <div className={a.diff} aria-live="polite">
           <div>

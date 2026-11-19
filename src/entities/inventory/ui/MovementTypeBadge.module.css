@@ -1,0 +1,2 @@
+.badge { display:inline-flex; align-items:center; gap:6px; padding:5px 8px; border:1px solid color-mix(in srgb,var(--movement-color) 35%,transparent); border-radius:6px; background:color-mix(in srgb,var(--movement-color) 10%,transparent); color:var(--movement-color); font-size:11px; font-weight:600; white-space:nowrap; }
+.badge i { width:6px; height:6px; flex-shrink:0; border-radius:50%; background:currentColor; }

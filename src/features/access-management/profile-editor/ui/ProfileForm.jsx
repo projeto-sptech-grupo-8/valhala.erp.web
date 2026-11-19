@@ -1,14 +1,32 @@
+import { Notice } from '@/shared/ui/feedback/ManagementFeedback.jsx'
 import { useRef, useState } from 'react'
-import { ArrowLeft, CheckCircle, AlertTriangle } from 'lucide-react'
+import { Tag, ListChecks, CheckCircle, AlertTriangle } from 'lucide-react'
 import { api } from '@/shared/api/api.js'
 import { useResource } from '@/shared/lib/hooks/useResource.js'
 import { useToast } from '@/shared/ui/notifications/useToast.js'
-import { Modal } from '@/shared/ui/modal/Modal.jsx'
-import { ErrorBlock, LoadingBlock } from '@/shared/ui/feedback/FeedbackBlocks.jsx'
+import { Modal } from '@/shared/ui/feedback/ManagementFeedback.jsx'
+import { ErrorBlock, LoadingBlock } from '@/shared/ui/feedback/ManagementFeedback.jsx'
 import { FuncionalidadesPicker } from '@/features/access-management/permissions/ui/PermissionsEditor.jsx'
+import { agruparPorModulo } from '@/shared/config/funcionalidades.js'
 import { validarNomePerfil } from '@/entities/access'
 import s from '@/shared/styles/panel.module.css'
 import a from '@/entities/access/ui/access.module.css'
+import layout from './ProfileForm.module.css'
+
+const cashSupervision = new Set([
+  'CAIXA_CONFIGURAR',
+  'CAIXA_ESTORNAR',
+  'CAIXA_AUTORIZAR_DESCONTO',
+  'CAIXA_RESOLVER_DIVERGENCIA',
+])
+
+function groupProfilePermissions(functionalities) {
+  const supervision = functionalities.filter(item => cashSupervision.has(item.codigo))
+  const groups = agruparPorModulo(functionalities.filter(item => !cashSupervision.has(item.codigo)))
+  return supervision.length
+    ? [...groups, { id: 'SUPERVISAO_CAIXA', nome: 'Supervisão do caixa', itens: supervision }]
+    : groups
+}
 
 /* ─── Novo perfil ─── */
 export function ProfileForm({ navigate, copyFrom }) {
@@ -22,6 +40,8 @@ export function ProfileForm({ navigate, copyFrom }) {
   const [base, setBase] = useState(copyFrom || '')
   const [errors, setErrors] = useState({})
   const [busy, setBusy] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const [uncertain, setUncertain] = useState(false)
   const [leave, setLeave] = useState(false)
   const nomeRef = useRef(null)
 
@@ -47,37 +67,34 @@ export function ProfileForm({ navigate, copyFrom }) {
 
   async function submit(e) {
     e.preventDefault()
-    if (busy) return
+    if (busy || uncertain) return
     const err = validarNomePerfil(nome, perfis.data)
     setErrors(err ? { nome: err } : {})
     if (err) { nomeRef.current?.focus(); return }
+    setSaveError('')
     setBusy(true)
     try {
       const p = await api.perfis.criar({ nome: nome.trim(), descricao: descricao.trim(), codigos })
       toast(`Perfil ${p.nome} criado com ${p.codigos.length} funcionalidade(s).`, { title: 'Perfil criado' })
-      navigate('perfil', { id: p.id })
+      navigate('perfis', { detalhe: p.id })
     } catch (ex) {
       setErrors(ex.fieldErrors || {})
       if (ex.fieldErrors?.nome) nomeRef.current?.focus()
-      toast(ex.message, { type: 'error', title: 'Não foi possível criar' })
+      setSaveError(ex.message)
+      if (ex.status === 0) setUncertain(true)
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <form onSubmit={submit} noValidate aria-busy={busy || undefined}>
-      <div className={s.objBar}>
-        <button type="button" className={a.backBtn} onClick={() => (dirty ? setLeave(true) : navigate('perfis'))}><ArrowLeft size={14} aria-hidden="true" /> Voltar para perfis</button>
-        <div className={s.tabsActions}>
-          <button type="button" onClick={() => (dirty ? setLeave(true) : navigate('perfis'))} disabled={busy}>Cancelar</button>
-          <button type="submit" className="gold" disabled={busy}>{busy ? 'Criando…' : 'Criar perfil'} {!busy && <CheckCircle size={13} aria-hidden="true" />}</button>
-        </div>
-      </div>
-
-      <section className={`card form ${s.objSection}`} aria-labelledby="pf-ident">
-        <h3 id="pf-ident">Identificação</h3>
-        <div className="two">
+    <form className={layout.editor} onSubmit={submit} noValidate aria-busy={busy || undefined}>
+      {uncertain && <Notice tone="warning" title="Cadastro sem confirmação">A conexão caiu antes da confirmação. Consulte a lista antes de tentar cadastrar novamente. <button type="button" onClick={() => navigate('perfis')}>Consultar perfis</button></Notice>}
+      {saveError && <Notice title="Não foi possível criar o perfil" focus>{saveError}</Notice>}
+      <fieldset disabled={busy || uncertain} className={layout.sections}>
+      <section className={`card form`} aria-labelledby="pf-ident">
+        <h3 id="pf-ident"><Tag size={19} aria-hidden="true" />Identificação</h3>
+        <div className={layout.identificationFields}>
           <label className={errors.nome ? s.fieldError : undefined} htmlFor="pf-nome">
             <span>Nome do perfil <i className={s.req} aria-hidden="true">*</i></span>
             <input id="pf-nome" ref={nomeRef} value={nome} maxLength={100} autoFocus placeholder="Ex.: Caixa noturno"
@@ -101,14 +118,20 @@ export function ProfileForm({ navigate, copyFrom }) {
         </label>
       </section>
 
-      <section className={`card form ${s.objSection}`} aria-labelledby="pf-func">
-        <h3 id="pf-func">Funcionalidades</h3>
+      <section className={`card form`} aria-labelledby="pf-func">
+        <h3 id="pf-func"><ListChecks size={19} aria-hidden="true" />Funcionalidades</h3>
         <p className={s.sectionDesc}>Marque o que os usuários com este perfil poderão fazer.</p>
-        <FuncionalidadesPicker funcionalidades={funcs.data} value={codigos} onChange={setCodigos} idPrefix="new" />
+        <FuncionalidadesPicker className={layout.functionPicker} groupBy={groupProfilePermissions} funcionalidades={funcs.data} value={codigos} onChange={setCodigos} idPrefix="new" />
         {codigos.length === 0 && (
           <p className={a.warnBox}><AlertTriangle size={14} aria-hidden="true" /> Sem funcionalidades, usuários com este perfil não conseguirão usar nenhuma tela.</p>
         )}
       </section>
+
+      </fieldset>
+      <footer className={layout.footer}>
+        <button type="button" onClick={() => (dirty ? setLeave(true) : navigate('perfis'))} disabled={busy}>Cancelar</button>
+        <button type="submit" className="gold" disabled={busy || uncertain}>{busy ? 'Criando…' : 'Criar perfil'} {!busy && <CheckCircle size={15} aria-hidden="true" />}</button>
+      </footer>
 
       {leave && (
         <Modal title="Descartar perfil?" subtitle="As informações preenchidas serão perdidas." width={420} onClose={() => setLeave(false)}

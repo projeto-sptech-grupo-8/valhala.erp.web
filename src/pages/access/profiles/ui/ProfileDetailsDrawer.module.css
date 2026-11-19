@@ -1,0 +1,21 @@
+.header { padding-right: 32px; }
+.header > span { display: flex; align-items: center; gap: 8px; color: var(--dim); font-size: 12px; }
+.header h2 { margin: 12px 0; font-size: 24px; line-height: 1.4; overflow-wrap: anywhere; }
+.description { color: var(--dim); font-size: 14px; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
+.highlights { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 24px; }
+.highlights > div { display: grid; gap: 10px; padding: 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.highlights strong { font-size: 28px; }
+.highlights span { color: var(--dim); font-size: 12px; }
+.highlights svg, .section h3 svg { color: var(--gold2); flex-shrink: 0; }
+.section { margin-top: 24px; padding-top: 22px; border-top: 1px solid var(--line); }
+.section h3 { display: flex; align-items: center; gap: 9px; margin: 0 0 16px; font-size: 15px; }
+.section p { color: var(--dim); font-size: 13px; line-height: 1.7; }
+.group { margin-top: 18px; padding: 16px; border: 1px solid var(--line); border-radius: 8px; }
+.group h4 { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 14px; font-size: 13px; }
+.group h4 span { color: var(--dim); }
+.group ul, .users { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; }
+.group li, .users li > div { display: grid; gap: 6px; min-width: 0; }
+.section b { font-size: 13px; font-weight: 500; overflow-wrap: anywhere; }
+.section small { color: var(--dim); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.users li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+@media (max-width: 420px) { .highlights { grid-template-columns: 1fr; } }

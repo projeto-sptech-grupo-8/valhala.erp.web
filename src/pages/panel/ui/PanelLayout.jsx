@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { FiscalProvider, FiscalReceipts } from '@/pages/sales/invoices/ui/FiscalCheckout.jsx'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ShieldOff, Compass, Menu } from 'lucide-react'
 import { Outlet, useLocation, useSearchParams } from 'react-router-dom'
 import { usePanelNavigate } from '@/shared/lib/navigation/usePanelNavigate.js'
@@ -9,6 +10,7 @@ import { pages, canAccess, firstAllowed } from '@/entities/access'
 import { Sidebar } from '@/widgets/sidebar/ui/Sidebar.jsx'
 import { PageHeader } from '@/widgets/page-header/ui/PageHeader.jsx'
 import { PrintHost } from '@/features/printing'
+import { useCashLogout } from '@/features/sales/cash-session/ui/useCashLogout.jsx'
 import s from '@/shared/styles/panel.module.css'
 
 const MENU_KEY = 'valhalla:menu-recolhido'
@@ -30,6 +32,7 @@ function Shell({ exit }) {
   const { pathname } = useLocation()
   const [searchParams] = useSearchParams()
   const navigate = usePanelNavigate()
+  const cashLogout = useCashLogout({ can, onLogout: exit, navigate })
   const page = pathname.split('/').filter(Boolean).at(-1) || ''
   const params = Object.fromEntries(searchParams)
 
@@ -41,7 +44,17 @@ function Shell({ exit }) {
 
   // títulos definidos pela própria página (ex.: nome do usuário no detalhe), por rota
   const routeKey = page + JSON.stringify(params)
+  const backAction = useRef(null)
+  const setBackAction = useCallback(handler => { backAction.current = { routeKey, handler } }, [routeKey])
+  const handleBack = () => {
+    if (backAction.current?.routeKey !== routeKey || !backAction.current.handler) return false
+    backAction.current.handler()
+    return true
+  }
+  const [headerActionsElement, setHeaderActionsElement] = useState(null)
   const [titles, setTitles] = useState({})
+  const [headerHelp, updateHeaderHelp] = useState(null)
+  const setHeaderHelp = useCallback(text => updateHeaderHelp(current => current?.page === page && current.text === text ? current : { page, text }), [page])
   const setTitle = (t) => setTitles(s => (s[routeKey] === t ? s : { ...s, [routeKey]: t }))
 
   /* ─── Menu lateral: recolhido (desktop) / gaveta (mobile) ─── */
@@ -90,12 +103,13 @@ function Shell({ exit }) {
       )}
 
       <Sidebar
-        page={page} navigate={navigate} exit={exit} user={user} role={role} can={can}
+        page={page} navigate={navigate} exit={cashLogout.requestLogout} user={user} role={role} can={can}
         collapsed={collapsed} onToggle={toggleCollapsed}
         mobile={mobile} open={drawerOpen} onClose={closeDrawer}
       />
       {drawerOpen && <div className={s.scrim} onClick={closeDrawer} aria-hidden="true" />}
       <PrintHost />
+      {cashLogout.modal}
 
       <main className={s.content} id="conteudo" tabIndex={-1}>
         {!known && (
@@ -112,8 +126,9 @@ function Shell({ exit }) {
         )}
         {allowed && (
           <>
-            <PageHeader page={page} navigate={navigate} extra={editName || titles[routeKey]} />
-            <Outlet context={{ setTitle }} />
+            <PageHeader onActionsMount={setHeaderActionsElement} page={page} navigate={navigate} extra={editName || titles[routeKey]} onBack={handleBack} help={headerHelp?.page === page ? headerHelp.text : null} />
+            {(page==='caixa'||page==='pedidos') && <FiscalReceipts />}
+            <Outlet context={{ setTitle, setBackAction, setHeaderHelp, headerActionsElement }} />
           </>
         )}
       </main>
@@ -123,5 +138,5 @@ function Shell({ exit }) {
 
 /* ─── Root ─── */
 export default function PanelLayout({ exit }) {
-  return <Shell exit={exit} />
+  return <FiscalProvider><Shell exit={exit} /></FiscalProvider>
 }

@@ -14,8 +14,3 @@ export function fmtDateTime(date) {
   const p = (x) => String(x).padStart(2, '0')
   return `${p(d.getDate())}/${p(d.getMonth() + 1)} · ${p(d.getHours())}:${p(d.getMinutes())}`
 }
-
-export function fmtTime(date) {
-  const d = new Date(date)
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-}

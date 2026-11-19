@@ -1,250 +1,106 @@
+import { FilterActions, FilterHeader } from '@/shared/ui/filters/FilterActions.jsx'
+import { MovementTypeBadge } from '@/entities/inventory/ui/MovementTypeBadge.jsx'
+import { Notice } from '@/shared/ui/feedback/ManagementFeedback.jsx'
+import { ImportProductsModal } from '@/pages/inventory/invoice-import/ui/InvoiceImportPage.jsx'
+import { Navigate } from 'react-router-dom'
 import { useState } from 'react'
-import { Plus, X, Download, ArrowUp, ArrowDown, RefreshCw } from 'lucide-react'
-import { Sel, KpiStrip } from '@/shared/ui/primitives/ui.jsx'
-import { METAS, toneLower } from '@/entities/reports'
-import { useToast } from '@/shared/ui/notifications/useToast.js'
-import { fmtNum, fmtDateTime } from '@/shared/lib/format.js'
-import { downloadCSV, stamp } from '@/shared/lib/csv.js'
+import { api } from '@/shared/api/api.js'
 import { useStore } from '@/entities/store'
-import { movDelta, movKind, fmtMovQty } from '@/entities/inventory'
+import { useListParams, useQueryResource } from '@/shared/lib/hooks/usePagedQuery.js'
 import { DataTable } from '@/shared/ui/data-table/DataTable.jsx'
-import s from '@/shared/styles/panel.module.css'
+import { Drawer } from '@/shared/ui/drawer/Drawer.jsx'
+import { fmtNum, fmtDateTime } from '@/shared/lib/format.js'
+import { stamp } from '@/shared/lib/csv.js'
+import { QueryFeedback, PageSize } from '@/features/catalog/remote/RemoteControls.jsx'
+import { RecordAutocomplete } from '@/features/catalog/product-editor/ui/CategoryAutocomplete.jsx'
+import { lotDate } from '@/entities/inventory/model/remoteLots.js'
+import ui from './MovementsPage.module.css'
+import filterUi from '@/pages/catalog/products/ui/ProductsPage.module.css'
+import { Eye, Download, SlidersHorizontal, ChevronDown, Plus, FileUp, ArrowDownToLine, ArrowUpFromLine, FileText } from 'lucide-react'
 
-const MOTIVOS_SAIDA = ['Perda / quebra', 'Vencimento', 'Consumo interno', 'Devolução', 'Outro']
-
-const kindChip = {
-  Entrada: [s.chipOk, ArrowUp],
-  Saída:   [s.chipBad, ArrowDown],
-  Ajuste:  [s.chipWarn, RefreshCw],
+const TYPES = { ENTRADA_INICIAL: 'Entrada inicial', ENTRADA: 'Entrada', SAIDA: 'Saída', SAIDA_DRINK: 'Saída de drink', PERDA: 'Perda', AJUSTE_POSITIVO: 'Ajuste positivo', AJUSTE_NEGATIVO: 'Ajuste negativo' }
+const POSITIVE = ['ENTRADA_INICIAL', 'ENTRADA', 'AJUSTE_POSITIVO']
+export function Movimentacoes(props) {
+  if (props.pageParams?.novo) return <Navigate replace to={'/novamovimentacao?' + new URLSearchParams({ produto: props.pageParams.produto || '' })} />
+  return <MovementHistory {...props} />
 }
-
-function emptyForm(produto = '') {
-  return { produto, qty: '', obs: '', nf: '', lote: '', validade: '', custo: '', motivo: MOTIVOS_SAIDA[0] }
-}
-
-/* ─── Movimentações (RF07 / RF12) ─── */
-export function Movimentacoes({ pageParams }) {
-  const { products, movements, addMovement, can } = useStore()
-  const toast = useToast()
-  const editable = can('MOVIMENTAR_ESTOQUE')
-
-  const [showForm, setShowForm]     = useState(editable && !!pageParams?.novo)
-  const [tipo, setTipo]             = useState('Entrada')
-  const [form, setForm]             = useState(() => emptyForm(pageParams?.produto))
-  const [errors, setErrors]         = useState({})
-  const [filtroTipo, setFiltroTipo] = useState('Todos')
-  const [searchMov, setSearchMov]   = useState('')
-  const [dataInicio, setDataInicio] = useState('')
-  const [dataFim, setDataFim]       = useState('')
-
-  const upd = (k, v) => setForm(f => ({ ...f, [k]: v }))
-  const prodSel = products.find(p => p.id === form.produto)
-
-  async function submit(e) {
-    e.preventDefault()
-    const q = Number(form.qty)
-    const errs = {}
-    if (!form.produto) errs.produto = 'Selecione o produto.'
-    if (!form.qty || Number.isNaN(q) || q === 0) errs.qty = tipo === 'Ajuste' ? 'Informe a diferença (ex.: -2 ou 3).' : 'Informe uma quantidade maior que zero.'
-    else if (tipo !== 'Ajuste' && q < 0) errs.qty = 'Use um valor positivo.'
-    else if (prodSel && tipo === 'Saída' && q > prodSel.qty) errs.qty = `Saldo atual é ${fmtNum(prodSel.qty)} ${prodSel.unit}.`
-    else if (prodSel && tipo === 'Ajuste' && prodSel.qty + q < 0) errs.qty = `O saldo ficaria negativo (atual: ${fmtNum(prodSel.qty)}).`
-    if (tipo === 'Ajuste' && !form.obs.trim()) errs.obs = 'Ajustes exigem justificativa.'
-    setErrors(errs)
-    if (Object.keys(errs).length) return
-
-    try {
-      const { alert } = await addMovement({
-        produtoId: form.produto,
-        tipo,
-        qty: q,
-        nf: tipo === 'Entrada' ? form.nf : '',
-        lote: tipo === 'Entrada' ? form.lote : '',
-        validade: tipo === 'Entrada' ? form.validade : '',
-        custo: tipo === 'Entrada' ? Number(String(form.custo).replace(',', '.')) || 0 : 0,
-        obs: [tipo === 'Saída' ? form.motivo : '', form.obs].filter(Boolean).join(' · '),
-      })
-      toast(`${tipo} de ${fmtNum(Math.abs(q))} ${prodSel.unit} em ${prodSel.name}.`, { title: 'Movimentação registrada' })
-      if (alert) toast(`${alert} ficou abaixo do estoque mínimo.`, { type: 'warning', title: 'Estoque crítico' })
-      setForm(emptyForm())
-      setShowForm(false)
-    } catch (err) {
-      toast(err.message, { type: 'error', title: 'Não foi possível registrar' })
-    }
-  }
-
-  const filteredMovs = movements.filter(m => {
-    const kind = movKind(m)
-    const day = m.em.slice(0, 10)
-    const byTipo = filtroTipo === 'Todos' || filtroTipo === kind
-    return byTipo &&
-      (!searchMov || m.produto.toLowerCase().includes(searchMov.toLowerCase())) &&
-      (!dataInicio || day >= dataInicio) &&
-      (!dataFim || day <= dataFim)
-  })
-
-  const count = (k) => movements.filter(m => movKind(m) === k).length
-  const saidas = movements.filter(m => movKind(m) === 'Saída')
-  const perdas = saidas.filter(m => /perda|quebra|vencimento/i.test(m.obs || '')).length
-  const taxaPerda = saidas.length ? (perdas / saidas.length) * 100 : 0
-  const taxaAjuste = movements.length ? (count('Ajuste') / movements.length) * 100 : 0
-
-  function exportar() {
-    downloadCSV(`movimentacoes-${stamp()}`,
-      ['Data/Hora', 'Produto', 'Código', 'Tipo', 'Quantidade', 'Operador', 'NF', 'Observação'],
-      filteredMovs.map(m => [fmtDateTime(m.em), m.produto, products.find(p => p.id === m.produtoId)?.sku || m.produtoId, m.tipo, movDelta(m), m.operador, m.nf, m.obs]))
-    toast(`${filteredMovs.length} movimentações exportadas.`, { title: 'Exportação concluída' })
-  }
-
+function MovementHistory({ navigate }) {
+  const { can } = useStore()
+  const { params, update, clear } = useListParams('ocorridoEm', 'DESC')
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState('')
+  const canListUsers = can('USUARIOS_VISUALIZAR')
+  const operators = useQueryResource(signal => canListUsers ? api.usuarios.listar(signal) : Promise.resolve([]), [canListUsers])
+  const [detail, setDetail] = useState(null)
+  const [importOpen, setImportOpen] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(true)
+  const invalidDates = params.dataInicial && params.dataFinal && params.dataInicial > params.dataFinal
+  const request = { produtoId: params.produtoId, tipo: params.tipo, usuarioId: params.usuarioId, dataInicial: params.dataInicial, dataFinal: params.dataFinal,
+    pagina: params.pagina, tamanho: params.tamanho, ordenarPor: ['ocorridoEm', 'tipo', 'quantidade', 'saldoPosterior'].includes(params.ordenarPor) ? params.ordenarPor : 'ocorridoEm', direcao: params.direcao }
+  const query = useQueryResource(signal => invalidDates ? Promise.reject(new Error('A data inicial deve ser anterior ou igual à final.')) : api.movimentacoes.pagina(request, signal), [request, invalidDates])
+  const rows = query.loading || query.error ? [] : query.data?.itens || []
   const columns = [
-    { key: 'em', header: 'Data / Hora', width: 120, render: m => <span className={s.muted}>{fmtDateTime(m.em)}</span> },
-    { key: 'produto', header: 'Produto', render: m => <b className={s.cellStrong}>{m.produto}</b> },
-    {
-      key: 'tipo', header: 'Tipo', width: 150, sort: m => m.tipo,
-      render: m => {
-        const [cls, Icon] = kindChip[movKind(m)]
-        return (
-          <span>
-            <em className={`${s.chip} ${cls}`}><Icon size={10} aria-hidden="true" /> {m.tipo}</em>
-          </span>
-        )
-      },
-    },
-    {
-      key: 'qty', header: 'Qtd.', width: 90, align: 'right', sort: movDelta,
-      render: m => {
-        const d = movDelta(m)
-        return <b style={{ color: d >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmtMovQty(m, products, fmtNum)}</b>
-      },
-    },
-    { key: 'operador', header: 'Operador', width: 120 },
-    {
-      key: 'ref', header: 'Referência', sort: false,
-      render: m => (
-        <span className={s.refCell}>
-          {m.nf && <span>NF {m.nf}</span>}
-          {m.obs && <small>{m.obs}</small>}
-          {!m.nf && !m.obs && '—'}
-        </span>
-      ),
-    },
+    { key: 'ocorridoEm', header: 'Data', render: m => fmtDateTime(m.ocorridoEm) },
+    { key: 'produtoNome', header: 'Produto', sort: false },
+    { key: 'tipo', header: 'Tipo', render: m => <MovementTypeBadge type={m.tipo} /> },
+    { key: 'quantidade', header: 'Quantidade', render: m => (POSITIVE.includes(m.tipo) ? '+' : '−') + fmtNum(m.quantidade) + ' ' + m.unidadeEstoque },
+    { key: 'saldoPosterior', header: 'Saldo após', render: m => fmtNum(m.saldoPosterior) + ' ' + m.unidadeEstoque },
+    { key: 'usuarioNome', header: 'Operador', sort: false },
+    { key: 'acao', header: 'Detalhes', sort: false, render: m => <button onClick={() => setDetail(m)}><Eye size={15} aria-hidden="true" />Ver detalhes</button> },
   ]
+  async function exportPage() {
+    setExporting(true)
+    setExportError('')
+    try {
+      const { blob } = await api.movimentacoes.exportar(request)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = 'movimentacoes-' + stamp() + '.xlsx'
+      link.click()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (error) { setExportError(error.message) }
+    finally { setExporting(false) }
+  }
+  return <>
+    <section className={ui.panel} aria-labelledby="movement-filter-title">
+      <FilterHeader className={ui.heading}><div><h2 id="movement-filter-title"><button type="button" className={filterUi.collapse} aria-expanded={filtersOpen} aria-controls="movement-filter-fields" onClick={() => setFiltersOpen(open => !open)}><SlidersHorizontal size={16} aria-hidden="true" />Filtros de movimentações<ChevronDown size={17} aria-hidden="true" className={filtersOpen ? filterUi.expanded : undefined} /></button></h2><p>Consulte entradas, saídas, perdas e ajustes do estoque por produto e período.</p></div><FilterActions onClear={clear} onRefresh={query.reload} refreshing={query.loading} compact={can('MOVIMENTAR_ESTOQUE')}>{can('MOVIMENTAR_ESTOQUE') && <button className="gold" onClick={() => navigate('novamovimentacao', { retorno: JSON.stringify(params) })}><Plus size={15} aria-hidden="true" />Nova movimentação</button>}</FilterActions></FilterHeader>
+      <div id="movement-filter-fields" hidden={!filtersOpen}><div className={ui.filters}>
 
-  return (
-    <>
-      <KpiStrip label="Indicadores de movimentação" items={[
-        { label: 'Total de registros', value: movements.length, sub: 'No histórico completo', tone: 'neutral' },
-        { label: 'Entradas', value: count('Entrada'), sub: 'Reposições e compras', tone: 'neutral' },
-        {
-          label: 'Perdas', value: perdas, tone: toneLower(taxaPerda, METAS.taxaPerdas),
-          sub: `${fmtNum(taxaPerda)}% das saídas · meta ≤ ${METAS.taxaPerdas.ok}%`, badge: perdas ? undefined : 'Sem perdas',
-        },
-        {
-          label: 'Ajustes', value: count('Ajuste'), tone: toneLower(taxaAjuste, METAS.taxaAjustes),
-          sub: `${fmtNum(taxaAjuste)}% das movimentações · meta ≤ ${METAS.taxaAjustes.ok}%`,
-          title: 'Muitos ajustes indicam divergência entre o estoque do sistema e o físico.',
-        },
-      ]} />
-
-      {showForm && (
-        <article className={'card form ' + s.movForm}>
-          <h3>Nova movimentação de estoque</h3>
-          <div className={s.tipoTabs} role="radiogroup" aria-label="Tipo de movimentação">
-            {['Entrada', 'Saída', 'Ajuste'].map(tp => (
-              <button key={tp} type="button" role="radio" aria-checked={tipo === tp} className={tipo === tp ? s.tipoActive : s.tipoBtn} onClick={() => { setTipo(tp); setErrors({}) }}>{tp}</button>
-            ))}
-          </div>
-          <form onSubmit={submit} noValidate>
-            <div className="two">
-              <label className={errors.produto ? s.fieldError : undefined}>
-                <span>Produto <i className={s.req} aria-hidden="true">*</i></span>
-                <select value={form.produto} onChange={e => upd('produto', e.target.value)} aria-invalid={!!errors.produto}>
-                  <option value="">Selecione o produto</option>
-                  {products.map(p => <option key={p.id} value={p.id}>{p.name} ({fmtNum(p.qty)} {p.unit} em estoque)</option>)}
-                </select>
-                {errors.produto && <small className={s.errMsg}>{errors.produto}</small>}
-              </label>
-              <label className={errors.qty ? s.fieldError : undefined}>
-                <span>{tipo === 'Ajuste' ? 'Diferença (+ ou −)' : 'Quantidade'} <i className={s.req} aria-hidden="true">*</i></span>
-                <input type="number" inputMode="numeric" min={tipo === 'Ajuste' ? undefined : 1} placeholder={tipo === 'Ajuste' ? 'Ex.: -2' : '0'} value={form.qty} onChange={e => upd('qty', e.target.value)} aria-invalid={!!errors.qty} />
-                {prodSel && form.qty && !errors.qty && (
-                  <small className={s.hint}>
-                    Saldo após: {fmtNum(prodSel.qty + (tipo === 'Entrada' ? Math.abs(form.qty) : tipo === 'Saída' ? -Math.abs(form.qty) : Number(form.qty)))} {prodSel.unit}
-                  </small>
-                )}
-                {errors.qty && <small className={s.errMsg}>{errors.qty}</small>}
-              </label>
-              {tipo === 'Saída' && (
-                <label>
-                  <span>Motivo</span>
-                  <select value={form.motivo} onChange={e => upd('motivo', e.target.value)}>
-                    {MOTIVOS_SAIDA.map(m => <option key={m}>{m}</option>)}
-                  </select>
-                </label>
-              )}
-              <label className={errors.obs ? s.fieldError : undefined}>
-                <span>Observação {tipo === 'Ajuste' && <i className={s.req} aria-hidden="true">*</i>}</span>
-                <input placeholder={tipo === 'Ajuste' ? 'Ex.: contagem física' : 'Nota interna (opcional)'} value={form.obs} onChange={e => upd('obs', e.target.value)} aria-invalid={!!errors.obs} />
-                {errors.obs && <small className={s.errMsg}>{errors.obs}</small>}
-              </label>
-              {tipo === 'Entrada' && (
-                <>
-                  <label><span>Nº da NF-e</span>
-                    <input placeholder="000.000" value={form.nf} onChange={e => upd('nf', e.target.value)} />
-                  </label>
-                  <label><span>Lote</span>
-                    <input placeholder="Ex.: L2610A (vazio = SEM-LOTE)" value={form.lote} onChange={e => upd('lote', e.target.value)} />
-                  </label>
-                  <label><span>Validade</span>
-                    <input type="date" value={form.validade} onChange={e => upd('validade', e.target.value)} />
-                    <small className={s.hint}>Entra no controle FEFO: vende primeiro o que vence antes.</small>
-                  </label>
-                  <label><span>Custo unitário (R$)</span>
-                    <input inputMode="decimal" placeholder={prodSel ? String(prodSel.cost).replace('.', ',') : '0,00'} value={form.custo} onChange={e => upd('custo', e.target.value)} />
-                    <small className={s.hint}>Atualiza o custo médio ponderado. Vazio = mantém o custo atual.</small>
-                  </label>
-                </>
-              )}
-            </div>
-            <footer>
-              <button type="button" onClick={() => { setShowForm(false); setErrors({}) }}>Cancelar</button>
-              <button type="submit" className="gold">Confirmar {tipo.toLowerCase()}</button>
-            </footer>
-          </form>
-        </article>
-      )}
-
-      <div className={s.movFilters}>
-        <Sel value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)} aria-label="Filtrar por tipo">
-          <option value="Todos">Tipo: Todos</option>
-          <option value="Entrada">Entradas</option>
-          <option value="Saída">Saídas</option>
-          <option value="Ajuste">Ajustes</option>
-        </Sel>
-        <div className={s.dateRange}>
-          <input type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} aria-label="Data inicial" />
-          <span>até</span>
-          <input type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} aria-label="Data final" />
-        </div>
-        <input type="search" placeholder="Buscar produto..." className={s.movSearch} value={searchMov} onChange={e => setSearchMov(e.target.value)} aria-label="Buscar produto" />
-        <div className={s.movActions}>
-          {editable && (
-            <button onClick={() => setShowForm(!showForm)} className={showForm ? '' : 'gold'} aria-expanded={showForm}>
-              {showForm ? <>Fechar formulário <X size={13} aria-hidden="true" /></> : <>Registrar movimentação <Plus size={13} aria-hidden="true" /></>}
-            </button>
-          )}
-          <button onClick={exportar}>Exportar <Download size={13} aria-hidden="true" /></button>
-        </div>
+      <label>Tipo<select aria-label="Filtrar por tipo" value={params.tipo || ''} onChange={e => update({ tipo: e.target.value })}><option value="">Todos</option>{Object.entries(TYPES).map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></label>
+      <label>Data inicial<input type="date" value={params.dataInicial || ''} onChange={e => update({ dataInicial: e.target.value })} /></label>
+      <label>Data final<input type="date" value={params.dataFinal || ''} onChange={e => update({ dataFinal: e.target.value })} /></label>
+      {canListUsers && <label>Operador<select aria-label="Filtrar por operador" disabled={operators.loading || !!operators.error} value={params.usuarioId || ''} onChange={e => update({ usuarioId: e.target.value })}><option value="">{operators.loading ? 'Carregando operadores…' : operators.error ? 'Operadores indisponíveis' : 'Todos os operadores'}</option>{params.usuarioId && !operators.data?.some(user => user.id === params.usuarioId) && <option value={params.usuarioId}>Operador selecionado</option>}{operators.data?.map(user => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}</select>{operators.error && <button type="button" onClick={operators.reload}>Tentar carregar operadores</button>}</label>}
+      <PageSize value={params.tamanho} onChange={tamanho => update({ tamanho })} />
       </div>
-
-      <DataTable
-        caption="Histórico de movimentações"
-        columns={columns}
-        rows={filteredMovs}
-        initialSort={{ key: 'em', dir: 'desc' }}
-        pageSize={15}
-        emptyText="Nenhuma movimentação encontrada com os filtros selecionados."
-      />
-    </>
-  )
+      </div>
+      <div className={ui.searchRow}><div className={ui.search}><RecordAutocomplete kind="produtos" active={false} productType={null} label="Buscar produto" placeholder="Digite o nome ou código do produto" value={params.produtoId} onChange={produtoId => update({ produtoId })} /></div><div className={ui.export}><span>Ações</span><div className={ui.actions}>{can('MOVIMENTAR_ESTOQUE') && <button onClick={() => setImportOpen(true)}><FileUp size={15} aria-hidden="true" />Importar produtos</button>}<button title="Exportar em Excel todas as movimentações que correspondem aos filtros" disabled={exporting || !rows.length || query.loading || !!query.error} onClick={exportPage}><Download size={15} aria-hidden="true" />{exporting ? 'Exportando…' : 'Exportar'}</button></div></div></div>
+    </section>
+    {exportError && <Notice title="Não foi possível exportar" focus>{exportError}</Notice>}
+    <QueryFeedback query={query} />
+    <DataTable caption="Histórico de movimentações" columns={columns} rows={rows} pageSize={params.tamanho}
+      emptyText={query.loading ? 'Carregando histórico…' : query.error ? 'Consulta indisponível.' : 'Nenhuma movimentação encontrada neste período e filtros.'}
+      remote={{ page: params.pagina, total: query.data?.totalItens || 0, loading: query.loading,
+        sort: { key: request.ordenarPor, dir: params.direcao.toLowerCase() },
+        onPage: pagina => update({ pagina }, false), onSort: sort => update({ ordenarPor: sort.key, direcao: sort.dir.toUpperCase() }) }} />
+    {importOpen && can('MOVIMENTAR_ESTOQUE') && <ImportProductsModal navigate={navigate} onClose={() => { setImportOpen(false); query.reload() }} />}
+    {detail && <Drawer title="Detalhes da movimentação" onClose={() => setDetail(null)}>
+      <header className={ui.detailHeader}>
+        <span className={ui.badge}>{POSITIVE.includes(detail.tipo) ? <ArrowDownToLine size={14} aria-hidden="true" /> : <ArrowUpFromLine size={14} aria-hidden="true" />}{TYPES[detail.tipo] || detail.tipo}</span>
+        <h2>{detail.produtoNome}</h2><p>Movimentação #{detail.id} · {fmtDateTime(detail.ocorridoEm)}</p>
+      </header>
+      <section className={ui.amount} aria-label="Quantidade movimentada"><span>Quantidade movimentada</span><strong>{POSITIVE.includes(detail.tipo) ? '+' : '−'}{fmtNum(detail.quantidade)} <small>{detail.unidadeEstoque}</small></strong></section>
+      <section className={ui.section}><h3>Efeito no estoque</h3><dl className={ui.balances}><div><dt>Saldo anterior: </dt><dd>{fmtNum(detail.saldoAnterior)} <small>{detail.unidadeEstoque}</small></dd></div><div><dt>Saldo após: </dt><dd>{fmtNum(detail.saldoPosterior)} <small>{detail.unidadeEstoque}</small></dd></div></dl></section>
+      <section className={ui.section}><h3>Registro e referências</h3><dl className={ui.metadata}>
+        <div><dt>Operador</dt><dd>{detail.usuarioNome || 'Não informado'}</dd></div>
+        <div><dt>Data e horário</dt><dd>{fmtDateTime(detail.ocorridoEm)}</dd></div>
+        <div><dt>Lote</dt><dd>{detail.lote || 'Não informado'}</dd></div>
+        <div><dt>Nota fiscal</dt><dd>{detail.numeroNotaFiscal || 'Não informada'}</dd></div>
+      </dl></section>
+      {!!detail.lotes?.length && <section className={ui.section}><h3>Lotes movimentados</h3><ul className={ui.recipe}>{detail.lotes.map((lot, index) => <li key={lot.loteId || index}><strong>{lot.codigo}</strong><span>{fmtNum(lot.quantidade)} {detail.unidadeEstoque} · validade {lotDate(lot.validade)}</span></li>)}</ul></section>}
+      <section className={ui.section}><h3><FileText size={15} aria-hidden="true" />Motivo da movimentação</h3><p className={ui.reason}>{detail.motivo || 'Nenhum motivo informado para esta movimentação.'}</p></section>
+      {detail.origemDrinkId && <section className={ui.section}><h3>Drink de origem</h3><p>{detail.receitaAplicada?.drinkNome || 'Drink vinculado'}</p><small className={ui.reference}>{detail.origemDrinkId}</small></section>}
+      {detail.receitaAplicada?.ingredientes && <section className={ui.section}><h3>Receita aplicada nesta saída</h3><p className={ui.muted}>{fmtNum(detail.receitaAplicada.quantidadeDrinks)} drink(s) preparados · registro da receita utilizada</p><ul className={ui.recipe}>{detail.receitaAplicada.ingredientes.map((r, i) => <li key={i}><strong>{r.produtoNome}</strong><span>{fmtNum(r.quantidadePorDrink)} {r.unidadeConsumo} por drink · {fmtNum(r.quantidadeConsumida)} {r.unidadeConsumo} consumidos</span></li>)}</ul></section>}
+    </Drawer>}
+  </>
 }

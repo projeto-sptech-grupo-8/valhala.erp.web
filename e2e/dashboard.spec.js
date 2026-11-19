@@ -22,10 +22,11 @@ test('dashboard mostra serie mensal, alertas e ultimas movimentacoes do back', a
   // lê o resumo direto da API (interceptar a resposta da tela é instável: o goto e o reload disparam a mesma busca)
   const body = await (await page.request.get(`${API}/dashboard/resumo?meses=6`)).json()
 
-  const mesAtual = MESES[new Date().getMonth()]
+  const ultimoMes = body.movimentacoes.serieMensal.at(-1).mes
+  const mesAtual = MESES[Number(ultimoMes.slice(5, 7)) - 1] + '/' + ultimoMes.slice(2, 4)
   await expect(page.locator('svg text').filter({ hasText: new RegExp(`^${mesAtual}$`) }).first()).toBeVisible()
   expect(body.movimentacoes.serieMensal.at(-1).saidas).toBeGreaterThanOrEqual(1)
-  await expect(page.getByText('nº de lançamentos')).toBeVisible()
+  await expect(page.getByText('nº de lançamentos', { exact: false })).toBeVisible()
   await expect(page.getByText(nome).first()).toBeVisible() // estoque crítico e/ou últimas movimentações
   await shot('dashboard')
 })

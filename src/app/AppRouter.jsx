@@ -8,6 +8,7 @@ import {
   useLocation,
   useNavigate,
 } from 'react-router-dom'
+import { useToast } from '@/shared/ui/notifications/useToast.js'
 import { api } from '@/shared/api/api.js'
 import { StoreProvider } from '@/app/providers/store'
 import Demo from '@/pages/demo'
@@ -50,6 +51,7 @@ function PanelStoreProvider({ user, onUserChange, onLogout }) {
 }
 
 function AppRoutes() {
+  const toast = useToast()
   const navigate = useNavigate()
   const location = useLocation()
   const [user, setUser] = useState(null)
@@ -90,18 +92,26 @@ function AppRoutes() {
   }, [location.state, navigate])
 
   const handleLogout = useCallback(async () => {
-    await api.logout().catch(() => {})
+    try {
+      await api.logout()
+    } catch (error) {
+      if (error.status !== 401) {
+        toast(error.message, { title: 'Não foi possível confirmar a saída', type: 'error' })
+        return false
+      }
+    }
     restorePromise.current = null
     setUser(null)
     setSessionStatus('anonymous')
     navigate('/', { replace: true })
-  }, [navigate])
+    return true
+  }, [navigate, toast])
 
   return (
     <Routes>
       <Route path="/" element={<Site go={go} />} />
       <Route path="/login" element={<Login go={go} onSuccess={handleLoginSuccess} />} />
-      <Route path="/forgot" element={<Forgot go={go} onSuccess={() => navigate('/login', { replace: true })} />} />
+      <Route path="/forgot" element={<Forgot go={go} />} />
       <Route path="/demo" element={<Demo go={go} />} />
 
       <Route element={<RequireSession user={user} status={sessionStatus} restoreSession={restoreSession} />}>

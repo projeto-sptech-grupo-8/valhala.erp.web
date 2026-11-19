@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { Check, Minus, Plus, Ban, Search } from 'lucide-react'
+import { Check, Ban, Search } from 'lucide-react'
 import { agruparPorModulo } from '@/shared/config/funcionalidades.js'
 import a from '@/entities/access/ui/access.module.css'
 
 /* ─── Seletor de funcionalidades agrupado por módulo ─── */
-export function FuncionalidadesPicker({ funcionalidades, value, onChange, baseline, readOnly, idPrefix = 'fn' }) {
+export function FuncionalidadesPicker({ funcionalidades, value, onChange, baseline, readOnly, idPrefix = 'fn', className = '', groupBy = agruparPorModulo }) {
   const [q, setQ] = useState('')
   const sel = new Set(value)
   const base = baseline ? new Set(baseline) : null
@@ -12,7 +12,7 @@ export function FuncionalidadesPicker({ funcionalidades, value, onChange, baseli
   const filtered = query
     ? funcionalidades.filter(f => f.nome.toLowerCase().includes(query) || f.codigo.toLowerCase().includes(query))
     : funcionalidades
-  const grupos = agruparPorModulo(filtered)
+  const grupos = groupBy(filtered)
 
   function toggle(codigo) {
     const next = new Set(sel)
@@ -46,7 +46,7 @@ export function FuncionalidadesPicker({ funcionalidades, value, onChange, baseli
   }
 
   return (
-    <div className={a.picker}>
+    <div className={`${a.picker || ''} ${className}`}>
       <div className={a.pickerTop}>
         <label className={a.searchBox}>
           <Search size={13} aria-hidden="true" />
@@ -135,83 +135,5 @@ export function PermissoesEfetivas({ funcionalidades, permissoes }) {
         ))}
       </div>
     </>
-  )
-}
-
-/* ─── Editor de ajustes individuais (sobrescritas) ───
- * value: { [codigo]: 'GRANT' | 'REVOKE' }
- * Conceder só faz sentido fora do perfil; revogar só dentro dele — evita sobrescrita redundante.
- */
-export function OverridesEditor({ funcionalidades, perfilCodigos, value, onChange }) {
-  const [soAjustes, setSoAjustes] = useState(false)
-  const noPerfil = new Set(perfilCodigos)
-  const lista = soAjustes ? funcionalidades.filter(f => value[f.codigo]) : funcionalidades
-
-  function set(codigo, efeito) {
-    const next = { ...value }
-    if (!efeito) delete next[codigo]
-    else next[codigo] = efeito
-    onChange(next)
-  }
-
-  const nAjustes = Object.keys(value).length
-
-  return (
-    <div className={a.overrides}>
-      <div className={a.pickerTop}>
-        <label className={a.inlineCheck}>
-          <input type="checkbox" checked={soAjustes} onChange={e => setSoAjustes(e.target.checked)} />
-          Mostrar só funcionalidades com ajuste ({nAjustes})
-        </label>
-      </div>
-      <table className={a.ovTable}>
-        <caption className={a.srOnly}>Ajustes individuais de permissão</caption>
-        <thead>
-          <tr>
-            <th scope="col">Funcionalidade</th>
-            <th scope="col">No perfil</th>
-            <th scope="col">Ajuste individual</th>
-            <th scope="col">Resultado</th>
-          </tr>
-        </thead>
-        {agruparPorModulo(lista).map(g => (
-          <tbody key={g.id}>
-            <tr className={a.ovGroup}><th colSpan={4} scope="rowgroup">{g.nome}</th></tr>
-            {g.itens.map(f => {
-              const inProfile = noPerfil.has(f.codigo)
-              const ef = value[f.codigo] || ''
-              const result = ef === 'GRANT' ? true : ef === 'REVOKE' ? false : inProfile
-              const name = `ov-${f.codigo}`
-              return (
-                <tr key={f.codigo} className={ef ? a.ovChanged : undefined}>
-                  <th scope="row">
-                    <b>{f.nome}</b>
-                    <small>{f.codigo}</small>
-                  </th>
-                  <td>{inProfile ? <span className={a.yes}><Check size={13} aria-hidden="true" /> Sim</span> : <span className={a.no}><Minus size={13} aria-hidden="true" /> Não</span>}</td>
-                  <td>
-                    <div className={a.seg} role="radiogroup" aria-label={`Ajuste para ${f.nome}`}>
-                      <label className={!ef ? a.segOn : undefined}>
-                        <input type="radio" name={name} checked={!ef} onChange={() => set(f.codigo, null)} /> Herdar
-                      </label>
-                      <label className={`${ef === 'GRANT' ? a.segGrant : ''} ${inProfile ? a.segDisabled : ''}`} title={inProfile ? 'Já incluída no perfil' : 'Conceder mesmo sem estar no perfil'}>
-                        <input type="radio" name={name} checked={ef === 'GRANT'} disabled={inProfile} onChange={() => set(f.codigo, 'GRANT')} />
-                        <Plus size={11} aria-hidden="true" /> Conceder
-                      </label>
-                      <label className={`${ef === 'REVOKE' ? a.segRevoke : ''} ${!inProfile ? a.segDisabled : ''}`} title={!inProfile ? 'Não faz parte do perfil' : 'Bloquear mesmo estando no perfil'}>
-                        <input type="radio" name={name} checked={ef === 'REVOKE'} disabled={!inProfile} onChange={() => set(f.codigo, 'REVOKE')} />
-                        <Ban size={11} aria-hidden="true" /> Revogar
-                      </label>
-                    </div>
-                  </td>
-                  <td>{result ? <span className={a.yes}><Check size={13} aria-hidden="true" /> Permitido</span> : <span className={a.blocked}><Ban size={13} aria-hidden="true" /> Bloqueado</span>}</td>
-                </tr>
-              )
-            })}
-          </tbody>
-        ))}
-      </table>
-      {soAjustes && nAjustes === 0 && <p className={a.muted}>Nenhum ajuste individual — o usuário segue exatamente o perfil.</p>}
-    </div>
   )
 }

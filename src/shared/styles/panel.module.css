@@ -1272,7 +1272,7 @@ aside > footer button {
   top: 0;
   right: 0;
   bottom: 0;
-  width: 380px;
+  width: min(380px, 100%);
   background: var(--panel);
   border-left: 1px solid var(--line);
   padding: 24px;

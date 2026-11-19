@@ -112,6 +112,12 @@
 
 .invalid { border-color: var(--red) !important; }
 
+.passwordField { position:relative; width:100%; min-width:0; }
+.passwordField > input { width:100%; box-sizing:border-box; padding-right:46px; }
+.passwordToggle { position:absolute; right:6px; top:50%; transform:translateY(-50%); display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; min-height:34px; padding:0; border:0; background:transparent; color:var(--dim); }
+.passwordToggle:hover:not(:disabled) { color:var(--gold2); background:var(--active-bg); }
+.passwordToggle:focus-visible { outline:2px solid var(--gold2); outline-offset:2px; }
+
 .err {
   color: var(--red);
   font-size: 10px;

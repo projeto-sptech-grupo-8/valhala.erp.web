@@ -1,119 +1,78 @@
-import { CheckCircle, Copy, AlertTriangle, Wine, Download, ArrowDownToLine } from 'lucide-react'
-import { Stat } from '@/shared/ui/primitives/ui.jsx'
-import { useToast } from '@/shared/ui/notifications/useToast.js'
+import access from '@/entities/access/ui/access.module.css'
+import { FilterActions, FilterHeader } from '@/shared/ui/filters/FilterActions.jsx'
+import { useState } from 'react'
 import { fmtNum } from '@/shared/lib/format.js'
-import { downloadCSV, stamp } from '@/shared/lib/csv.js'
+import { api } from '@/shared/api/api.js'
 import { useStore } from '@/entities/store'
-import { canEdit } from '@/entities/access'
-import { getStatus, getStatusDrink, getGargalo, getRendimentoDrink } from '@/entities/inventory'
-import { StatusChip } from '@/entities/inventory'
+import { useQueryResource } from '@/shared/lib/hooks/usePagedQuery.js'
+import { QueryFeedback } from '@/features/catalog/remote/RemoteControls.jsx'
 import { DataTable } from '@/shared/ui/data-table/DataTable.jsx'
-import s from '@/shared/styles/panel.module.css'
+import { AlertTriangle, PackageX, Settings2, ShieldCheck, ChevronDown, SlidersHorizontal, CircleHelp } from 'lucide-react'
+import { minimumMetrics, filterRestockAlerts } from '../model/restockAlerts.js'
+import { RestockRowActions } from './RestockRowActions.jsx'
+import s from './RestockPage.module.css'
 
-const statusOrder = { Zerado: 0, Crítico: 1, Baixo: 2 }
-
-/* Sugestão de compra: repõe até 2× o mínimo (mesma referência do "nível ideal") */
-const sugestao = (p) => Math.max(0, Math.ceil(p.min * 2 - p.qty))
-
-/* ─── Reposição ─── */
 export function Reposicao({ navigate }) {
-  const { products, drinks, role } = useStore()
-  const toast = useToast()
-
-  const urgentes = products
-    .filter(p => p.tipo === 'padrao' && ['Crítico', 'Zerado', 'Baixo'].includes(getStatus(p)))
-    .sort((a, b) => statusOrder[getStatus(a)] - statusOrder[getStatus(b)])
-
-  const drinksAfetados = drinks.filter(d => ['Crítico', 'Zerado'].includes(getStatusDrink(d, products)))
-  const nUrg   = urgentes.filter(p => ['Crítico', 'Zerado'].includes(getStatus(p))).length
-  const nBreve = urgentes.filter(p => getStatus(p) === 'Baixo').length
-
-  async function copyLista() {
-    const lines = urgentes.map(p => `${p.name}: ${fmtNum(p.qty)}/${p.min} ${p.unit} — pedir ${sugestao(p)} ${p.unit}`)
-    try {
-      await navigator.clipboard.writeText(lines.join('\n'))
-      toast('Cole no WhatsApp ou e-mail do pedido de compra.', { title: 'Lista copiada' })
-    } catch {
-      toast('O navegador bloqueou a área de transferência. Use "Exportar".', { type: 'error', title: 'Não foi possível copiar' })
+  const { can } = useStore()
+  const query = useQueryResource(signal => api.dashboard.resumo(1, signal), [])
+  const stock = query.data?.estoque
+  const rows = query.loading || query.error ? [] : stock?.alertas || []
+  const units = useQueryResource(async signal => {
+    const result = {}
+    for (let index = 0; index < rows.length; index += 2) {
+      await Promise.all(rows.slice(index, index + 2).map(async row => {
+        try { const p = await api.produtos.obter(row.produtoId, signal); result[row.produtoId] = p.fracionado ? 'ml' : p.unit }
+        catch (ex) { if (signal.aborted) throw ex; result[row.produtoId] = null }
+      }))
     }
-  }
-
-  function exportar() {
-    downloadCSV(`reposicao-${stamp()}`,
-      ['Código', 'Produto', 'Categoria', 'Em estoque', 'Mínimo', 'Sugestão de compra', 'Unidade', 'Situação'],
-      urgentes.map(p => [p.sku || p.id, p.name, p.cat, p.qty, p.min, sugestao(p), p.unit, getStatus(p)]))
-    toast(`${urgentes.length} itens exportados.`, { title: 'Exportação concluída' })
-  }
-
-  const columns = [
-    { key: 'name', header: 'Produto', render: p => <span className={s.repName}>{p.name}</span> },
-    { key: 'cat', header: 'Categoria', width: 120 },
-    {
-      key: 'qty', header: 'Em estoque', width: 110, align: 'right',
-      render: p => <b style={{ color: ['Zerado', 'Crítico'].includes(getStatus(p)) ? 'var(--red)' : 'var(--gold2)' }}>{fmtNum(p.qty)} {p.unit}</b>,
-    },
-    { key: 'min', header: 'Mínimo', width: 90, align: 'right', render: p => `${p.min} ${p.unit}` },
-    { key: 'sug', header: 'Sugestão de compra', width: 150, align: 'right', sort: sugestao, render: p => <b style={{ color: 'var(--green)' }}>+{sugestao(p)} {p.unit}</b> },
-    { key: 'status', header: 'Situação', width: 100, sort: p => statusOrder[getStatus(p)], render: p => <StatusChip status={getStatus(p)} /> },
-    ...(canEdit(role) ? [{
-      key: 'acao', header: <span className={s.srOnly}>Ações</span>, width: 60, sort: false,
-      render: p => (
-        <button className={s.iconBtn} title="Registrar entrada" aria-label={`Registrar entrada de ${p.name}`} onClick={() => navigate('movimentacoes', { produto: p.id, novo: 1 })}>
-          <ArrowDownToLine size={14} />
-        </button>
-      ),
-    }] : []),
+    return result
+  }, [rows.map(row => row.produtoId), query.loading])
+  const amount = (row, key) => row[key] == null ? '—' : fmtNum(row[key]) + ' ' + (!units.loading && units.data?.[row.produtoId] || '(unidade-base)')
+  const [search, setSearch] = useState('')
+  const [status, setStatus] = useState('')
+  const [category, setCategory] = useState('')
+  const [range, setRange] = useState('')
+  const [order, setOrder] = useState('priority')
+  const [filtersOpen, setFiltersOpen] = useState(true)
+  const categories = [...new Set(rows.map(r => r.categoria).filter(Boolean))]
+  const filtered = filterRestockAlerts(rows, { search, status, category, range, order })
+  const available = stock && !query.error && !query.loading
+  const indicators = [
+    { label: 'Produtos zerados', value: stock?.zerados, text: 'Sem saldo em estoque', Icon: PackageX, tone: stock?.zerados > 0 ? 'danger' : 'blue' },
+    { label: 'Estoque crítico', value: stock?.criticos, text: 'Saldo abaixo do mínimo definido', Icon: AlertTriangle, tone: stock?.criticos > 0 ? 'danger' : 'blue' },
+    { label: 'Sem mínimo definido', value: stock?.produtosSemMinimoDefinido, text: 'Configure para acompanhar a reposição', Icon: Settings2, tone: 'orange' },
+    { label: 'Saúde do estoque', value: stock?.saudePercentual, suffix: '%', text: 'Indicador calculado pelo servidor', Icon: ShieldCheck, tone: stock?.saudePercentual < 25 ? 'danger' : stock?.saudePercentual < 75 ? 'yellow' : 'green' },
   ]
-
-  return (
-    <div className={s.repPage}>
-      <div className="stats">
-        <Stat a="Reposição urgente"  b={nUrg} c="Itens críticos ou zerados — pedir hoje" tone={nUrg ? 'bad' : 'ok'} badge={nUrg ? 'Pedir hoje' : 'Em dia'} />
-        <Stat a="Reposição em breve" b={nBreve} c="Estoque baixo — incluir no próximo pedido" tone={nBreve ? 'warn' : 'ok'} badge={nBreve ? 'Programar' : 'Em dia'} />
-        <Stat a="Drinks afetados"    b={drinksAfetados.length} c="Cardápio com insumos críticos" tone={drinksAfetados.length ? 'warn' : 'ok'} badge={drinksAfetados.length ? 'Cardápio em risco' : 'Cardápio ok'} />
-      </div>
-
-      {urgentes.length === 0 ? (
-        <article className="card" style={{ textAlign: 'center', padding: '48px 24px' }}>
-          <CheckCircle size={32} style={{ color: 'var(--green)', marginBottom: 12 }} aria-hidden="true" />
-          <p style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)' }}>Estoque em ordem</p>
-          <p className={s.muted}>Nenhum produto precisa de reposição agora.</p>
-        </article>
-      ) : (
-        <>
-          <div className={s.repCardHeader}>
-            <span>Lista de reposição</span>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={copyLista}>Copiar lista <Copy size={13} aria-hidden="true" /></button>
-              <button onClick={exportar}>Exportar <Download size={13} aria-hidden="true" /></button>
-            </div>
-          </div>
-          <DataTable caption="Lista de reposição" columns={columns} rows={urgentes} pageSize={20} />
-        </>
-      )}
-
-      {drinksAfetados.length > 0 && (
-        <article className="card">
-          <h3 className={s.warnTitle}><AlertTriangle size={14} aria-hidden="true" />Drinks afetados</h3>
-          {drinksAfetados.map(d => {
-            const gargalo = getGargalo(d, products)
-            const rend = getRendimentoDrink(d, products)
-            return (
-              <div key={d.id} className={s.repDrinkRow}>
-                <Wine size={14} style={{ color: 'var(--gold)', flexShrink: 0 }} aria-hidden="true" />
-                <span style={{ flex: 1 }}>
-                  <b className={s.cellStrong}>{d.name}</b>
-                  <small className={s.repDrinkSub}>
-                    {rend === 0 ? 'Impossível produzir' : `~${rend} copos possíveis`}
-                    {gargalo ? ` · gargalo: ${gargalo.insumo.name}` : ''}
-                  </small>
-                </span>
-                <StatusChip status={getStatusDrink(d, products)} />
-              </div>
-            )
-          })}
-        </article>
-      )}
+  const columns = [
+    { key: 'nome', header: 'Produto', sort: false },
+    { key: 'categoria', header: 'Categoria', sort: false },
+    { key: 'quantidadeAtual', header: 'Saldo atual', align: 'right', sort: false, render: row => amount(row, 'quantidadeAtual') },
+    { key: 'estoqueMinimo', header: 'Mínimo', align: 'right', sort: false, render: row => amount(row, 'estoqueMinimo') },
+    { key: 'missing', header: 'Falta para o mínimo', align: 'right', sort: false, render: row => amount({ ...row, missing: minimumMetrics(row).missing }, 'missing') },
+    { key: 'status', header: 'Situação', width: 130, sort: false, render: r => <span className={s.chip} data-tone="danger">{r.status === 'ZERADO' ? 'Zerado' : r.status === 'CRITICO' ? 'Crítico' : 'Não informado'}</span> },
+    { key: 'acao', header: 'Ações', width: 80, align: 'center', sort: false, render: r => <RestockRowActions product={r} can={can} navigate={navigate} /> },
+  ]
+  return <>
+    <section className={s.kpis} aria-label="Indicadores de reposição" aria-busy={query.loading}>
+      {indicators.map(({ label, value, text, Icon, tone, suffix = '' }) => <article key={label} className={s.kpi} data-tone={available && value != null ? tone : 'neutral'}><div className={s.kpiTop}><span>{label}</span><Icon size={19} aria-hidden="true" /></div><strong>{available && value != null ? value + suffix : '—'}</strong><p>{text}</p></article>)}
+    </section>
+    <QueryFeedback query={query} />
+    <section className={s.filterPanel} aria-labelledby="restock-filters">
+    <FilterHeader className={s.heading}><div><h2 id="restock-filters"><button className={s.toggle} aria-expanded={filtersOpen} aria-controls="restock-filter-fields" onClick={() => setFiltersOpen(open => !open)}><SlidersHorizontal size={16} aria-hidden="true" />Filtros dos alertas exibidos<ChevronDown size={18} aria-hidden="true" className={filtersOpen ? s.expanded : undefined} /></button></h2><p>Consulte até 5 alertas prioritários retornados pelo servidor. As buscas abaixo filtram somente esses alertas; os indicadores permanecem globais.</p>{!filtersOpen && (search || status || category || range || order !== 'priority') && <p>Há filtros ou ordenação aplicados à lista.</p>}</div><FilterActions compact onClear={() => { setSearch(''); setStatus(''); setCategory(''); setRange(''); setOrder('priority') }} onRefresh={query.reload} refreshing={query.loading} refreshLabel="Atualizar alertas"><button onClick={() => navigate('produtos')}>Ver catálogo completo</button></FilterActions></FilterHeader>
+    <div id="restock-filter-fields" hidden={!filtersOpen}>
+    <div className={s.filters}>
+      <label>Categoria<select aria-label="Categoria" value={category} onChange={e => setCategory(e.target.value)}><option value="">Todas as categorias</option>{category && !categories.includes(category) && <option value={category}>{category}</option>}{categories.map(c => <option key={c}>{c}</option>)}</select></label>
+      <div className={s.rangeField}><div className={s.rangeLabel}><label htmlFor="restock-minimum-range">Mínimo disponível</label><span className={s.metricHelp}><button type="button" aria-label="Como é calculado o mínimo disponível" aria-describedby="restock-minimum-help"><CircleHelp size={15} aria-hidden="true" /></button><span id="restock-minimum-help" role="tooltip">Saldo atual ÷ estoque mínimo × 100. Até 25% inclui produtos zerados; de 25% a 50% exclui 25%. Sem saldo ou mínimo válido, o percentual não é calculado. “Falta para o mínimo” mostra apenas a diferença até o mínimo, não uma sugestão completa de compra.</span></span></div><select id="restock-minimum-range" value={range} onChange={e => setRange(e.target.value)}><option value="">Todas as faixas</option><option value="25">Até 25% do mínimo</option><option value="50">Acima de 25% até 50%</option><option value="above50">Acima de 50% do mínimo</option></select></div>
+      <label>Ordenar por<select aria-label="Ordenar por" value={order} onChange={e => setOrder(e.target.value)}><option value="priority">Prioridade do servidor</option><option value="name">Nome do produto · A–Z</option><option value="percentage">Menor percentual do mínimo</option></select></label>
     </div>
-  )
+    </div>
+    <div className={s.searchRow}>
+    <label className={s.search}>Buscar nome<input type="search" placeholder="Digite o nome do produto" value={search} onChange={e => setSearch(e.target.value)} /></label>
+      <div className={s.situationField}><span>Situação dos alertas recebidos</span><div className={access.segFilter + ' ' + s.situations} role="group" aria-label="Situação">{[['', 'Todos'], ['ZERADO', 'Zerados'], ['CRITICO', 'Abaixo do mínimo']].map(([value, label]) => <button key={value} type="button" className={status === value ? access.segFilterOn : undefined} aria-pressed={status === value} onClick={() => setStatus(value)}>{label}<small>{query.loading || query.error ? '—' : value ? rows.filter(row => row.status === value).length : rows.length}</small></button>)}</div></div>
+    </div>
+    </section>
+    {!query.loading && !query.error && <p className={s.resultSummary} role="status">Exibindo {filtered.length} de {rows.length} alerta(s) recebido(s). Os indicadores acima não são alterados pelos filtros.</p>}
+    <DataTable key={JSON.stringify([search, status, category, range, order])} caption="Alertas prioritários de reposição" rowKey={r => r.produtoId} columns={columns} rows={filtered} pageSize={20}
+      emptyText={query.loading ? 'Consultando alertas…' : query.error ? 'Não foi possível consultar a reposição.' : rows.length ? 'Nenhum alerta exibido corresponde aos filtros.' : 'Nenhum alerta retornado nesta consulta.'} />
+  </>
 }

@@ -1,0 +1,64 @@
+.editor { width: 100%; min-width: 0; margin: 24px auto 0; container-type: inline-size; }
+.sections { display: grid; gap: 16px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.sections > section { width: 100%; min-width: 0; max-width: none; box-sizing: border-box; margin: 0; padding: 28px; border-radius: 12px; }
+.sections > section > h3 { display: flex; justify-content: flex-start; align-items: center; gap: 10px; margin: 0 0 20px; padding-bottom: 14px; border-bottom: 1px solid var(--line); font-size: 15px; text-align: left; }
+.sections h3 svg { flex-shrink: 0; color: var(--gold2); }
+
+.identificationFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 18px 24px; }
+.sections > section > label { margin-top: 18px; }
+.sections .identificationFields > label { margin-top: 0; min-width: 0; }
+.identificationFields label > span { line-height: 1.5; }
+.editor input:not([type="checkbox"]), .editor select, .editor textarea { width: 100%; min-width: 0; box-sizing: border-box; }
+.editor input:not([type="checkbox"]), .editor select { height: 44px; }
+.editor textarea { resize: none; min-height: 100px; line-height: 1.6; }
+
+.functionPicker { margin-top: 18px; }
+.functionPicker > div:first-child {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px 16px;
+  margin-bottom: 20px;
+}
+.functionPicker > div:first-child > label {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+}
+.functionPicker > div:first-child svg { top: 50%; transform: translateY(-50%); pointer-events: none; }
+.functionPicker > div:first-child > span {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.functionPicker > div:last-child {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  gap: 16px;
+}
+.functionPicker fieldset { padding: 6px 12px 12px; }
+.functionPicker legend { max-width: 100%; margin-inline: 0 auto; }
+.functionPicker legend label { flex-wrap: wrap; justify-content: flex-start; }
+.functionPicker fieldset > label {
+  grid-template-columns: 15px minmax(0, 1fr);
+  padding: 10px 6px;
+}
+.functionPicker fieldset > label + label { border-top: 1px solid var(--row-line); }
+.functionPicker fieldset > label > input { margin: 2px 0 0; }
+.functionPicker fieldset > label > span { min-width: 0; gap: 3px; line-height: 1.5; overflow-wrap: anywhere; }
+.functionPicker fieldset > label:has(> input:checked) { background: color-mix(in srgb, var(--gold) 9%, transparent); }
+.functionPicker fieldset code { line-height: 1.5; overflow-wrap: anywhere; }
+
+.footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 12px; margin-top: 20px; padding: 16px 0 8px; border-top: 1px solid var(--line); }
+.footer button { min-width: 136px; min-height: 44px; justify-content: center; }
+
+@container (max-width: 840px) {
+  .functionPicker > div:last-child { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container (max-width: 580px) {
+  .sections > section { padding: 18px; }
+  .sections .identificationFields, .functionPicker > div:last-child { grid-template-columns: minmax(0, 1fr); }
+  .functionPicker > div:first-child { grid-template-columns: minmax(0, 1fr); }
+  .footer button { flex: 1 1 120px; min-width: 0; }
+}

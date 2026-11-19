@@ -1,0 +1,12 @@
+.muted { color: var(--dim); font-size: 13px; }
+.deleteAction.deleteAction { color: var(--red); }
+.dangerSolid { background: #a9483a; border-color: #a9483a; color: #fff; font-weight: 700; }
+.dangerSolid:hover:not(:disabled) { background: #c0503f; border-color: #c0503f; color: #fff; }
+.modalForm { display: grid; gap: 20px; min-width: 0; }
+.modalForm label { display: grid; gap: 8px; min-width: 0; color: var(--dim); font-size: 12px; }
+.modalForm input, .modalForm select, .modalForm textarea { width: 100%; min-width: 0; box-sizing: border-box; }
+.modalForm input, .modalForm select { min-height: 42px; }
+.modalForm textarea { resize: none; line-height: 1.6; }
+.modalForm small { line-height: 1.6; }
+.categoryModal > footer { flex-wrap: wrap; }
+

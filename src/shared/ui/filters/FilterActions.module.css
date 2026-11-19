@@ -1,0 +1,7 @@
+.header.header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 16px; }
+.header > :first-child { min-width: 0; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.actions > button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; white-space: nowrap; }
+.actions > button.icon { width: 36px; height: 36px; min-width: 36px; padding: 0; }
+.actions > button:focus-visible { outline: 2px solid var(--gold2); outline-offset: 3px; }
+@media (max-width: 700px) { .header.header { grid-template-columns: minmax(0, 1fr); gap: 12px; } .actions { width: 100%; } }

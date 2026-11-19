@@ -3,6 +3,8 @@
   inset: 0;
   z-index: 300;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   place-items: center;
   padding: 20px;
 }
@@ -15,8 +17,10 @@
 
 .panel {
   position: relative;
+  min-width: 0;
   max-width: 100%;
-  max-height: calc(100vh - 40px);
+  box-sizing: border-box;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--panel);
@@ -41,8 +45,10 @@
 
 .body {
   padding: 18px 22px;
+  min-width: 0;
   overflow: auto;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
   font-size: 13px;
 }
@@ -57,7 +63,14 @@
 .foot {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 14px 22px 18px;
   border-top: 1px solid var(--line);
+}
+
+@media (max-width: 480px) {
+  .wrap { padding: 12px; }
+  .head, .body, .foot { padding-inline: 14px; }
+  .foot > button { flex: 1 1 auto; justify-content: center; }
 }

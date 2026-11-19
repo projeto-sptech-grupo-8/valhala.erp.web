@@ -1,0 +1,56 @@
+.actions { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.actions button,.panel h2 button,.receipt h3 { display:inline-flex; align-items:center; gap:7px; }
+.panel,.receipt { padding:clamp(12px,2vw,20px); margin-bottom:14px; min-width:0; }
+.panel h2,.receipt h3,.detail h2,.detail h3 { margin:0; font-size:16px; }
+.panel h2 button { font:inherit; border:0; background:transparent; padding:4px 0; }
+.fields { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(145px,100%),1fr)); gap:12px; align-items:end; margin-top:14px; }
+.fields label,.detail label { display:grid; gap:5px; min-width:0; font-size:13px; }
+.fields input,.fields select,.detail textarea,.detail input { min-width:0; width:100%; box-sizing:border-box; }
+.customer { margin:12px 0; }
+.customer summary { cursor:pointer; font-size:13px; color:var(--gold2); }
+.scroll { overflow-x:auto; margin:12px 0; }
+.scroll table { width:100%; border-collapse:collapse; text-align:left; font-size:13px; }
+.scroll td,.scroll th { padding:10px 8px; border-bottom:1px solid var(--line); }
+.scroll small { display:block; color:var(--dim); }
+.scroll [data-status=AUTORIZADA] { color:var(--green); }
+.scroll [data-status=CANCELADA],.danger,.scroll [data-status=REJEITADA] { color:var(--red); }
+.detail { display:grid; gap:10px; overflow-wrap:anywhere; padding:12px 0; }
+.detail p,.detail ul { margin:0; }
+.detail textarea { resize:vertical; }
+.receipt { border-inline-start:3px solid var(--gold); }
+
+
+.listTitle,.scroll td button { display:inline-flex; gap:7px; align-items:center; }
+.listTitle svg { color:var(--gold2); }
+
+.invoice { display:grid; gap:16px; min-width:0; overflow-wrap:anywhere; font-size:13px; }
+.invoice h2,.invoice h3,.invoice p,.invoice dl,.invoice dd,.invoice ul { margin:0; }
+.invoice h2,.invoice h3,.fileActions button,.cancelArea button,.fiscalData button { display:flex; align-items:center; gap:7px; }
+.invoice h2 { font-size:20px; }
+.invoice h3 { font-size:14px; }
+.invoice svg { flex:none; }
+.identity { padding-right:30px; display:grid; gap:7px; }
+.identity h2 svg,.section h3 svg { color:var(--gold2); }
+.identity p,.invoice dt,.invoice small,.section p { color:var(--dim); }
+.badges,.fileActions { display:flex; flex-wrap:wrap; gap:7px; }
+.badges > * { padding:4px 8px; border-radius:6px; background:var(--panel); font-size:11px; }
+.badges [data-status=AUTORIZADA] { color:var(--green); }
+.badges [data-status=CANCELADA],.badges [data-status=REJEITADA] { color:var(--red); }
+.summary { display:grid; gap:4px; padding:14px; background:var(--panel); border:1px solid var(--line); border-radius:8px; }
+.summary > strong { font-size:26px; font-variant-numeric:tabular-nums; }
+.summary dl,.section dl { display:grid; gap:6px; padding-top:10px; border-top:1px solid var(--line); margin-top:8px; }
+.summary dl > div,.section dl > div,.section li { display:flex; justify-content:space-between; align-items:baseline; gap:12px; }
+.summary dd,.section dd { text-align:right; }
+.invoice small { display:block; margin-top:3px; }
+.fileActions button { flex:1 1 120px; justify-content:center; }
+.section { display:grid; gap:8px; }
+.section ul { padding:0; list-style:none; }
+.section li { padding:6px 0; }
+.section li strong { flex:none; }
+.fiscalData,.cancelArea { border-top:1px solid var(--line); padding-top:12px; }
+.fiscalData summary { cursor:pointer; font-weight:600; }
+.fiscalData summary svg { vertical-align:middle; }
+.fiscalData dl { display:grid; gap:8px; margin:12px 0; }
+.cancelArea { margin-top:16px; }
+
+.listMessage { text-align:center; }

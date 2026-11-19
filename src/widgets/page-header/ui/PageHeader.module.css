@@ -1,0 +1,40 @@
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 0;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  font: inherit;
+}
+.back:hover { color: var(--gold2); background: transparent; }
+.back:focus-visible { outline: 2px solid var(--gold2); outline-offset: 3px; }
+.titleWithIcon { display: flex; align-items: center; gap: 10px; }
+.titleWithIcon svg { flex-shrink: 0; color: var(--gold2); }
+.help { position: relative; display: inline-flex; }
+.helpButton { display: inline-flex; align-items: center; justify-content: center; padding: 0; width: 30px; height: 30px; border: 0; border-radius: 50%; background: transparent; cursor: help; }
+.helpButton:focus-visible { outline: 2px solid var(--gold2); outline-offset: 2px; }
+.helpText { display: none; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); z-index: 10; width: min(310px, 70vw); padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); box-shadow: 0 8px 24px #0004; color: var(--text); font-size: 12px; font-weight: 400; line-height: 1.7; }
+.help:hover .helpText, .help:focus-within .helpText { display: block; }
+
+.auditLegend { width:min(380px,78vw); max-height:min(520px,65vh); overflow-y:auto; overscroll-behavior:contain; text-align:left; }
+.legendTitle { display:block; font-size:13px; margin-bottom:6px; }
+.legendIntro { display:block; color:var(--dim); margin-bottom:14px; }
+.legendRow { display:flex; align-items:flex-start; gap:9px; margin-top:12px; }
+.legendDot { width:9px; height:9px; border-radius:50%; flex-shrink:0; margin-top:6px; }
+.legendRow > span:last-child { display:grid; gap:3px; min-width:0; }
+.legendRow strong { font-size:12px; font-weight:600; }
+.legendRow > span > span { color:var(--dim); font-size:11px; line-height:1.65; }
+.legendFooter { display:block; border-top:1px solid var(--line); margin-top:14px; padding-top:12px; color:var(--dim); font-size:11px; }
+@media(max-width:640px) { .auditLegend { left:auto; right:0; transform:none; width:min(340px,78vw); } }
+.dashboardHeader { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 24px; align-items: center; }
+.dashboardHeader > h1 { grid-column: 1; grid-row: 1; }
+.dashboardHeader > p { grid-column: 1; grid-row: 2; }
+.dashboardActions { grid-column: 2; grid-row: 1 / span 2; min-width: 0; }
+@media(max-width: 1100px) { .dashboardHeader { grid-template-columns: minmax(0, 1fr); } .dashboardActions { grid-column: 1; grid-row: 3; margin-top: 14px; } }
