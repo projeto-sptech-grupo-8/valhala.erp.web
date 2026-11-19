@@ -1,0 +1,19 @@
+/* Área de impressão: invisível na tela; na impressão, só ela aparece (preto no branco, qualquer tema). */
+.print-root { display: none; }
+
+@media print {
+  html, body { background: #fff !important; }
+  body > *:not(.print-root) { display: none !important; }
+  .print-root { display: block !important; color: #000; background: #fff; }
+}
+
+/* ─── etiquetas de gôndola A4 (3 × 8, 63,5 × 33,9 mm) ─── */
+.print-labels {
+  display: grid;
+  grid-template-columns: repeat(3, 63.5mm);
+  grid-auto-rows: 33.9mm;
+  column-gap: 2.5mm;
+  font-family: Arial, Helvetica, sans-serif;
+  color: #000;
+}
+.print-labels.grande { grid-template-columns: repeat(2, 99mm); grid-auto-rows: 57mm; }

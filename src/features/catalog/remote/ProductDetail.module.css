@@ -1,0 +1,30 @@
+.header { padding-right: 24px; }
+.header h2 { margin: 16px 0 8px; font-size: 23px; line-height: 1.4; overflow-wrap: anywhere; }
+.header p { margin: 0 0 8px; color: var(--dim); font-size: 13px; }
+.header > small { color: var(--faint); font-size: 11px; overflow-wrap: anywhere; }
+.tags, .type { display: flex; align-items: center; gap: 8px; }
+.type, .status, .stockState { font-size: 11px; border-radius: 6px; padding: 6px 9px; background: var(--active-bg); color: var(--gold2); }
+.status[data-active="true"] { color: var(--green); background: var(--ok-bg); }
+.status[data-active="false"], .stockState[data-alert="true"] { color: var(--red); }
+.price { display: grid; gap: 10px; padding: 22px; border: 1px solid var(--line); background: var(--active-bg); border-radius: 10px; }
+.price > span { font-size: 12px; color: var(--dim); }
+.price strong { font-size: 30px; font-variant-numeric: tabular-nums; color: var(--gold2); }
+.section { padding: 0 0 22px; border-bottom: 1px solid var(--line); }
+.section h3 { font-size: 13px; margin: 0 0 18px; }
+.sectionTitle { display: flex; justify-content: space-between; align-items: start; gap: 12px; }
+.stats, .metadata { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin: 0; }
+.stats dt, .metadata dt { color: var(--dim); font-size: 12px; line-height: 1.6; }
+.stats dd, .metadata dd { margin: 8px 0 0; overflow-wrap: anywhere; line-height: 1.5; }
+.stats dd { font-size: 21px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.metadata dd { font-size: 13px; }
+.stats small, .recipe small { font-size: 12px; color: var(--dim); font-weight: 400; }
+.hint { color: var(--dim); font-size: 12px; line-height: 1.7; margin: 14px 0 0; }
+.recipe { list-style: none; margin: 14px 0 0; padding: 0; }
+.recipe li { display: flex; justify-content: space-between; align-items: start; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.recipe li > span { overflow-wrap: anywhere; min-width: 0; }
+.recipe strong { white-space: nowrap; }
+.notice { display: flex; gap: 8px; padding: 14px; background: var(--active-bg); border-radius: 8px; color: var(--dim); font-size: 12px; line-height: 1.7; }
+.notice svg { flex-shrink: 0; margin-top: 2px; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; padding: 4px 0 8px; }
+.actions button { flex: 1 1 170px; min-height: 42px; font-size: 12px; }
+@media (max-width: 400px) { .stats, .metadata { gap: 14px; } .sectionTitle { flex-wrap: wrap; margin-bottom: 12px; } }

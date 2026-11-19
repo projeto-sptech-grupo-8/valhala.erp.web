@@ -1,0 +1,13 @@
+.label { box-sizing: border-box; display: grid; grid-template-rows: auto auto 1fr auto; gap: .7mm; overflow: hidden; padding: 1.5mm 2mm; border: .2mm dashed #aaa; background: #fff; color: #111; font-family: Arial, Helvetica, sans-serif; height: 100%; min-width: 0; break-inside: avoid; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+.stripe { padding: .6mm 1mm; background: #f1f5f9; color: #111; font-size: 6.5pt; font-weight: 700; line-height: 1.2; }
+.name { font-size: 9pt; font-weight: 700; line-height: 1.15; max-height: 2.3em; overflow: hidden; overflow-wrap: anywhere; }
+.price { align-self: center; font-size: 19pt; font-weight: 800; line-height: 1.1; white-space: nowrap; }
+.footer { display: flex; align-items: end; justify-content: space-between; gap: 1.5mm; min-width: 0; }
+.metadata { font-size: 6.5pt; line-height: 1.3; min-width: 0; overflow-wrap: anywhere; }
+.footer svg { flex-shrink: 0; width: 32mm; height: 11mm; background: #fff; }
+.noBarcode { font-size: 6pt; color: #333; max-width: 19mm; text-align: right; }
+.large .stripe { font-size: 9pt; padding: 1mm 2mm; }
+.large .name { font-size: 12pt; }
+.large .price { font-size: 30pt; }
+.large .metadata, .large .noBarcode { font-size: 8pt; }
+.large .footer svg { width: 38mm; height: 12mm; }

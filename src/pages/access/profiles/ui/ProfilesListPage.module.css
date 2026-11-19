@@ -1,0 +1,16 @@
+.ranges { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.ranges fieldset { min-width: 0; margin: 0; padding: 16px; border: 1px solid var(--line); border-radius: 8px; }
+.ranges legend { display: inline-flex; align-items: center; gap: 8px; padding: 0 6px; font-size: 13px; color: var(--text); }
+.ranges legend svg { color: var(--gold2); }
+.bounds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.bounds label { display: grid; gap: 8px; min-width: 0; font-size: 12px; color: var(--dim); }
+.bounds input { width: 100%; min-width: 0; height: 42px; box-sizing: border-box; }
+.ranges p { margin: 12px 0 0; color: var(--dim); font-size: 12px; line-height: 1.6; }
+.bottom { grid-template-columns: minmax(0, 1fr); }
+.error { color: var(--red); font-size: 13px; line-height: 1.6; }
+.help { position: relative; display: inline-flex; }
+.helpButton { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: help; }
+.helpButton:focus-visible { outline: 2px solid var(--gold2); outline-offset: 2px; }
+.helpText { display: none; position: absolute; top: 100%; right: 0; z-index: 10; width: min(300px, 65vw); padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); box-shadow: 0 8px 24px #0004; color: var(--text); font-size: 12px; font-weight: 400; line-height: 1.7; }
+.help:hover .helpText, .help:focus-within .helpText { display: block; }
+@media (max-width: 640px) { .ranges, .bottom { grid-template-columns: 1fr; } }
