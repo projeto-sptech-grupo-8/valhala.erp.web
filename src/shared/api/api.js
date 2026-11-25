@@ -382,7 +382,13 @@ const realApi = {
   logout: () => request('/auth/logout', { method: 'POST' }),
   me:     () => request('/usuario/me').then(toUsuario),
 
+  estabelecimento: {
+    obter: (signal) => request('/estabelecimento', { signal }),
+    atualizar: (patch) => request('/estabelecimento', send('PATCH', patch)),
+  },
+
   usuarios: {
+    meusAcessos: (signal) => request('/usuario/me/acessos', { signal }),
     listar:    (signal) => catalogRead('/usuario', signal).then(r => list(r).map(toUsuario)),
     obter:     (id) => request(`/usuario/${id}`).then(toUsuario),
     criar:     async (data) => request('/usuario', send('POST', await comNomePerfil(data))).then(toUsuario).catch(camposDoUsuario),

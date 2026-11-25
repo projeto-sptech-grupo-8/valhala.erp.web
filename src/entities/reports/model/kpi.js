@@ -20,6 +20,16 @@ export const METAS = {
   margemLiquida: { ok: 15, warn: 8 },   // %
   cmv: { ok: 60, warn: 70 },            // % da receita (menor é melhor)
   coberturaPagar: { ok: 2, warn: 1 },   // saldo ÷ contas a pagar em 30 dias
+  perdasFaturamento: { ok: 1, warn: 2 }, // custo das perdas ÷ faturamento, em %
+  participacaoCategoria: { ok: 50, warn: 20 }, // % do total em vendas por categoria
+}
+
+export const LIMITE_FALTA_RECORRENTE = 10 // % dos dias do período, exclusivo
+
+export const PRIORIDADES_ABC = {
+  A: { tone: 'bad', label: 'Alta prioridade' },
+  B: { tone: 'warn', label: 'Média prioridade' },
+  C: { tone: 'ok', label: 'Baixa prioridade' },
 }
 
 /* maior é melhor */
