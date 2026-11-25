@@ -1,236 +1,602 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { Link } from 'react-router-dom'
 import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer, ReferenceLine, LabelList,
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, ReferenceLine, LabelList, Rectangle, Dot,
 } from 'recharts'
-import { Download, Info, Table2, Grid3x3 } from 'lucide-react'
-import { Stat, ToneBadge } from '@/shared/ui/primitives/ui.jsx'
+import {
+  ChartNoAxesCombined, CircleCheck, CircleMinus, CircleX, Clock3, Download, Eye,
+  Grid3x3, PackageX, Percent, Store, Table2, TrendingDown,
+} from 'lucide-react'
+import { ToneBadge } from '@/shared/ui/primitives/ui.jsx'
 import { useToast } from '@/shared/ui/notifications/useToast.js'
 import { fmtBRL, fmtNum } from '@/shared/lib/format.js'
 import { downloadCSV, stamp } from '@/shared/lib/csv.js'
-import { METAS } from '@/entities/reports'
+import { LIMITE_FALTA_RECORRENTE, METAS, PRIORIDADES_ABC, TONE_COLOR, toneHigher, toneLower } from '@/entities/reports'
 import { useStore } from '@/entities/store'
-import { getHistorico, CANAIS, MOTIVOS_PERDA } from '@/entities/reports'
-import {
-  mergeSales, inPeriod, curvaABC, margemPorCategoria, rupturas, mapaHorarios, binOf, porCanal, perdas, WEEKDAYS, HOURS,
-} from '@/entities/reports'
+import { binOf, WEEKDAYS } from '@/entities/reports'
 import { axisTick, legendStyle } from '@/shared/ui/charts/chartStyles.js'
-import { DataTable } from '@/shared/ui/data-table/DataTable.jsx'
-import s from '@/shared/styles/panel.module.css'
+import { Drawer } from '@/shared/ui/drawer/Drawer.jsx'
+import p from '@/shared/styles/panel.module.css'
+import { useQueryResource } from '@/shared/lib/hooks/usePagedQuery.js'
+import { ErrorBlock, LoadingBlock, Notice } from '@/shared/ui/feedback/ManagementFeedback.jsx'
+import { readReport, estoqueAtual, horarioReport, perdasReport, produtosDoHorario } from '../model/reportApi.js'
+import { ReportTable } from './ReportTable.jsx'
+import s from './ReportsPage.module.css'
 
 const ABAS = [
-  ['abc', 'Curva ABC'], ['margem', 'Margem por categoria'], ['ruptura', 'Ruptura'],
-  ['horarios', 'Vendas por horário'], ['canais', 'Canais'], ['perdas', 'Perdas por motivo'],
+  { id: 'abc', label: 'Curva ABC', Icon: ChartNoAxesCombined, title: 'Produtos que mais faturam',
+    description: 'Veja quais produtos mais contribuem para o faturamento.' },
+  { id: 'margem', endpoint: 'margem-categorias', label: 'Margem por categoria', Icon: Percent, title: 'Margem por categoria',
+    description: 'Compare quanto sobra das vendas depois de descontar o custo dos produtos.' },
+  { id: 'ruptura', label: 'Falta de estoque', Icon: PackageX, title: 'Falta de estoque',
+    description: 'Veja quais produtos ficaram sem estoque e quanto isso pode ter custado.' },
+  { id: 'horarios', label: 'Horários de venda', Icon: Clock3, title: 'Horários de venda',
+    description: 'Identifique os dias e horários em que o caixa fica mais movimentado.' },
+  { id: 'canais', label: 'Canais de venda', Icon: Store, title: 'Canais de venda',
+    description: 'Compare balcão, mesa e delivery.' },
+  { id: 'perdas', label: 'Perdas por motivo', Icon: TrendingDown, title: 'Perdas por motivo',
+    description: 'Veja quanto foi perdido a preço de custo e quais motivos mais pesaram.' },
 ]
-const PERIODOS = [[7, '7 dias'], [30, '30 dias'], [90, '90 dias']]
-const CAT_VAR = ['var(--cat-1)', 'var(--cat-2)', 'var(--cat-3)', 'var(--cat-4)']
-const pct = (n, d = 0) => `${n.toFixed(d).replace('.', ',')}%`
+const PERIODOS = [7, 30, 90]
+const BUSCA_PRODUTO = { key: 'name', label: 'Buscar produto', placeholder: 'Digite o nome do produto' }
+const SITUACAO_RUPTURA = { ok: 'Sem registro', warn: 'Pontual', bad: 'Recorrente' }
+const COR_POR_MOTIVO = {
+  'Perda / quebra': TONE_COLOR.bad,
+  Vencimento: TONE_COLOR.warn,
+  'Consumo interno': TONE_COLOR.ok,
+}
+const pct = (n, d = 0) => n == null ? '—' : `${n.toFixed(d).replace('.', ',')}%`
+const HEATMAP_DIRECTIONS = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }
+const DIAS_POR_EXTENSO = {
+  Seg: 'Segunda-feira', Ter: 'Terça-feira', Qua: 'Quarta-feira', Qui: 'Quinta-feira',
+  Sex: 'Sexta-feira', Sáb: 'Sábado', Dom: 'Domingo',
+}
 
-/* tooltip padrão: texto em tinta, nunca na cor da série */
-function Tip({ active, payload, label, fmt = fmtBRL, title }) {
+const KPI_STATUS = {
+  ok: { label: 'Bom', Icon: CircleCheck },
+  warn: { label: 'Médio', Icon: CircleMinus },
+  bad: { label: 'Ruim', Icon: CircleX },
+  neutral: { label: 'Sem referência' },
+}
+
+function percentual(parte, total) {
+  return total ? pct(parte / total * 100, 1) : null
+}
+
+function Indicadores({ unidade, items }) {
+  return (
+    <div className={s.metrics} role="region" aria-label="Indicadores do relatório" tabIndex={0}>
+      {items.map(({ label, value, percent, percentLabel, description, tone, statusLabel, featured }) => {
+        const status = KPI_STATUS[tone]
+        const exibirPercentual = unidade === 'percentual' && percent !== undefined
+        return (
+          <article key={label} className={s.stat} data-featured={featured || undefined} data-tone={tone ?? 'neutral'}>
+            <div className={s.statTitleRow}>
+              <h3>{label}</h3>
+              <span className={s.kpiStatus} data-priority={statusLabel ? true : undefined}>
+                {!statusLabel && status?.Icon && <status.Icon size={17} aria-hidden="true" />}
+                {statusLabel ?? status?.label ?? 'Sem meta'}
+              </span>
+            </div>
+            <div>
+              <strong className={s.statValue}>{exibirPercentual ? percent ?? '—' : value}</strong>
+              {exibirPercentual && percent != null && <span className={s.statUnit}>{percentLabel}</span>}
+            </div>
+            <p>{description}</p>
+          </article>
+        )
+      })}
+    </div>
+  )
+}
+
+function ExportButton({ onClick }) {
+  return <button type="button" onClick={onClick}><Download size={15} aria-hidden="true" />Exportar</button>
+}
+function Tip({ active, payload, label, fmt = fmtBRL, title, color }) {
   if (!active || !payload?.length) return null
   return (
-    <div className={s.tip}>
-      <span className={s.tipLabel}>{title ? title(payload[0].payload) : label}</span>
+    <div className={p.tip}>
+      <span className={p.tipLabel}>{title ? title(payload[0].payload) : label}</span>
       {payload.map(p => (
-        <span key={p.dataKey} className={s.tipRow}>
-          <i style={{ background: p.color }} aria-hidden="true" />{p.name}: <b>{fmt(p.value, p.payload)}</b>
+        <span key={p.dataKey} className={p.tipRow}>
+          <i style={{ background: color?.(p.payload) ?? p.color }} aria-hidden="true" />{p.name}: <b>{fmt(p.value, p.payload)}</b>
         </span>
       ))}
     </div>
   )
 }
 
-const grid = <CartesianGrid vertical={false} stroke="var(--grid)" />
+const grid = <CartesianGrid vertical={false} stroke="var(--grid)" strokeDasharray="4 4" />
+const reportBarColor = row => TONE_COLOR[row.tone]
 
-/* ─── abas ─── */
-function ABC({ sales, exportar }) {
-  const rows = curvaABC(sales)
-  const cls = (c) => rows.filter(r => r.classe === c)
-  const resumo = ['A', 'B', 'C'].map(c => {
-    const l = cls(c)
-    return { c, itens: l.length, receita: l.reduce((a, r) => a + r.receita, 0), mix: rows.length ? (l.length / rows.length) * 100 : 0 }
-  })
-  const total = rows.reduce((a, r) => a + r.receita, 0) || 1
+function ReportBarShape(props) {
+  return <Rectangle {...props} fill={reportBarColor(props.payload)} />
+}
+
+function ClasseABC({ classe }) {
+  const { tone, label } = PRIORIDADES_ABC[classe]
+  return <span className={s.abcClassBadge} data-tone={tone} title={label}><ToneBadge tone={tone} label={'Classe ' + classe} /></span>
+}
+
+const corClasseABC = row => TONE_COLOR[PRIORIDADES_ABC[row.classe].tone]
+
+function PontoABC({ cx, cy, r, payload }) {
+  return <Dot cx={cx} cy={cy} r={r} fill={corClasseABC(payload)} stroke="var(--card)" />
+}
+
+function ParticipacaoABC({ value }) {
+  const width = Math.max(0, Math.min(100, value))
+  return (
+    <span className={s.abcShare}>
+      <span>{pct(value, 1)}</span>
+      <span className={s.abcShareTrack} aria-hidden="true"><span style={{ width: width + '%' }} /></span>
+    </span>
+  )
+}
+
+function DetalhesProdutoABC({ produto, dias, onClose }) {
+  return createPortal(
+    <Drawer title={`Curva ABC de ${produto.name}`} onClose={onClose}>
+      <header className={s.abcDetailHeader}>
+        <ClasseABC classe={produto.classe} />
+        <h2>{produto.name}</h2>
+        <p>{produto.cat || 'Categoria não informada'} · Últimos {dias} dias</p>
+      </header>
+      <section className={s.drawerRevenue} aria-label="Faturamento do produto">
+        <span>Faturamento no período</span>
+        <strong>{fmtBRL(produto.receita)}</strong>
+      </section>
+      <section className={s.abcDetailSection}>
+        <h3>Desempenho na Curva ABC</h3>
+        <dl className={s.abcDetailMetrics}>
+          <div><dt>Posição no ranking</dt><dd>{fmtNum(produto.pos)}º</dd></div>
+          <div><dt>Unidades vendidas</dt><dd>{fmtNum(produto.qty)}</dd></div>
+          <div><dt>% do faturamento total</dt><dd>{pct(produto.pct, 1)}</dd></div>
+          <div><dt>% acumulado no ranking</dt><dd>{pct(produto.acumulado, 1)}</dd></div>
+        </dl>
+        <p>O acumulado soma a participação deste produto à dos itens que aparecem antes dele no ranking por faturamento.</p>
+      </section>
+    </Drawer>,
+    document.body,
+  )
+}
+
+function filtroCategoria(rows) {
+  const categorias = [...new Set(rows.map(row => row.cat).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'pt-BR'))
+  return {
+    key: 'cat', label: 'Categoria', allLabel: 'Todas as categorias',
+    options: categorias.map(value => ({ value, label: value })),
+  }
+}
+
+function TabelaProdutosABC({ rows, dias }) {
+  const [produtoAbertoId, setProdutoAbertoId] = useState(null)
+  const produtoAberto = rows.find(row => row.id === produtoAbertoId)
+
+  function abrirProduto(event, id) {
+    event.currentTarget.focus({ preventScroll: true })
+    setProdutoAbertoId(id)
+  }
+
   const columns = [
     { key: 'pos', header: '#', width: 50, align: 'right' },
-    { key: 'name', header: 'Produto', render: r => <b className={s.cellStrong}>{r.name}</b> },
+    {
+      key: 'name', header: 'Produto',
+      render: row => (
+        <button type="button" className={s.abcProductLink} aria-haspopup="dialog" aria-label={`Ver detalhes de ${row.name}`}
+          onClick={event => abrirProduto(event, row.id)}>
+          <span>{row.name}</span>
+        </button>
+      ),
+    },
     { key: 'cat', header: 'Categoria', width: 120 },
     { key: 'qty', header: 'Unidades', width: 90, align: 'right', render: r => fmtNum(r.qty) },
-    { key: 'receita', header: 'Faturamento', width: 130, align: 'right', render: r => fmtBRL(r.receita) },
-    { key: 'pct', header: '% do total', width: 100, align: 'right', render: r => pct(r.pct, 1) },
+    { key: 'receita', header: 'Faturamento', width: 130, align: 'right', render: r => <strong className={s.abcMoney}>{fmtBRL(r.receita)}</strong> },
+    { key: 'pct', header: '% do total', width: 120, align: 'right', render: r => <ParticipacaoABC value={r.pct} /> },
     { key: 'acumulado', header: '% acumulado', width: 110, align: 'right', render: r => pct(r.acumulado, 1) },
-    { key: 'classe', header: 'Classe', width: 80, render: r => <ToneBadge tone={r.classe === 'A' ? 'ok' : r.classe === 'B' ? 'warn' : 'neutral'} label={r.classe} /> },
+    { key: 'classe', header: 'Classe', width: 98, render: r => <ClasseABC classe={r.classe} /> },
+    {
+      key: 'acoes', header: 'Ações', width: 84, align: 'center', sort: false,
+      render: row => (
+        <button type="button" className={s.abcAction} aria-haspopup="dialog" aria-label={`Ver mais sobre ${row.name}`}
+          onClick={event => abrirProduto(event, row.id)}>
+          <Eye size={17} aria-hidden="true" />
+          <span>Ver mais</span>
+        </button>
+      ),
+    },
   ]
+
+  const filtros = [
+    filtroCategoria(rows),
+    {
+      key: 'classe', label: 'Classe ABC', allLabel: 'Todas', segmented: true,
+      options: Object.entries(PRIORIDADES_ABC).map(([value, { tone }]) => ({ value, label: value, tone })),
+    },
+  ]
+
   return (
     <>
-      <div className="stats">
-        {resumo.map(r => (
-          <Stat key={r.c} a={`Classe ${r.c}`} b={`${r.itens} ${r.itens === 1 ? 'item' : 'itens'}`}
-            c={`${pct(r.mix)} do mix · ${pct((r.receita / total) * 100)} do faturamento`}
-            tone="neutral" />
-        ))}
-      </div>
-      <article className="card">
-        <div className={s.cardTitleRow}>
-          <h3>Faturamento acumulado por produto (do maior para o menor)</h3>
-          <button onClick={() => exportar('curva-abc', ['Posição', 'Produto', 'Categoria', 'Unidades', 'Faturamento', '% do total', '% acumulado', 'Classe'], rows.map(r => [r.pos, r.name, r.cat, r.qty, r.receita, r.pct.toFixed(2), r.acumulado.toFixed(2), r.classe]))}>Exportar <Download size={13} aria-hidden="true" /></button>
-        </div>
-        <ResponsiveContainer width="100%" height={260}>
-          <LineChart data={rows} margin={{ top: 12, right: 24, left: 4, bottom: 4 }}>
-            {grid}
-            <XAxis dataKey="pos" tick={axisTick} axisLine={false} tickLine={false} label={{ value: 'posição no ranking', position: 'insideBottomRight', offset: -2, style: { fill: 'var(--dim)', fontSize: 11 } }} />
-            <YAxis domain={[0, 100]} ticks={[0, 25, 50, 80, 95, 100]} tick={axisTick} axisLine={false} tickLine={false} tickFormatter={v => `${v}%`} width={44} />
-            <ReferenceLine y={80} stroke="var(--dim)" strokeWidth={1} label={{ value: 'A até 80%', position: 'insideTopLeft', style: { fill: 'var(--dim)', fontSize: 11 } }} />
-            <ReferenceLine y={95} stroke="var(--dim)" strokeWidth={1} label={{ value: 'B até 95%', position: 'insideTopLeft', style: { fill: 'var(--dim)', fontSize: 11 } }} />
-            <Tooltip content={<Tip fmt={(v, p) => `${pct(v, 1)} · ${fmtBRL(p.receita)}`} title={p => `${p.pos}º · ${p.name} (classe ${p.classe})`} />} cursor={{ stroke: 'var(--grid)' }} />
-            <Line type="monotone" dataKey="acumulado" name="% acumulado" stroke="var(--series-1)" strokeWidth={2} dot={{ r: 4, fill: 'var(--series-1)', stroke: 'var(--card)', strokeWidth: 2 }} activeDot={{ r: 6 }} />
-          </LineChart>
-        </ResponsiveContainer>
-        <p className={s.chartNote}>Classe A são os poucos itens que trazem 80% do faturamento — <b>nunca podem faltar</b>. Classe C é cauda: revise mix e estoque parado.</p>
-      </article>
-      <DataTable caption="Curva ABC" columns={columns} rows={rows} initialSort={{ key: 'pos', dir: 'asc' }} pageSize={20} />
+      <ReportTable title="Detalhamento por produto" caption="Curva ABC" search={BUSCA_PRODUTO} filters={filtros}
+        singular="produto" plural="produtos" columns={columns} rows={rows}
+        initialSort={{ key: 'pos', dir: 'asc' }} emptyText="Nenhum produto vendido no período."
+        rowClassName={row => row.id === produtoAbertoId ? s.abcSelectedRow : undefined} />
+      {produtoAberto && <DetalhesProdutoABC produto={produtoAberto} dias={dias} onClose={() => setProdutoAbertoId(null)} />}
     </>
   )
 }
 
-function Margem({ sales, exportar }) {
-  const rows = margemPorCategoria(sales)
-  const meta = METAS.margemBruta.ok
+/* ─── abas ─── */
+function ABC({ data, exportar, unidade, dias }) {
+  const rows = data.itens.map(r => ({
+    id: r.produtoId, name: r.nome, cat: r.categoria, qty: r.quantidade, receita: r.receita,
+    pos: r.posicao, pct: r.percentual, acumulado: r.acumulado, classe: r.classe,
+  }))
+  const resumo = Object.keys(PRIORIDADES_ABC).map(classe => {
+    const itens = rows.filter(row => row.classe === classe)
+    return { classe, count: itens.length, receita: itens.reduce((sum, row) => sum + row.receita, 0) }
+  })
+  const total = rows.reduce((a, r) => a + r.receita, 0)
+  return (
+    <>
+      <Indicadores unidade={unidade} items={resumo.map(({ classe, count, receita }) => ({
+        label: `Classe ${classe}`,
+        value: fmtBRL(receita),
+        percent: percentual(receita, total),
+        percentLabel: 'do faturamento',
+        description: `${count} ${count === 1 ? 'produto' : 'produtos'} · ${pct(rows.length ? count / rows.length * 100 : 0)} dos produtos vendidos`,
+        tone: PRIORIDADES_ABC[classe].tone,
+        statusLabel: PRIORIDADES_ABC[classe].label,
+      }))} />
+      <article className={s.card}>
+        <div className={s.cardHead}>
+          <div><h3>Faturamento acumulado</h3><p>Produtos em ordem de faturamento, do maior para o menor.</p></div>
+          <ExportButton onClick={() => exportar('curva-abc', ['Posição', 'Produto', 'Categoria', 'Unidades', 'Faturamento', '% do total', '% acumulado', 'Classe'], rows.map(r => [r.pos, r.name, r.cat, r.qty, r.receita, r.pct?.toFixed(2), r.acumulado?.toFixed(2), r.classe]))} />
+        </div>
+        {rows.length ? (
+          <div className={s.abcGrid}>
+            <div className={s.abcChart}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={rows} margin={{ top: 14, right: 16, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="reports-abc-fill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="var(--series-1)" stopOpacity={0.25} />
+                      <stop offset="100%" stopColor="var(--series-1)" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  {grid}
+                  <XAxis dataKey="pos" tick={axisTick} axisLine={false} tickLine={false} tickMargin={8} />
+                  <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tick={axisTick} axisLine={false} tickLine={false} tickFormatter={v => pct(v)} width={44} />
+                  <ReferenceLine y={80} stroke="var(--dim)" strokeDasharray="5 5" />
+                  <ReferenceLine y={95} stroke="var(--dim)" strokeDasharray="5 5" />
+                  <Tooltip content={<Tip color={corClasseABC} fmt={(v, row) => `${pct(v, 1)} · ${fmtBRL(row.receita)} no produto`}
+                    title={row => `${row.pos}º · ${row.name} (classe ${row.classe})`} />} cursor={{ stroke: 'var(--accent-line)' }} />
+                  <Area type="linear" dataKey="acumulado" name="Faturamento acumulado" stroke="var(--series-1)" strokeWidth={2.25}
+                    fill="url(#reports-abc-fill)" dot={<PontoABC r={4} />} activeDot={<PontoABC r={6} />} isAnimationActive={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+              <p className={s.axisNote}>Posição do produto no ranking</p>
+            </div>
+            <section className={s.ranking} aria-label="Maiores faturamentos">
+              <h4>Maiores faturamentos</h4>
+              <ol>
+                {rows.slice(0, 3).map(row => (
+                  <li key={row.id}><span><strong>{row.name}</strong><small>{row.cat}</small></span><b>{fmtBRL(row.receita)}</b></li>
+                ))}
+              </ol>
+            </section>
+          </div>
+        ) : <p className={s.empty}>Nenhuma venda registrada neste período.</p>}
+        <p className={s.chartNote}>A classificação usa as faixas de 80% e 95% do faturamento acumulado. A classe A reúne os produtos que mais pesam no faturamento.</p>
+      </article>
+      <TabelaProdutosABC rows={rows} dias={dias} />
+    </>
+  )
+}
+
+function Margem({ data, exportar, unidade }) {
+  const { ok: meta, warn: minimo } = METAS.margemBruta
+  const rows = data.itens.map(row => ({
+    ...row, cat: row.categoria, share: row.participacao, tone: toneHigher(row.margem, METAS.margemBruta),
+  }))
   const total = rows.reduce((a, r) => ({ receita: a.receita + r.receita, cmv: a.cmv + r.cmv }), { receita: 0, cmv: 0 })
-  const margemGeral = total.receita ? ((total.receita - total.cmv) / total.receita) * 100 : 0
-  const abaixo = rows.filter(r => r.margem < meta)
+  const lucroBruto = total.receita - total.cmv
+  const margemGeral = total.receita ? (lucroBruto / total.receita) * 100 : null
+  const cmvPct = total.receita ? (total.cmv / total.receita) * 100 : null
+  const abaixo = rows.filter(r => r.tone === 'warn' || r.tone === 'bad')
+  const temReferencia = rows.some(r => r.tone !== 'neutral')
+  const receitaAbaixoDaMeta = abaixo.reduce((soma, row) => soma + row.receita, 0)
   const columns = [
-    { key: 'cat', header: 'Categoria', render: r => <b className={s.cellStrong}>{r.cat}</b> },
+    { key: 'cat', header: 'Categoria', render: r => <b className={p.cellStrong}>{r.cat}</b> },
     { key: 'receita', header: 'Faturamento', width: 130, align: 'right', render: r => fmtBRL(r.receita) },
     { key: 'cmv', header: 'CMV', width: 120, align: 'right', render: r => fmtBRL(r.cmv) },
     { key: 'lucro', header: 'Lucro bruto', width: 130, align: 'right', render: r => fmtBRL(r.lucro) },
     { key: 'margem', header: 'Margem', width: 90, align: 'right', render: r => pct(r.margem, 1) },
     { key: 'share', header: '% do faturamento', width: 140, align: 'right', render: r => pct(r.share, 1) },
-    { key: 'sit', header: 'Situação', width: 130, sort: r => r.margem, render: r => <ToneBadge tone={r.margem >= meta ? 'ok' : r.margem >= METAS.margemBruta.warn ? 'warn' : 'bad'} label={r.margem >= meta ? 'Na meta' : 'Abaixo da meta'} /> },
+    { key: 'sit', header: 'Situação', width: 130, sort: r => r.margem, render: r => <ToneBadge tone={r.tone}
+      label={r.tone === 'neutral' ? 'Sem referência' : r.tone === 'ok' ? 'Na meta' : 'Abaixo da meta'} /> },
   ]
+  const filtros = [{
+    key: 'situacao', label: 'Situação', allLabel: 'Todas as situações',
+    options: [{ value: 'ok', label: 'Na meta' }, { value: 'abaixo', label: 'Abaixo da meta' }, { value: 'neutral', label: 'Sem referência' }],
+    matches: (row, value) => value === 'abaixo' ? row.tone === 'warn' || row.tone === 'bad' : row.tone === value,
+  }]
   const xmax = Math.max(60, Math.ceil(Math.max(...rows.map(r => r.margem), 0) / 10) * 10 + 10)
   return (
     <>
-      <div className="stats">
-        <Stat a="Margem bruta geral" b={pct(margemGeral, 1)} tone={margemGeral >= meta ? 'ok' : 'warn'} c={`Meta ≥ ${meta}%`} />
-        <Stat a="Lucro bruto" b={fmtBRL(total.receita - total.cmv)} c={`sobre ${fmtBRL(total.receita)} faturados`} />
-        <Stat a="Categorias abaixo da meta" b={abaixo.length} tone={abaixo.length ? 'warn' : 'ok'} c={abaixo.length ? abaixo.map(r => r.cat).join(', ') : 'Todas na meta'} />
-      </div>
-      <article className="card">
-        <div className={s.cardTitleRow}>
-          <h3>Margem bruta por categoria</h3>
-          <button onClick={() => exportar('margem-categoria', ['Categoria', 'Faturamento', 'CMV', 'Lucro bruto', 'Margem %', '% do faturamento'], rows.map(r => [r.cat, r.receita, r.cmv, r.lucro, r.margem.toFixed(2), r.share.toFixed(2)]))}>Exportar <Download size={13} aria-hidden="true" /></button>
+      <Indicadores unidade={unidade} items={[
+        {
+          label: 'Lucro bruto', value: fmtBRL(lucroBruto), percent: percentual(lucroBruto, total.receita),
+          percentLabel: 'de margem bruta', description: `Meta de margem de ${meta}% ou mais`,
+          featured: true, tone: toneHigher(margemGeral, METAS.margemBruta),
+        },
+        {
+          label: 'Custo dos produtos', value: fmtBRL(total.cmv), percent: percentual(total.cmv, total.receita),
+          percentLabel: 'do faturamento', description: `Meta de até ${METAS.cmv.ok}% do faturamento`,
+          tone: toneLower(cmvPct, METAS.cmv),
+        },
+        {
+          label: 'Categorias abaixo da meta', value: fmtBRL(receitaAbaixoDaMeta),
+          percent: percentual(receitaAbaixoDaMeta, total.receita), percentLabel: 'do faturamento',
+          description: abaixo.length ? abaixo.map(r => r.cat).join(', ') : temReferencia ? 'Nenhuma categoria com margem medida abaixo da meta' : 'Sem margem de referência',
+          tone: abaixo.length ? 'warn' : temReferencia ? 'ok' : 'neutral',
+        },
+      ]} />
+      <article className={s.card}>
+        <div className={s.cardHead}>
+          <div><h3>Margem bruta por categoria</h3><p>A linha indica a meta de {meta}%.</p></div>
+          <ExportButton onClick={() => exportar('margem-categoria', ['Categoria', 'Faturamento', 'CMV', 'Lucro bruto', 'Margem %', '% do faturamento'], rows.map(r => [r.cat, r.receita, r.cmv, r.lucro, r.margem?.toFixed(2), r.share?.toFixed(2)]))} />
         </div>
-        <ResponsiveContainer width="100%" height={Math.max(200, rows.length * 44 + 40)}>
-          <BarChart data={rows} layout="vertical" margin={{ top: 8, right: 56, left: 8, bottom: 4 }} barCategoryGap={10}>
+        {rows.length ? <ResponsiveContainer width="100%" height={Math.max(200, rows.length * 44 + 40)}>
+          <BarChart data={rows} layout="vertical" margin={{ top: 10, right: 38, left: 0, bottom: 4 }} barCategoryGap={10}>
             <CartesianGrid horizontal={false} stroke="var(--grid)" />
             <XAxis type="number" domain={[0, xmax]} tick={axisTick} axisLine={false} tickLine={false} tickFormatter={v => `${v}%`} />
-            <YAxis type="category" dataKey="cat" tick={axisTick} axisLine={false} tickLine={false} width={96} />
-            <ReferenceLine x={meta} stroke="var(--dim)" label={{ value: `meta ${meta}%`, position: 'top', style: { fill: 'var(--dim)', fontSize: 11 } }} />
-            <Tooltip content={<Tip fmt={(v, p) => `${pct(v, 1)} · lucro ${fmtBRL(p.lucro)}`} />} cursor={{ fill: 'rgb(var(--ink) / .04)' }} />
-            <Bar dataKey="margem" name="Margem" fill="var(--series-1)" radius={[0, 4, 4, 0]} barSize={18}>
+            <YAxis type="category" dataKey="cat" tick={axisTick} axisLine={false} tickLine={false} width={82} />
+            <ReferenceLine x={meta} stroke="var(--dim)" strokeDasharray="5 5" />
+            <Tooltip content={<Tip color={reportBarColor} fmt={(v, p) => `${pct(v, 1)} · lucro ${fmtBRL(p.lucro)}`} />}
+              cursor={{ fill: 'rgb(var(--ink) / .04)' }} />
+            <Bar dataKey="margem" name="Margem" radius={[0, 4, 4, 0]} barSize={18} isAnimationActive={false}
+              shape={ReportBarShape}>
               <LabelList dataKey="margem" position="right" formatter={v => pct(v)} style={{ fill: 'var(--text)', fontSize: 12 }} />
             </Bar>
           </BarChart>
-        </ResponsiveContainer>
+        </ResponsiveContainer> : <p className={s.empty}>Nenhuma venda registrada neste período.</p>}
+        {rows.length > 0 && (
+          <div className={s.chartLegend} role="group" aria-label="Faixas de margem">
+            <ToneBadge tone="ok" label={`Bom · ${meta}% ou mais`} />
+            <ToneBadge tone="warn" label={`Médio · de ${minimo}% a menos de ${meta}%`} />
+            <ToneBadge tone="bad" label={`Ruim · abaixo de ${minimo}%`} />
+          </div>
+        )}
       </article>
-      <DataTable caption="Margem por categoria" columns={columns} rows={rows} rowKey={r => r.cat} initialSort={{ key: 'margem', dir: 'desc' }} />
+      <ReportTable title="Detalhamento por categoria" caption="Margem por categoria"
+        search={{ key: 'cat', label: 'Buscar categoria', placeholder: 'Digite o nome da categoria' }} filters={filtros}
+        singular="categoria" plural="categorias" columns={columns} rows={rows} rowKey={r => r.cat}
+        initialSort={{ key: 'margem', dir: 'desc' }} emptyText="Nenhuma categoria com vendas no período." />
     </>
   )
 }
 
-function Ruptura({ dias, products, exportar }) {
-  const hist = getHistorico()
-  const rows = rupturas(hist.rupturaDiaria, dias, products)
+function Ruptura({ data, dias, receita, exportar, unidade }) {
+  const { can } = useStore()
+  const consultarEstoque = can('VISUALIZAR_ESTOQUE')
+  const estoque = useQueryResource(signal => consultarEstoque ? estoqueAtual(signal) : null, [consultarEstoque])
+  const rows = data.itens.map(row => ({
+    ...row, id: row.produtoId, name: row.nome, cat: row.categoria, pctDias: row.percentualDias, perdidas: row.unidadesPerdidas,
+    estoque: estoque.error ? null : estoque.data?.get(row.produtoId),
+    tone: row.percentualDias > LIMITE_FALTA_RECORRENTE ? 'bad' : row.dias ? 'warn' : 'ok',
+  }))
   const comRuptura = rows.filter(r => r.dias > 0)
+  const recorrentes = comRuptura.filter(r => r.tone === 'bad').length
   const top = comRuptura.slice(0, 10).map(r => ({ ...r, nome: r.name.length > 22 ? r.name.slice(0, 21) + '…' : r.name }))
   const perdido = rows.reduce((a, r) => a + r.vendaPerdida, 0)
   const columns = [
-    { key: 'name', header: 'Produto', render: r => <b className={s.cellStrong}>{r.name}</b> },
-    { key: 'dias', header: 'Dias zerado', width: 110, align: 'right', render: r => `${r.dias} de ${dias}` },
+    { key: 'name', header: 'Produto', render: r => <b className={p.cellStrong}>{r.name}</b> },
+    { key: 'cat', header: 'Categoria', width: 120 },
+    { key: 'dias', header: 'Dias sem estoque', width: 110, align: 'right', render: r => `${r.dias} de ${dias}` },
     { key: 'ocorrencias', header: 'Ocorrências', width: 110, align: 'right' },
     { key: 'perdidas', header: 'Unid. não vendidas', width: 150, align: 'right', render: r => fmtNum(r.perdidas) },
     { key: 'vendaPerdida', header: 'Venda perdida', width: 130, align: 'right', render: r => fmtBRL(r.vendaPerdida) },
-    { key: 'estoqueAtual', header: 'Estoque hoje', width: 120, align: 'right', render: r => `${fmtNum(r.estoqueAtual)} / mín. ${r.min}` },
-    { key: 'sit', header: 'Situação', width: 120, sort: r => r.pctDias, render: r => <ToneBadge tone={r.pctDias > 10 ? 'bad' : r.dias ? 'warn' : 'ok'} label={r.pctDias > 10 ? 'Crônica' : r.dias ? 'Pontual' : 'Sem ruptura'} /> },
+    ...(consultarEstoque ? [{
+      key: 'estoqueAtual', header: 'Estoque hoje', width: 120, align: 'right', sort: r => r.estoque?.qty,
+      render: r => r.estoque ? `${fmtNum(r.estoque.qty)} / mín. ${fmtNum(r.estoque.min)}` : '—',
+    }] : []),
+    { key: 'sit', header: 'Situação', width: 120, sort: r => r.pctDias, render: r => <ToneBadge tone={r.tone} label={SITUACAO_RUPTURA[r.tone]} /> },
+  ]
+  const filtros = [
+    filtroCategoria(rows),
+    {
+      key: 'tone', label: 'Situação', allLabel: 'Todas as situações',
+      options: Object.entries(SITUACAO_RUPTURA).map(([value, label]) => ({ value, label })),
+    },
   ]
   return (
     <>
-      <div className="stats">
-        <Stat a="Venda perdida estimada" b={fmtBRL(perdido)} tone={perdido > 0 ? 'bad' : 'ok'} c={`Clientes que não acharam o produto em ${dias} dias`} />
-        <Stat a="Produtos com ruptura" b={comRuptura.length} tone={comRuptura.length ? 'warn' : 'ok'} c={`de ${rows.length} no catálogo`} />
-        <Stat a="Ruptura crônica" b={rows.filter(r => r.pctDias > 10).length} tone={rows.some(r => r.pctDias > 10) ? 'bad' : 'ok'} c="Zerado em mais de 10% dos dias" />
-      </div>
-      <article className="card">
-        <div className={s.cardTitleRow}>
-          <h3>Dias com o produto zerado</h3>
-          <button onClick={() => exportar('ruptura', ['Produto', 'Dias zerado', 'Ocorrências', 'Unidades não vendidas', 'Venda perdida', 'Estoque hoje'], rows.map(r => [r.name, r.dias, r.ocorrencias, r.perdidas, r.vendaPerdida, r.estoqueAtual]))}>Exportar <Download size={13} aria-hidden="true" /></button>
+      <Indicadores unidade={unidade} items={[
+        {
+          label: 'Vendas perdidas', value: fmtBRL(perdido), percent: percentual(perdido, receita),
+          percentLabel: 'do faturamento registrado', description: `Estimativa nos últimos ${dias} dias`,
+          tone: perdido > 0 ? 'bad' : rows.length ? 'ok' : 'neutral', featured: true,
+        },
+        {
+          label: 'Produtos que faltaram', value: fmtNum(comRuptura.length),
+          percent: percentual(comRuptura.length, rows.length), percentLabel: 'do catálogo',
+          description: `De ${rows.length} produtos no catálogo`,
+          tone: comRuptura.length ? 'warn' : rows.length ? 'ok' : 'neutral',
+        },
+        {
+          label: 'Falta recorrente', value: fmtNum(recorrentes),
+          percent: percentual(recorrentes, rows.length), percentLabel: 'do catálogo',
+          description: `Sem estoque em mais de ${LIMITE_FALTA_RECORRENTE}% dos dias`, tone: recorrentes ? 'bad' : rows.length ? 'ok' : 'neutral',
+        },
+      ]} />
+      <article className={s.card}>
+        <div className={s.cardHead}>
+          <h3>Dias sem estoque por produto</h3>
+          <ExportButton onClick={() => exportar('ruptura', ['Produto', 'Dias zerado', 'Ocorrências', 'Unidades não vendidas', 'Venda perdida', ...(consultarEstoque ? ['Estoque hoje'] : [])],
+            rows.map(r => [r.name, r.dias, r.ocorrencias, r.perdidas, r.vendaPerdida, ...(consultarEstoque ? [r.estoque?.qty] : [])]))} />
         </div>
-        {top.length === 0 ? <p className={s.muted}>Nenhuma ruptura no período.</p> : (
+        {top.length === 0 ? <p className={s.empty}>Nenhum dia sem estoque registrado neste período.</p> : (
           <ResponsiveContainer width="100%" height={top.length * 38 + 40}>
-            <BarChart data={top} layout="vertical" margin={{ top: 4, right: 48, left: 8, bottom: 4 }}>
+            <BarChart data={top} layout="vertical" margin={{ top: 4, right: 24, left: 0, bottom: 4 }}>
               <CartesianGrid horizontal={false} stroke="var(--grid)" />
               <XAxis type="number" allowDecimals={false} tick={axisTick} axisLine={false} tickLine={false} />
-              <YAxis type="category" dataKey="nome" tick={axisTick} axisLine={false} tickLine={false} width={170} />
-              <Tooltip content={<Tip fmt={(v, p) => `${v} dia(s) · ${fmtBRL(p.vendaPerdida)} perdidos`} title={p => p.name} />} cursor={{ fill: 'rgb(var(--ink) / .04)' }} />
-              <Bar dataKey="dias" name="Dias zerado" fill="var(--series-1)" radius={[0, 4, 4, 0]} barSize={16}>
+              <YAxis type="category" dataKey="nome" tick={axisTick} axisLine={false} tickLine={false} width={105} />
+              <Tooltip content={<Tip color={reportBarColor} fmt={(v, p) => `${v} dia(s) · ${fmtBRL(p.vendaPerdida)} perdidos`}
+                title={p => p.name} />} cursor={{ fill: 'rgb(var(--ink) / .04)' }} />
+              <Bar dataKey="dias" name="Dias sem estoque" radius={[0, 4, 4, 0]} barSize={16} isAnimationActive={false}
+                shape={ReportBarShape}>
                 <LabelList dataKey="dias" position="right" style={{ fill: 'var(--text)', fontSize: 12 }} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
         )}
-        <p className={s.chartNote}>Venda perdida = unidades procuradas enquanto o produto estava zerado × preço. Ruptura crônica pede rever o estoque mínimo.</p>
+        {top.length > 0 && (
+          <div className={s.chartLegend} role="group" aria-label="Faixas de falta de estoque">
+            <ToneBadge tone="ok" label="Sem falta registrada · 0 dias" />
+            <ToneBadge tone="warn" label={`Pontual · falta em até ${LIMITE_FALTA_RECORRENTE}% dos dias`} />
+            <ToneBadge tone="bad" label={`Recorrente · mais de ${LIMITE_FALTA_RECORRENTE}% dos dias`} />
+          </div>
+        )}
+        <p className={s.chartNote}>A estimativa multiplica as unidades que deixaram de ser vendidas pelo preço do produto.</p>
       </article>
-      <DataTable caption="Ruptura por produto" columns={columns} rows={rows} initialSort={{ key: 'vendaPerdida', dir: 'desc' }} pageSize={15} />
+      <ReportTable title="Detalhamento por produto" caption="Falta de estoque por produto"
+        search={BUSCA_PRODUTO} filters={filtros} singular="produto" plural="produtos" columns={columns} rows={rows}
+        initialSort={{ key: 'vendaPerdida', dir: 'desc' }} emptyText="Nenhum produto no catálogo." />
     </>
   )
 }
 
-function Horarios({ sales, dias, exportar }) {
-  const { grid: g, max, picos, porDia } = mapaHorarios(sales)
+function DetalhesVendasHorario({ celula, diaSemana, hora, referencia, onClose, onRefresh }) {
+  const { can } = useStore()
+  const permitido = can('CAIXA_VISUALIZAR')
+  const consulta = useQueryResource(signal => permitido
+    ? produtosDoHorario(referencia, diaSemana, hora, celula, signal)
+    : null, [permitido, referencia, diaSemana, hora, celula.tickets, celula.receita])
+  const dia = WEEKDAYS[diaSemana]
+  const titulo = `${DIAS_POR_EXTENSO[dia]} · ${hora}h`
+  const produtos = permitido && !consulta.loading && !consulta.error ? consulta.data : null
+
+  return createPortal(
+    <Drawer title={`Vendas de ${titulo}`} onClose={onClose}>
+      <header className={s.hourDetailHeader}>
+        <h2>{DIAS_POR_EXTENSO[dia]} <span>· {hora}h</span></h2>
+        <p>{fmtNum(celula.tickets)} {celula.tickets === 1 ? 'venda' : 'vendas'} nos últimos {referencia.dias} dias</p>
+      </header>
+      <section className={s.drawerRevenue} aria-label="Faturamento do horário">
+        <span>Faturamento total</span>
+        <strong>{fmtBRL(celula.receita)}</strong>
+      </section>
+      <section className={s.hourProducts}>
+        <header>
+          <h3>Produtos vendidos</h3>
+          {produtos?.length > 0 && <span>Subtotal</span>}
+        </header>
+        {!permitido && <Notice tone="info">A lista de produtos requer permissão para consultar os pedidos do caixa.</Notice>}
+        {permitido && consulta.loading && <LoadingBlock label="Consultando os pedidos deste horário…" />}
+        {consulta.error && <Notice title="Não foi possível consultar os produtos" onRetry={consulta.reload}>
+          <p>{consulta.error.message}</p>
+          <button type="button" onClick={onRefresh}>Atualizar relatório</button>
+        </Notice>}
+        {produtos?.length > 0 && (
+          <ul>
+            {produtos.map(produto => (
+              <li key={produto.id}>
+                <div>
+                  <strong>{produto.name}</strong>
+                  <small>{fmtNum(produto.qty)} {produto.qty === 1 ? 'unidade vendida' : 'unidades vendidas'}</small>
+                </div>
+                <b><span className={p.srOnly}>Subtotal do produto </span>{fmtBRL(produto.receita)}</b>
+              </li>
+            ))}
+          </ul>
+        )}
+        {produtos?.length === 0 && <p className={s.empty}>Nenhum item detalhado para este horário.</p>}
+      </section>
+    </Drawer>,
+    document.body,
+  )
+}
+
+function Horarios({ data, dias, receita, exportar, unidade, onRefresh }) {
+  const { grid: g, horas, max, picos, porDia } = useMemo(() => horarioReport(data.itens), [data.itens])
   const [tabela, setTabela] = useState(false)
   const [hover, setHover] = useState(null)
+  const [selecionado, setSelecionado] = useState(null)
   const melhorDia = [...porDia].sort((a, b) => b.tickets - a.tickets)[0]
   const piorDia = [...porDia].sort((a, b) => a.tickets - b.tickets)[0]
-  const isPico = (ri, ci) => picos.some(p => p.ri === ri && p.ci === ci)
-  const bins = [1, 2, 3, 4, 5].map(b => ({ b, de: Math.ceil(((b - 1) / 5) * max) || 1, ate: Math.floor((b / 5) * max) }))
+  const pico = picos[0]
+  const temVendas = pico.tickets > 0
+  const receitaDoDia = ({ dia }) => g[WEEKDAYS.indexOf(dia)].reduce((total, celula) => total + celula.receita, 0)
+  const cards = [
+    { label: 'Horário de pico', total: pico.receita, detalhe: `${pico.dia} ${pico.hora}h · ${pico.tickets} vendas`, featured: true },
+    { label: 'Dia com mais vendas', total: receitaDoDia(melhorDia), detalhe: `${melhorDia.dia} · ${melhorDia.tickets} vendas` },
+    { label: 'Dia com menos vendas', total: receitaDoDia(piorDia), detalhe: `${piorDia.dia} · ${piorDia.tickets} vendas` },
+  ]
+  const isPico = (ri, ci) => picos.some(p => p.tickets > 0 && p.ri === ri && p.ci === ci)
+  const colunaHover = horas.indexOf(hover?.hora)
+  const destaque = colunaHover >= 0 ? { ...g[hover.ri][colunaHover], dia: WEEKDAYS[hover.ri], hora: hover.hora } : null
+  const celulaSelecionada = selecionado && g[selecionado.ri][horas.indexOf(selecionado.hora)]
+  if (selecionado && !celulaSelecionada?.tickets) setSelecionado(null)
+
+  function abrirHorario(event, ri, ci) {
+    setHover({ ri, hora: horas[ci] })
+    if (!g[ri][ci].tickets) return
+    event.currentTarget.focus({ preventScroll: true })
+    setSelecionado({ ri, hora: horas[ci] })
+  }
+
+  function moverFoco(event, linha, coluna) {
+    const direcao = HEATMAP_DIRECTIONS[event.key]
+    if (!direcao) return
+    event.preventDefault()
+    const proximaLinha = Math.max(0, Math.min(linha + direcao[0], WEEKDAYS.length - 1))
+    const proximaColuna = Math.max(0, Math.min(coluna + direcao[1], horas.length - 1))
+    event.currentTarget.closest('table').tBodies[0].rows[proximaLinha].cells[proximaColuna + 1].querySelector('button').focus()
+  }
 
   return (
     <>
-      <div className="stats">
-        <Stat a="Horário de pico" b={`${picos[0]?.dia} ${picos[0]?.hora}h`} c={`${picos[0]?.tickets ?? 0} vendas no período · ${fmtBRL(picos[0]?.receita ?? 0)}`} />
-        <Stat a="Dia mais forte" b={melhorDia?.dia} c={`${melhorDia?.tickets} vendas em ${dias} dias`} />
-        <Stat a="Dia mais fraco" b={piorDia?.dia} c={`${piorDia?.tickets} vendas — bom para folga e recebimento`} />
-      </div>
-      <article className="card">
-        <div className={s.cardTitleRow}>
+      <Indicadores unidade={unidade} items={cards.map(({ label, total, detalhe, featured }) => ({
+        label, value: fmtBRL(total), featured, percent: percentual(total, receita), percentLabel: 'do faturamento',
+        description: temVendas ? detalhe : 'Sem vendas nos horários exibidos',
+      }))} />
+      <article className={s.card}>
+        <div className={s.cardHead}>
           <h3>Vendas por dia da semana e hora</h3>
-          <div className={s.rowActions}>
-            <button onClick={() => setTabela(t => !t)} aria-pressed={tabela}>{tabela ? <><Grid3x3 size={13} aria-hidden="true" /> Ver mapa</> : <><Table2 size={13} aria-hidden="true" /> Ver tabela</>}</button>
-            <button onClick={() => exportar('vendas-por-horario', ['Dia', ...HOURS.map(h => `${h}h`)], WEEKDAYS.map((d, ri) => [d, ...g[ri].map(c => c.tickets)]))}>Exportar <Download size={13} aria-hidden="true" /></button>
+          <div className={s.actions}>
+            <button type="button" onClick={() => setTabela(t => !t)} aria-pressed={tabela}>{tabela ? <><Grid3x3 size={13} aria-hidden="true" /> Ver mapa</> : <><Table2 size={13} aria-hidden="true" /> Ver tabela</>}</button>
+            <ExportButton onClick={() => exportar('vendas-por-horario', ['Dia', ...horas.map(h => `${h}h`)], WEEKDAYS.map((d, ri) => [d, ...g[ri].map(c => c.tickets)]))} />
           </div>
         </div>
-        <p className={s.heatInfo} aria-live="polite">
-          {hover ? <><b>{hover.dia} {hover.hora}h</b> · {hover.tickets} venda(s) · {fmtBRL(hover.receita)}</> : 'Passe o mouse sobre uma célula para ver o detalhe.'}
+        <p className={p.heatInfo} aria-live="polite">
+          {destaque ? <><b>{destaque.dia} {destaque.hora}h</b> · {destaque.tickets} vendas · {fmtBRL(destaque.receita)}</> : 'Selecione uma célula com vendas para ver os produtos. Use as setas para navegar pelo teclado.'}
         </p>
-        <div className={s.heatWrap}>
-          <table className={tabela ? s.heatTable : s.heat}>
-            <caption className={s.srOnly}>Número de vendas por dia da semana e hora, nos últimos {dias} dias</caption>
-            <thead><tr><th scope="col"><span className={s.srOnly}>Dia</span></th>{HOURS.map(h => <th key={h} scope="col">{h}h</th>)}</tr></thead>
+        <p className={s.tableHint}>Deslize a grade para ver todos os horários.</p>
+        <div className={s.heatScroll} role="region" aria-label="Grade de horários" tabIndex={0}>
+          <table className={s.heatmap} data-table={tabela || undefined}>
+            <caption className={p.srOnly}>Número de vendas por dia da semana e hora, nos últimos {dias} dias</caption>
+            <thead><tr><th scope="col"><span className={p.srOnly}>Dia</span></th>{horas.map(h => <th key={h} scope="col">{h}h</th>)}</tr></thead>
             <tbody>
               {WEEKDAYS.map((d, ri) => (
                 <tr key={d}>
                   <th scope="row">{d}</th>
                   {g[ri].map((c, ci) => (
-                    <td
-                      key={ci}
-                      className={tabela ? undefined : `${s['heat' + binOf(c.tickets, max)]} ${isPico(ri, ci) ? s.heatPeak : ''}`}
-                      aria-label={`${d} ${HOURS[ci]}h: ${c.tickets} vendas`}
-                      onMouseEnter={() => setHover({ dia: d, hora: HOURS[ci], ...c })}
-                      onMouseLeave={() => setHover(null)}
-                    >
-                      {tabela ? c.tickets : <span className={s.srOnly}>{c.tickets}</span>}
+                    <td key={ci}>
+                      <button type="button" data-level={binOf(c.tickets, max)} data-peak={!tabela && isPico(ri, ci) || undefined}
+                        tabIndex={(colunaHover >= 0 ? hover.ri : 0) === ri && Math.max(0, colunaHover) === ci ? 0 : -1}
+                        aria-label={`${d} ${horas[ci]}h: ${c.tickets} vendas`}
+                        aria-haspopup={c.tickets > 0 ? 'dialog' : undefined}
+                        onMouseEnter={() => setHover({ ri, hora: horas[ci] })}
+                        onFocus={() => setHover({ ri, hora: horas[ci] })}
+                        onKeyDown={event => moverFoco(event, ri, ci)}
+                        onClick={event => abrirHorario(event, ri, ci)}>
+                        {tabela ? c.tickets : <span className={p.srOnly}>{c.tickets}</span>}
+                      </button>
                     </td>
                   ))}
                 </tr>
@@ -239,76 +605,105 @@ function Horarios({ sales, dias, exportar }) {
           </table>
         </div>
         {!tabela && (
-          <div className={s.heatLegend} aria-label="Escala de cores">
-            <span>Menos</span>
-            <i className={s.heat0} title="0 vendas" />
-            {bins.map(b => <i key={b.b} className={s['heat' + b.b]} title={`${b.de}–${b.ate} vendas`} />)}
-            <span>Mais</span>
-            <small>Contorno = 3 horários de pico</small>
+          <div className={s.heatLegend}>
+            <span>Menos vendas</span>
+            {[0, 1, 2, 3, 4, 5].map(level => <i key={level} data-level={level} aria-hidden="true" />)}
+            <span>Mais vendas</span>
+            {temVendas && <small>Contorno indica os horários de pico</small>}
           </div>
         )}
-        <p className={s.chartNote}>
-          <b>Escala sugerida:</b> reforçar a equipe em {picos.map(p => `${p.dia} ${p.hora}h`).join(', ')}; usar {piorDia?.dia} para recebimento de mercadoria.
-        </p>
+        {temVendas && <p className={s.chartNote}><b>Horários com mais movimento:</b> {picos.filter(p => p.tickets > 0).map(p => `${p.dia} ${p.hora}h`).join(', ')}.</p>}
       </article>
+      {celulaSelecionada?.tickets > 0 && (
+        <DetalhesVendasHorario celula={celulaSelecionada} diaSemana={selecionado.ri} hora={selecionado.hora}
+          referencia={data.referencia} onClose={() => setSelecionado(null)} onRefresh={() => {
+            setSelecionado(null)
+            onRefresh()
+          }} />
+      )}
     </>
   )
 }
 
-function Canais({ sales, exportar }) {
-  const rows = porCanal(sales, CANAIS)
+function Canais({ data, exportar, unidade }) {
+  const rows = data.itens.map(row => ({ ...row, ticket: row.ticketMedio, share: row.participacao }))
   const melhor = [...rows].sort((a, b) => b.ticket - a.ticket)[0]
   return (
     <>
-      <div className="stats">
-        {rows.map(r => (
-          <Stat key={r.canal} a={r.canal} b={fmtBRL(r.ticket)} tone="neutral"
-            badge={melhor && r.canal === melhor.canal ? 'Maior ticket' : undefined}
-            c={`ticket médio · ${r.vendas} vendas · ${fmtBRL(r.faturamento)} (${pct(r.share)})`} />
-        ))}
-      </div>
-      <article className="card">
-        <div className={s.cardTitleRow}>
-          <h3>Comparativo por canal</h3>
-          <button onClick={() => exportar('canais', ['Canal', 'Vendas', 'Faturamento', 'Ticket médio', '% do faturamento', 'Itens por venda'], rows.map(r => [r.canal, r.vendas, r.faturamento, r.ticket.toFixed(2), r.share.toFixed(2), r.itensPorVenda.toFixed(2)]))}>Exportar <Download size={13} aria-hidden="true" /></button>
+      <Indicadores unidade={unidade} items={rows.map(row => {
+        const featured = row === melhor && row.vendas > 0
+        return {
+          label: row.canal, value: fmtBRL(row.faturamento), percent: row.share == null ? null : pct(row.share, 1),
+          percentLabel: 'do faturamento',
+          description: `${row.vendas} vendas · ${fmtBRL(row.ticket)} em média por venda${featured ? ' · Maior valor médio' : ''}`,
+          featured,
+        }
+      })} />
+      <article className={s.card}>
+        <div className={s.cardHead}>
+          <div><h3>Comparativo por canal</h3><p>Valor médio por venda e participação de cada canal no faturamento.</p></div>
+          <ExportButton onClick={() => exportar('canais', ['Canal', 'Vendas', 'Faturamento', 'Ticket médio', '% do faturamento', 'Itens por venda'], rows.map(r => [r.canal, r.vendas, r.faturamento, r.ticket?.toFixed(2), r.share?.toFixed(2), r.itensPorVenda?.toFixed(2)]))} />
         </div>
-        <table className={s.simpleTable}>
-          <thead><tr><th scope="col">Canal</th><th scope="col">Vendas</th><th scope="col">Faturamento</th><th scope="col">% do faturamento</th><th scope="col">Ticket médio</th><th scope="col">Itens por venda</th></tr></thead>
-          <tbody>
-            {rows.map(r => (
-              <tr key={r.canal}><td><b>{r.canal}</b></td><td>{fmtNum(r.vendas)}</td><td>{fmtBRL(r.faturamento)}</td><td>{pct(r.share, 1)}</td><td>{fmtBRL(r.ticket)}</td><td>{fmtNum(r.itensPorVenda)}</td></tr>
-            ))}
-          </tbody>
-        </table>
-        <p className={s.chartNote}>São três números por canal: cartões e tabela comunicam melhor que um gráfico. Use o ticket por canal para definir taxa de entrega e mínimo do delivery.</p>
+        <p className={s.tableHint}>Deslize a tabela para ver todas as colunas.</p>
+        <div className={s.channelScroll} role="region" aria-label="Comparativo por canal" tabIndex={0}>
+          <table className={s.channelTable}>
+            <thead><tr><th scope="col">Canal</th><th scope="col">Vendas</th><th scope="col">Faturamento</th><th scope="col">% do faturamento</th><th scope="col">Valor médio por venda</th><th scope="col">Itens por venda</th></tr></thead>
+            <tbody>
+              {!rows.length && <tr><td colSpan={6}>Nenhuma venda registrada no período.</td></tr>}
+              {rows.map(r => (
+                <tr key={r.canal}><th scope="row">{r.canal}</th><td>{fmtNum(r.vendas)}</td><td>{fmtBRL(r.faturamento)}</td><td>{pct(r.share, 1)}</td><td>{fmtBRL(r.ticket)}</td><td>{fmtNum(r.itensPorVenda)}</td></tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </article>
     </>
   )
 }
 
-function Perdas({ dias, movements, products, receita, exportar }) {
-  const hist = getHistorico()
-  const { rows, porMotivo, total, gran } = perdas(hist.perdas, movements, products, dias)
+function Perdas({ data, receita, exportar, unidade }) {
+  const { rows, motivos, porMotivo, total, gran } = perdasReport(data.itens, data.granularidade)
   const maior = [...porMotivo].sort((a, b) => b.valor - a.valor)[0]
-  const pctReceita = receita ? (total / receita) * 100 : 0
+  const pctReceita = receita ? (total / receita) * 100 : null
   const columns = [
-    { key: 'label', header: gran === 'mes' ? 'Mês' : gran === 'semana' ? 'Semana' : 'Dia', sort: r => r.k, render: r => <b className={s.cellStrong}>{r.label}</b> },
-    ...MOTIVOS_PERDA.map((m, k) => ({ key: m, header: m, align: 'right', render: r => <span className={s.legendCell}><i style={{ background: CAT_VAR[k] }} aria-hidden="true" />{fmtBRL(r[m])}</span> })),
+    { key: 'label', header: gran === 'mes' ? 'Mês' : gran === 'semana' ? 'Semana' : 'Dia', sort: r => r.k, render: r => <b className={p.cellStrong}>{r.label}</b> },
+    ...motivos.map(motivo => ({
+      key: motivo,
+      header: motivo,
+      align: 'right',
+      render: row => (
+        <span className={p.legendCell}>
+          <i style={{ backgroundColor: COR_POR_MOTIVO[motivo] }} aria-hidden="true" />
+          {fmtBRL(row[motivo])}
+        </span>
+      ),
+    })),
     { key: 'total', header: 'Total', width: 110, align: 'right', render: r => <b>{fmtBRL(r.total)}</b> },
   ]
+  const filtros = [{
+    key: 'motivo', label: 'Motivo', allLabel: 'Todos os motivos',
+    options: motivos.map(value => ({ value, label: value })),
+    matches: (row, value) => row[value] > 0,
+  }]
   return (
     <>
-      <div className="stats">
-        <Stat a="Perdas no período" b={fmtBRL(total)} tone={pctReceita > 2 ? 'bad' : pctReceita > 1 ? 'warn' : 'ok'} c={`${pct(pctReceita, 1)} do faturamento · meta ≤ 1%`} />
-        <Stat a="Maior motivo" b={maior?.valor ? maior.motivo : '—'} c={maior?.valor ? fmtBRL(maior.valor) : 'Sem perdas'} />
-        {porMotivo.filter(m => m.motivo !== maior?.motivo).slice(0, 2).map(m => <Stat key={m.motivo} a={m.motivo} b={fmtBRL(m.valor)} c={total ? `${pct((m.valor / total) * 100)} das perdas` : '—'} />)}
-      </div>
-      <article className="card">
-        <div className={s.cardTitleRow}>
-          <h3>Perdas a custo por motivo</h3>
-          <button onClick={() => exportar('perdas-por-motivo', ['Período', ...MOTIVOS_PERDA, 'Total'], rows.map(r => [r.label, ...MOTIVOS_PERDA.map(m => r[m]), r.total]))}>Exportar <Download size={13} aria-hidden="true" /></button>
+      <Indicadores unidade={unidade} items={[
+        {
+          label: 'Perdas no período', value: fmtBRL(total), percent: percentual(total, receita),
+          percentLabel: 'do faturamento', description: receita ? `Meta de até ${METAS.perdasFaturamento.ok}% do faturamento` : 'Sem faturamento de referência',
+          featured: true, tone: toneLower(pctReceita, METAS.perdasFaturamento),
+        },
+        ...[maior, ...porMotivo.filter(motivo => motivo !== maior)].map(motivo => ({
+          label: motivo.motivo, value: fmtBRL(motivo.valor), percent: percentual(motivo.valor, total),
+          percentLabel: 'do custo das perdas', description: motivo === maior && motivo.valor > 0 ? 'Maior causa de perda' : 'Valor a preço de custo',
+        })),
+      ]} />
+      <article className={s.card}>
+        <div className={s.cardHead}>
+          <div><h3>Perdas por motivo</h3><p>Valor calculado pelo custo dos produtos.</p></div>
+          <ExportButton onClick={() => exportar('perdas-por-motivo', ['Período', ...motivos, 'Total'], rows.map(r => [r.label, ...motivos.map(m => r[m]), r.total]))} />
         </div>
-        {rows.length === 0 ? <p className={s.muted}>Sem perdas no período.</p> : (
+        {rows.length === 0 ? <p className={s.empty}>Sem perdas no período.</p> : (
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={rows} margin={{ top: 8, right: 12, left: 4, bottom: 4 }} barCategoryGap="28%">
               {grid}
@@ -316,66 +711,82 @@ function Perdas({ dias, movements, products, receita, exportar }) {
               <YAxis tick={axisTick} axisLine={false} tickLine={false} tickFormatter={v => `R$${Math.round(v)}`} width={56} />
               <Tooltip content={<Tip />} cursor={{ fill: 'rgb(var(--ink) / .04)' }} />
               <Legend iconType="square" iconSize={10} wrapperStyle={legendStyle} />
-              {MOTIVOS_PERDA.map((m, k) => (
-                <Bar key={m} dataKey={m} name={m} stackId="p" fill={CAT_VAR[k]} stroke="var(--card)" strokeWidth={2}
-                  radius={k === MOTIVOS_PERDA.length - 1 ? [4, 4, 0, 0] : 0} />
+              {motivos.map((motivo, index) => (
+                <Bar key={motivo} dataKey={motivo} name={motivo} stackId="p" fill={COR_POR_MOTIVO[motivo] ?? 'var(--dim)'} stroke="var(--card)" strokeWidth={2} isAnimationActive={false}
+                  radius={index === motivos.length - 1 ? [4, 4, 0, 0] : 0} />
               ))}
             </BarChart>
           </ResponsiveContainer>
         )}
       </article>
-      <DataTable caption="Perdas por motivo" columns={columns} rows={rows} rowKey={r => r.k} initialSort={{ key: 'label', dir: 'asc' }} pageSize={20} />
+      <ReportTable title="Detalhamento por período" caption="Perdas por motivo"
+        search={{ key: 'label', label: 'Buscar período', placeholder: 'Digite o período exibido na tabela' }} filters={filtros}
+        singular="período" plural="períodos" columns={columns} rows={rows} rowKey={r => r.k}
+        initialSort={{ key: 'label', dir: 'asc' }} emptyText="Sem perdas no período." />
     </>
   )
 }
 
-/* ─── Relatórios ─── */
-export function Relatorios({ navigate, pageParams }) {
-  const { sales: real, products, drinks, movements } = useStore()
+export function Relatorios({ navigate, pageParams, headerActionsElement }) {
   const toast = useToast()
-  const [aba, setAba] = useState(ABAS.some(a => a[0] === pageParams?.aba) ? pageParams.aba : 'abc')
-  const [dias, setDias] = useState([7, 30, 90].includes(Number(pageParams?.dias)) ? Number(pageParams.dias) : 30)
-
-  const hist = getHistorico()
-  const sales = mergeSales(hist, real, products, drinks).filter(v => inPeriod(v.em, dias))
-  const receita = sales.reduce((a, v) => a + v.total, 0)
-
-  const set = (patch) => {
-    const next = { aba, dias, ...patch }
-    setAba(next.aba); setDias(next.dias)
-    navigate('relatorios', next, { replace: true })
-  }
+  const aba = ABAS.find(tab => tab.id === pageParams?.aba) ?? ABAS[0]
+  const dias = PERIODOS.includes(Number(pageParams?.dias)) ? Number(pageParams.dias) : 30
+  const unidade = pageParams?.unidade === 'percentual' ? 'percentual' : 'reais'
+  const endpoint = aba.endpoint ?? aba.id
+  const consulta = useQueryResource(signal => readReport(endpoint, dias, signal), [endpoint, dias])
+  const data = !consulta.loading && !consulta.error ? consulta.data : null
+  const filtros = { aba: aba.id, dias, unidade }
+  const alterar = (patch) => navigate('relatorios', { ...filtros, ...patch }, { replace: true })
   const exportar = (nome, headers, rows) => {
     downloadCSV(`${nome}-${dias}d-${stamp()}`, headers, rows)
     toast(`${rows.length} linha(s) exportada(s).`, { title: 'Exportação concluída' })
   }
+  const seletorPeriodo = (
+    <div className={s.periodControl}>
+      <span>Período</span>
+      <div className={s.segment} role="group" aria-label="Período">
+        {PERIODOS.map(periodo => (
+          <button key={periodo} type="button" aria-pressed={dias === periodo} onClick={() => alterar({ dias: periodo })}>
+            {periodo} dias
+          </button>
+        ))}
+      </div>
+    </div>
+  )
 
   return (
-    <>
-      <div className={s.reportFilters}>
-        <div className={s.segRow} role="radiogroup" aria-label="Período">
-          {PERIODOS.map(([d, l]) => (
-            <button key={d} type="button" role="radio" aria-checked={dias === d} className={dias === d ? s.segRowOn : undefined} onClick={() => set({ dias: d })}>{l}</button>
-          ))}
-        </div>
-        <span className={s.muted}>{fmtNum(sales.length)} vendas · {fmtBRL(receita)}</span>
-      </div>
-
-      <nav className={s.reportTabs} aria-label="Relatórios">
-        {ABAS.map(([id, label]) => (
-          <a key={id} href={`#/relatorios?aba=${id}&dias=${dias}`} aria-current={aba === id ? 'page' : undefined} className={aba === id ? s.reportTabOn : undefined}
-            onClick={e => { e.preventDefault(); set({ aba: id }) }}>{label}</a>
+    <div className={s.reports}>
+      {headerActionsElement ? createPortal(seletorPeriodo, headerActionsElement) : seletorPeriodo}
+      <nav className={s.tabs} aria-label="Tipos de relatório">
+        {ABAS.map(({ id, label, Icon }) => (
+          <Link key={id} to={{ pathname: '/relatorios', search: new URLSearchParams({ ...filtros, aba: id }).toString() }}
+            replace aria-current={aba.id === id ? 'page' : undefined}>
+            <Icon size={17} aria-hidden="true" />{label}
+          </Link>
         ))}
       </nav>
 
-      <p className={s.ruleNote}><Info size={14} aria-hidden="true" /> Baseado nas vendas do caixa registradas neste navegador: o back ainda não guarda vendas, então cada computador vê só as próprias.</p>
+      <header className={s.heading}>
+        <h2>{aba.title}</h2>
+        <p>{aba.description}</p>
+      </header>
+      <div className={s.kpiToolbar}>
+        <div><h3>Indicadores</h3><p className={s.metricsHint}>Deslize para ver mais.</p></div>
+        <div className={s.segment} role="group" aria-label="Exibir indicadores">
+          <button type="button" aria-pressed={unidade === 'reais'} onClick={() => alterar({ unidade: 'reais' })}>Reais</button>
+          <button type="button" aria-pressed={unidade === 'percentual'} onClick={() => alterar({ unidade: 'percentual' })}>Porcentagem</button>
+        </div>
+      </div>
 
-      {aba === 'abc' && <ABC sales={sales} exportar={exportar} />}
-      {aba === 'margem' && <Margem sales={sales} exportar={exportar} />}
-      {aba === 'ruptura' && <Ruptura dias={dias} products={products} exportar={exportar} />}
-      {aba === 'horarios' && <Horarios sales={sales} dias={dias} exportar={exportar} />}
-      {aba === 'canais' && <Canais sales={sales} exportar={exportar} />}
-      {aba === 'perdas' && <Perdas dias={dias} movements={movements} products={products} receita={receita} exportar={exportar} />}
-    </>
+      {consulta.loading && <LoadingBlock label="Consultando o relatório…" />}
+      {consulta.error && <ErrorBlock error={consulta.error} onRetry={consulta.reload} />}
+      {data && aba.id === 'abc' && <ABC data={data} unidade={unidade} exportar={exportar} dias={dias} />}
+      {data && aba.id === 'margem' && <Margem data={data} unidade={unidade} exportar={exportar} />}
+      {data && aba.id === 'ruptura' && <Ruptura data={data} unidade={unidade} dias={dias} receita={data.totais.faturamento} exportar={exportar} />}
+      {data && aba.id === 'horarios' && <Horarios data={data} unidade={unidade} dias={dias} receita={data.totais.faturamento}
+        exportar={exportar} onRefresh={consulta.reload} />}
+      {data && aba.id === 'canais' && <Canais data={data} unidade={unidade} exportar={exportar} />}
+      {data && aba.id === 'perdas' && <Perdas data={data} unidade={unidade} receita={data.totais.faturamento} exportar={exportar} />}
+    </div>
   )
 }

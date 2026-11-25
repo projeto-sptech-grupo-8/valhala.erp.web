@@ -28,15 +28,19 @@ export function mergeSales(hist, real, products, drinks) {
   return [...hist.sales, ...realN]
 }
 
-/* ─── Curva ABC (faturamento) ─── */
-export function curvaABC(sales) {
+export function vendasPorProduto(sales) {
   const by = {}
   for (const v of sales) for (const i of v.itens) {
     const e = (by[i.id] ||= { id: i.id, name: i.name, cat: i.cat, receita: 0, qty: 0 })
     e.receita += i.price * i.qty
     e.qty += i.qty
   }
-  const rows = Object.values(by).sort((a, b) => b.receita - a.receita)
+  return Object.values(by).sort((a, b) => b.receita - a.receita)
+}
+
+/* ─── Curva ABC (faturamento) ─── */
+export function curvaABC(sales) {
+  const rows = vendasPorProduto(sales)
   const total = rows.reduce((a, r) => a + r.receita, 0) || 1
   let acc = 0
   return rows.map((r, k) => {
@@ -84,14 +88,16 @@ export function rupturas(rupturaDiaria, dias, products, now = new Date()) {
 
 /* ─── Mapa de calor: vendas por dia da semana × hora ─── */
 export function mapaHorarios(sales) {
-  const grid = WEEKDAYS.map(() => HOURS.map(() => ({ tickets: 0, receita: 0 })))
+  const grid = WEEKDAYS.map(() => HOURS.map(() => ({ tickets: 0, receita: 0, vendas: [] })))
   for (const v of sales) {
     const d = new Date(v.em)
     const row = (d.getDay() + 6) % 7
     const col = HOURS.indexOf(d.getHours())
     if (col < 0) continue
-    grid[row][col].tickets++
-    grid[row][col].receita += v.total
+    const celula = grid[row][col]
+    celula.tickets++
+    celula.receita += v.total
+    celula.vendas.push(v)
   }
   const cells = grid.flatMap((r, ri) => r.map((c, ci) => ({ ...c, dia: WEEKDAYS[ri], hora: HOURS[ci], ri, ci })))
   const max = Math.max(1, ...cells.map(c => c.tickets))

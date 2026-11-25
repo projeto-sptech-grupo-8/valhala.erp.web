@@ -1,0 +1,800 @@
+.finance {
+  --finance-receitas: var(--gold);
+  --finance-despesas: var(--red);
+  display: grid;
+  gap: 16px;
+  container-type: inline-size;
+}
+
+.viewHeading,
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tabs,
+.actions,
+.filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.tabs {
+  gap: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tabs a {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 16px;
+  color: var(--dim);
+  border-bottom: 2px solid transparent;
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.tabs a:hover {
+  background: var(--active-bg);
+  color: var(--gold2);
+}
+
+.tabs a[aria-current='page'] {
+  color: var(--gold2);
+  border-bottom-color: var(--gold2);
+  font-weight: 600;
+}
+
+.tabs a:focus-visible {
+  outline: 2px solid var(--gold2);
+  outline-offset: -2px;
+}
+
+.actions button {
+  min-height: 38px;
+  padding-inline: 12px;
+  font-weight: 600;
+}
+
+.finance svg {
+  flex-shrink: 0;
+}
+
+.viewHeading {
+  flex-wrap: wrap;
+}
+
+.viewHeading .actions {
+  margin-inline-start: auto;
+}
+
+.viewHeading h2,
+.monthGrid h2 {
+  margin: 0;
+  font-size: 15px;
+  letter-spacing: -.012em;
+}
+
+.cardHead h2 svg {
+  color: var(--gold2);
+}
+
+.balanceGrid,
+.overviewGrid,
+.monthGrid,
+.resultGrid {
+  display: grid;
+  gap: 14px;
+}
+
+.balanceGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.overviewGrid {
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  align-items: start;
+}
+
+.monthGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.monthGrid h2 {
+  grid-column: 1 / -1;
+}
+
+.card,
+.metric,
+.resultMetric {
+  min-width: 0;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 13px;
+}
+
+.card {
+  padding: clamp(14px, 2.1cqi, 23px);
+}
+
+.metric,
+.resultMetric {
+  --metric-status: var(--dim);
+  --metric-status-bg: var(--raised);
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  align-items: start;
+  gap: 9px;
+  padding: clamp(13px, 1.7cqi, 20px);
+}
+
+.metricTitleRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.metricTitleRow > :is(h3, h4) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.metric h3,
+.cardHead h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.metricIcon {
+  display: grid;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  color: var(--gold2);
+  background: var(--active-bg);
+  border-radius: 8px;
+}
+
+.metric strong,
+.resultMetric strong,
+.salesTotal strong {
+  color: var(--text);
+  font-size: clamp(22px, 2.4cqi, 32px);
+  line-height: 1.14;
+  font-weight: 700;
+  letter-spacing: -.045em;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric strong,
+.resultMetric strong {
+  color: var(--metric-status);
+}
+
+.metric p,
+.cardHead p,
+.resultMetric p {
+  margin: 0;
+  color: var(--dim);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.cardHead {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  margin-bottom: 17px;
+}
+
+.cardHead h2 {
+  font-size: 16px;
+}
+
+.cardHead p {
+  margin-top: 5px;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 14px;
+  margin: 3px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--dim);
+  font-size: 12px;
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.legend li::before {
+  content: '';
+  width: 14px;
+  border-top: 2px solid var(--finance-receitas);
+}
+
+.legend li[data-series='despesas']::before {
+  border-top: 2px dashed var(--finance-despesas);
+}
+
+.chart {
+  width: 100%;
+  height: 248px;
+}
+
+.monthDetails {
+  margin-top: 9px;
+  border-top: 1px solid var(--row-line);
+}
+
+.monthDetails summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 40px;
+  padding: 7px 0 0;
+  border-radius: 5px;
+  color: var(--gold2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.monthDetails summary::-webkit-details-marker {
+  display: none;
+}
+
+.monthDetails[open] summary svg {
+  transform: rotate(180deg);
+}
+
+.monthDetails table,
+.salesTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.monthDetails th,
+.monthDetails td {
+  padding: 9px 0 9px 6px;
+  border-bottom: 1px solid var(--row-line);
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.monthDetails th:first-child {
+  padding-left: 0;
+  text-align: left;
+}
+
+.monthDetails thead,
+.salesTable thead {
+  color: var(--dim);
+  font-size: 12px;
+}
+
+.filters {
+  gap: 5px;
+  margin-bottom: 9px;
+}
+
+.filters button {
+  padding: 6px 10px;
+  min-height: 30px;
+  border-radius: 7px;
+  color: var(--dim);
+  font-size: 12px;
+}
+
+.filters button[aria-pressed='true'] {
+  color: var(--gold2);
+  border-color: var(--accent-line);
+  background: var(--active-bg);
+}
+
+.dueList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dueRow {
+  display: grid;
+  grid-template-columns: minmax(62px, max-content) minmax(0, 1fr) max-content;
+  grid-template-areas:
+    'date name amount'
+    'status name amount';
+  align-items: center;
+  gap: 3px 12px;
+  min-height: 64px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--row-line);
+}
+
+.dueRow:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.dueDate {
+  grid-area: date;
+  align-self: end;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.dueName,
+.dueAmount {
+  display: grid;
+  gap: 4px;
+  line-height: 1.25;
+  font-size: 13px;
+}
+
+.dueName {
+  grid-area: name;
+  overflow-wrap: anywhere;
+}
+
+.dueAmount {
+  grid-area: amount;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.dueName span,
+.dueAmount span,
+.dueStatus {
+  font-size: 11px;
+  color: var(--dim);
+}
+
+.dueStatus {
+  grid-area: status;
+  align-self: start;
+  font-weight: 600;
+}
+
+.dueStatus[data-tone='ok'] { color: var(--green); }
+.dueStatus[data-tone='warn'] { color: var(--gold2); }
+.dueStatus[data-tone='bad'] { color: var(--red); }
+
+.resultGrid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.resultHeader {
+  align-items: center;
+  margin-bottom: 0;
+}
+
+.resultHeaderControls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.resultControls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 9px;
+}
+
+.resultControls h3,
+.resultDetailTitle {
+  margin: 0;
+  font-size: 15px;
+}
+
+.resultUnits {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.resultUnits button {
+  min-height: 35px;
+  padding: 6px 10px;
+  color: var(--dim);
+  font-size: 12px;
+}
+
+.resultUnits button[aria-pressed='true'] {
+  border-color: var(--accent-line);
+  background: var(--active-bg);
+  color: var(--gold2);
+  font-weight: 600;
+}
+
+.resultScrollHint {
+  display: none;
+}
+
+.resultMetrics {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(206px, 1fr);
+  gap: 12px;
+  overflow-x: auto;
+  padding: 1px 1px 6px;
+  scrollbar-color: var(--track) transparent;
+  scrollbar-width: thin;
+}
+
+.resultMetrics:focus-visible {
+  outline-offset: -2px;
+}
+
+:is(.metric, .resultMetric)[data-tone='ok'] {
+  --metric-status: var(--green);
+  --metric-status-bg: var(--ok-bg);
+}
+
+:is(.metric, .resultMetric)[data-tone='warn'] {
+  --metric-status: var(--gold2);
+  --metric-status-bg: var(--warn-bg);
+}
+
+:is(.metric, .resultMetric)[data-tone='bad'] {
+  --metric-status: var(--red);
+  --metric-status-bg: var(--bad-bg);
+}
+
+:is(.metric, .resultMetric):is([data-tone='ok'], [data-tone='warn'], [data-tone='bad']) {
+  border-color: color-mix(in srgb, var(--metric-status) 52%, var(--line));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--metric-status-bg) 68%, transparent), transparent 70%), var(--card);
+}
+
+.resultMetric h4 {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.resultMetricBase {
+  display: block;
+  margin-top: 4px;
+  color: var(--dim);
+  font-size: 12px;
+}
+
+.metricStatus {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 6px;
+  min-height: 34px;
+  padding: 5px 11px;
+  border: 1px solid color-mix(in srgb, var(--metric-status) 45%, transparent);
+  border-radius: 8px;
+  background: var(--metric-status-bg);
+  color: var(--metric-status);
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.period {
+  position: relative;
+  flex: none;
+}
+
+.period .periodTrigger {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  min-width: 52px;
+  padding: 5px 8px;
+  color: var(--dim);
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.periodTrigger svg {
+  color: var(--gold2);
+}
+
+.periodTrigger[aria-expanded='true'] {
+  border-color: var(--accent-line);
+  background: var(--active-bg);
+  color: var(--gold2);
+}
+
+.periodOptions {
+  position: absolute;
+  z-index: 3;
+  inset-block-start: calc(100% + 6px);
+  inset-inline-start: 0;
+  min-width: 142px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--card);
+  box-shadow: 0 8px 24px rgb(0 0 0 / .22);
+}
+
+.periodOptions:not([hidden]) {
+  display: grid;
+  gap: 2px;
+}
+
+.periodOptions button {
+  justify-content: space-between;
+  min-height: 35px;
+  padding: 6px 9px;
+  border-color: transparent;
+  background: transparent;
+  font-size: 13px;
+}
+
+.periodOptions button:is(:hover, [aria-pressed='true']) {
+  background: var(--active-bg);
+  color: var(--gold2);
+}
+
+.resultRows {
+  display: grid;
+  margin: 0;
+  font-size: 13px;
+}
+
+.resultRows > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 10px;
+  border-bottom: 1px solid var(--row-line);
+}
+
+.resultRows dd {
+  margin: 0;
+  text-align: right;
+  white-space: nowrap;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.resultRows small {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 11px;
+}
+
+.resultRows .subtotal {
+  background: var(--panel);
+  font-weight: 650;
+}
+
+.resultRows .resultTotal {
+  margin-top: 12px;
+  padding: 14px 10px;
+  color: var(--gold2);
+  background: var(--active-bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.salesTotal {
+  display: grid;
+  gap: 4px;
+  text-align: right;
+  color: var(--dim);
+  font-size: 12px;
+}
+
+.salesTable th,
+.salesTable td {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--row-line);
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+.salesTable th:last-child,
+.salesTable td:last-child {
+  padding-left: 10px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.salesTable :is(th, td):nth-child(2) {
+  width: 50%;
+  padding-inline: 12px;
+}
+
+.share {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.share > span:last-child {
+  min-width: 3ch;
+  text-align: right;
+}
+
+.shareTrack {
+  flex: 1;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--track);
+}
+
+.shareTrack i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.financeEmpty {
+  margin: 12px 0 0;
+  color: var(--dim);
+  font-size: 13px;
+}
+
+.dueName .accountLink {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 650;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.dueName .accountLink:hover { color: var(--gold2); }
+
+.accountList:not([hidden]) { display: grid; gap: 14px; }
+
+.accountFilters,
+.accountFields,
+.accountDetail {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.accountFilters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.accountSelect { min-width: 0; display: grid; gap: 6px; align-content: start; }
+.accountWide { grid-column: 1 / -1; }
+.accountFilters select,
+.accountFields :is(input, select, textarea) { width: 100%; min-width: 0; }
+.accountDetail > div { min-width: 0; overflow-wrap: anywhere; }
+.accountDetail dt { color: var(--dim); font-size: 12px; }
+.accountDetail dd { margin: 4px 0 0; font-weight: 600; white-space: pre-wrap; }
+
+@media (max-width: 500px) {
+  .accountFilters, .accountFields { grid-template-columns: minmax(0, 1fr); }
+}
+
+@container (max-width: 920px) {
+  .overviewGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container (max-width: 640px) {
+  .balanceGrid,
+  .monthGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .resultMetrics {
+    grid-auto-columns: minmax(220px, 66%);
+    gap: 8px;
+  }
+
+  .resultScrollHint {
+    display: block;
+    margin: 4px 0 0;
+    color: var(--dim);
+    font-size: 11px;
+  }
+
+  .balanceGrid, .monthGrid {
+    gap: 9px;
+  }
+
+  .chart {
+    height: 208px;
+  }
+
+  .salesTable :is(th, td):nth-child(2) {
+    width: auto;
+    padding-inline: 8px;
+  }
+}
+
+@container (480px <= width <= 640px) {
+  .balanceGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .balanceGrid > [data-featured] {
+    grid-column: 1 / -1;
+  }
+
+  .balanceGrid > .metric:not([data-featured]) .metricIcon {
+    display: none;
+  }
+}
+
+@container (max-width: 420px) {
+  .actions {
+    width: 100%;
+  }
+
+  .actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .actions button {
+    min-width: 0;
+    padding-inline: 5px;
+    font-size: 11px;
+  }
+
+  .dueRow {
+    gap: 3px 7px;
+  }
+
+  .dueName,
+  .dueAmount {
+    font-size: 12px;
+  }
+
+  .salesTable thead {
+    font-size: 11px;
+  }
+
+  .share {
+    flex-direction: column-reverse;
+    align-items: stretch;
+    gap: 5px;
+  }
+
+  .shareTrack {
+    flex: none;
+    height: 4px;
+  }
+
+  .share > span:last-child {
+    text-align: left;
+  }
+}
