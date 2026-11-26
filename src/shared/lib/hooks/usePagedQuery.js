@@ -1,23 +1,26 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 // Bounded state: only the current response; abort requests and reject stale responses.
-export function useQueryResource(loader, deps) {
+export function useQueryResource(loader, deps, { refreshKey } = {}) {
   const [revision, setRevision] = useState(0)
-  const key = JSON.stringify(deps) + ':' + revision
+  const dataKey = JSON.stringify(deps)
+  const key = JSON.stringify([dataKey, revision, refreshKey])
+  const reload = useCallback(() => setRevision(v => v + 1), [])
   const load = useRef(loader)
   useEffect(() => { load.current = loader })
-  const [state, setState] = useState({ key: null, data: null, error: null })
+  const [state, setState] = useState({ key: null, dataKey: null, data: null, error: null })
   useEffect(() => {
     const controller = new AbortController()
     Promise.resolve().then(() => load.current(controller.signal)).then(
-      data => { if (!controller.signal.aborted) setState({ key, data, error: null }) },
+      data => { if (!controller.signal.aborted) setState({ key, dataKey, data, error: null }) },
       error => { if (!controller.signal.aborted) setState(s => ({ ...s, key, error })) },
     )
     return () => controller.abort()
-  }, [key])
+  }, [key, dataKey])
+  const loading = state.key !== key
   return { data: state.data, error: state.key === key ? state.error : null,
-    loading: state.key !== key, reload: () => setRevision(v => v + 1) }
+    loading, refreshing: loading && state.dataKey === dataKey, reload }
 }
 
 export function useListParams(defaultSort = 'nome', defaultDirection = 'ASC') {

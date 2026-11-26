@@ -54,7 +54,7 @@ export function ProfileChip({ nome, onClick }) {
 }
 
 /* ─── Menu de ações (⋯) — teclado: ↑ ↓ Enter Esc ─── */
-export function ActionMenu({ label = 'Mais ações', items, trigger }) {
+export function ActionMenu({ label = 'Mais ações', items, trigger, focusTriggerOnSelect = false }) {
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState(null)
   const btnRef = useRef(null)
@@ -112,7 +112,11 @@ export function ActionMenu({ label = 'Mais ações', items, trigger }) {
             ? <hr key={`d${i}`} />
             : (
               <button key={it.label} type="button" role="menuitem" disabled={it.disabled} className={it.danger ? a.menuDanger : undefined}
-                onClick={() => { setOpen(false); it.onClick() }}>
+                onClick={() => {
+                  setOpen(false)
+                  if (focusTriggerOnSelect) btnRef.current?.focus({ preventScroll: true })
+                  it.onClick()
+                }}>
                 {it.icon && <it.icon size={14} aria-hidden="true" />}
                 <span>{it.label}{it.disabled && it.hint && <small>{it.hint}</small>}</span>
               </button>

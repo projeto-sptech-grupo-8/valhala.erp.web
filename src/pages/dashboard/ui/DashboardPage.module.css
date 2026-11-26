@@ -1,4 +1,8 @@
 .toolbar { display:flex; justify-content:space-between; align-items:center; gap:18px; flex-wrap:wrap; padding:0; margin:0; }
+.toolbarTitle { display:flex; align-items:center; flex-wrap:wrap; gap:6px 10px; }
+.toolbarTitle > button { min-height:32px; padding:5px 9px; font-size:12px; }
+.overviewShortcut { display:inline-flex; align-items:center; gap:6px; border:0; border-radius:8px; background:var(--gold,#c9a227); color:#161412; font-weight:700; }
+.overviewShortcut:hover { color:#161412; filter:brightness(1.07); }
 .toolbar small { display:block; margin-top:6px; }
 .toolbar strong { font-size:14px; }
 .toolbar p { font-size:12px; color:var(--dim); margin:7px 0; line-height:1.7; }
@@ -16,13 +20,15 @@
 .kpiCard[data-accent=warn] { --kpi-accent:var(--gold2); }
 .kpiCard[data-accent=info] { --kpi-accent:var(--c-operacional); }
 .kpiCard[data-accent=neutral] { --kpi-accent:var(--dim); }
-.kpiCard > article { flex:1; padding:18px; border-top:3px solid var(--kpi-accent); background:linear-gradient(145deg,color-mix(in srgb,var(--kpi-accent) 7%,transparent),transparent 65%),var(--card); }
+.kpiCard > article { flex:1; display:grid; grid-template-rows:auto auto 1fr; align-items:start; gap:9px; padding:clamp(13px,1.7vw,20px); border:0; border-radius:10px; background:linear-gradient(135deg,color-mix(in srgb,var(--kpi-accent) 9%,transparent),transparent 70%),var(--card); }
 .kpiCard > article > div:first-child { align-items:center; }
 .kpiCard > article > b { display:block; min-height:32px; color:var(--kpi-accent); }
-.kpiCard > article > span { line-height:1.55; }
+.kpiCard > article > span { color:var(--secondary-text); font-size:12px; line-height:1.45; }
 .kpiIcon { color:var(--kpi-accent); flex-shrink:0; }
+.kpiIconWrap { display:grid; place-items:center; width:32px; height:32px; flex:none; border-radius:8px; background:color-mix(in srgb,var(--kpi-accent) 12%,transparent); }
 .kpiCard [role=meter] > i { background:var(--kpi-accent); }
-.kpiCard > article p { display:flex; align-items:center; gap:6px; }
+.kpiCard > article p { display:flex; align-items:center; gap:9px; margin:0; font-size:14px; font-weight:650; line-height:1.35; }
+.kpiCard > article > b { margin:0; font-weight:700; letter-spacing:-.045em; font-variant-numeric:tabular-nums; }
 .help { position:relative; display:inline-flex; flex-shrink:0; }
 .help > button { display:inline-flex; border:0; background:transparent; padding:2px; color:var(--dim); min-height:0; }
 .help > span { display:none; position:absolute; left:50%; transform:translateX(-50%); top:calc(100% + 8px); z-index:20; width:min(260px,65vw); padding:12px; border:1px solid var(--line); border-radius:8px; background:var(--panel); box-shadow:0 8px 24px #0004; color:var(--text); font-size:12px; font-weight:400; line-height:1.7; text-transform:none; }

@@ -78,7 +78,7 @@ export function Products({ navigate }) {
   return <>
     <section className={ui.panel} aria-labelledby="catalog-filter-title">
       <FilterHeader className={ui.heading}>
-        <div><h2 id="catalog-filter-title"><button className={ui.collapse} aria-expanded={filtersOpen} aria-controls="product-filter-fields" onClick={() => setFiltersOpen(v => !v)}><SlidersHorizontal size={17} aria-hidden="true" />Filtros<ChevronDown size={17} aria-hidden="true" className={filtersOpen ? ui.expanded : undefined} /></button></h2><p>Encontre produtos e drinks e organize sua consulta.</p></div>
+        <div><h2 id="catalog-filter-title"><button className={ui.collapse} aria-expanded={filtersOpen} aria-controls="product-filter-fields" onClick={() => setFiltersOpen(v => !v)}><SlidersHorizontal size={17} aria-hidden="true" />Filtro de produtos<ChevronDown size={17} aria-hidden="true" className={filtersOpen ? ui.expanded : undefined} /></button></h2></div>
         <FilterActions onClear={clear} onRefresh={refresh} refreshing={query.loading} compact={can('GERENCIAR_ESTOQUE')}>{can('GERENCIAR_ESTOQUE') && <button className="gold" onClick={() => navigate('novo')}><Plus size={15} aria-hidden="true" />Novo produto</button>}</FilterActions>
       </FilterHeader>
       <div id="product-filter-fields" hidden={!filtersOpen}><div className={ui.filters}>

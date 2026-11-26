@@ -50,7 +50,7 @@ export const panelRoutes = [
   { id: 'novoperfil', component: ProfileFormPage, props: ({ pageParams }) => ({ copyFrom: pageParams.copiar }) },
   { id: 'perfil', component: LegacyProfileRedirect },
   { id: 'seguranca', component: LegacySettingsRedirect, props: () => ({ tab: 'seguranca' }) },
-  { id: 'notificacoes', component: LegacySettingsRedirect, props: () => ({ tab: 'notificacoes' }) },
+  { id: 'notificacoes', component: LegacySettingsRedirect },
   { id: 'geral', component: ConfigPage },
 ]
 
@@ -86,4 +86,4 @@ function LegacyProfileRedirect({ pageParams }) {
   return <Navigate replace to={'/perfis' + (query ? '?' + query : '')} />
 }
 
-function LegacySettingsRedirect({ tab }) { return <Navigate replace to={'/geral?aba=' + tab} /> }
+function LegacySettingsRedirect({ tab }) { return <Navigate replace to={tab ? '/geral?aba=' + tab : '/geral'} /> }

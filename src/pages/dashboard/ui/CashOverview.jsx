@@ -23,6 +23,7 @@ export function CashOverview({ navigate, headerTarget }) {
   const average = orders > 0 && received != null ? received / orders : null
   return <>
     <OverviewToolbar target={headerTarget} title={turn ? (turn.caixaNome || 'Caixa do operador') + ' · Aberto' : 'Caixa do operador'}
+      titleAction={turn && <button type="button" className={s.overviewShortcut} onClick={() => navigate('caixa')}><Wallet size={16} aria-hidden="true" />Caixa</button>}
       detail={turn && (turn.operadorNome || 'Operador não informado') + ' · Abertura em ' + dashboardDate(turn.abertaEm)}
       busy={cash.loading} refresh={cash.reload} />
     {cash.loading ? <LoadingBlock label="Consultando o turno do operador…" /> :

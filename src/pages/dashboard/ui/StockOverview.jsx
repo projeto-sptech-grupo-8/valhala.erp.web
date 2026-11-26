@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertTriangle, ArrowDown, ArrowLeftRight, ArrowUp, BarChart3, CalendarX, Download, Gauge, PackageX, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowLeftRight, ArrowUp, BarChart3, Boxes, CalendarX, Download, Gauge, PackageX, ShieldCheck } from 'lucide-react'
 import { MovementTypeBadge } from '@/entities/inventory/ui/MovementTypeBadge.jsx'
 import { api } from '@/shared/api/api.js'
 import { downloadCSV, stamp } from '@/shared/lib/csv.js'
@@ -77,6 +77,7 @@ export function StockOverview({ navigate, headerTarget }) {
   const busy = summary.loading || expiry.loading
   return <>
     <OverviewToolbar target={headerTarget} title="Estoque do estabelecimento"
+      titleAction={<button type="button" className={s.overviewShortcut} onClick={() => navigate('movimentacoes')}><Boxes size={16} aria-hidden="true" />Estoque</button>}
       detail={data && 'Atualizado em ' + dashboardDate(data.geradoEm) + (data.referencia?.fusoHorario ? ' · ' + data.referencia.fusoHorario : '')}
       busy={busy} refresh={() => { summary.reload(); expiry.reload() }} />
     {summary.error && <ErrorBlock error={summary.error} onRetry={summary.reload} />}

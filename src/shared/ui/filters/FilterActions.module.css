@@ -5,3 +5,6 @@
 .actions > button.icon { width: 36px; height: 36px; min-width: 36px; padding: 0; }
 .actions > button:focus-visible { outline: 2px solid var(--gold2); outline-offset: 3px; }
 @media (max-width: 700px) { .header.header { grid-template-columns: minmax(0, 1fr); gap: 12px; } .actions { width: 100%; } }
+
+.actions > button.utility { background:var(--panel); color:var(--secondary-text); border:1px solid var(--line); border-radius:8px; }
+.actions > button.utility:hover:not(:disabled) { background:var(--active-bg); color:var(--navigation-text); border-color:var(--accent-line); }

@@ -451,7 +451,7 @@ test('detalhe do catálogo organiza preço estoque e ações', async ({ page }) 
 test('buscas e ações permanecem visíveis ao recolher filtros de produtos', async ({ page }) => {
   const calls = await setup(page)
   await page.goto('/#/produtos')
-  const toggle = page.getByRole('button', { name: 'Filtros', exact: true })
+  const toggle = page.getByRole('button', { name: 'Filtro de produtos', exact: true })
   await toggle.click()
   await expect(page.getByRole('combobox', { name: 'Status', exact: true })).toBeHidden()
   await expect(page.getByRole('searchbox', { name: 'Buscar nome', exact: true })).toBeVisible()
@@ -884,7 +884,7 @@ test('configurações ficam no menu lateral e conta contém apenas aparência', 
   await nav.getByRole('link', { name: 'Configurações gerais', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Configurações gerais', exact: true })).toBeVisible()
   const sections = page.getByRole('navigation', { name: 'Seções de configurações', exact: true })
-  await expect(sections.getByRole('link')).toHaveCount(3)
+  await expect(sections.getByRole('link')).toHaveText(['Geral', 'Segurança'])
   const theme=page.getByRole('radiogroup',{name:'Tema do painel',exact:true})
   await theme.getByRole('radio',{name:'Claro',exact:true}).check()
   await expect(page.locator('html')).toHaveAttribute('data-theme','light')
@@ -899,8 +899,9 @@ test('configurações ficam no menu lateral e conta contém apenas aparência', 
   await expect(page.getByRole('heading', { name: 'Alterar senha', exact: true })).toBeVisible()
   await expect(page.getByRole('heading',{name:'Sessões ativas',exact:true})).toHaveCount(0)
   await expect(page.getByRole('button',{name:'Baixar relatório de acessos',exact:true})).toHaveCount(0)
-  await sections.getByRole('link', { name: 'Notificações', exact: true }).click()
-  await expect(page.getByText('Estoque crítico', { exact: true })).toBeVisible()
+  await page.goto('/#/notificacoes')
+  await expect(page).toHaveURL(/#\/geral$/)
+  await expect(sections.getByRole('link', { name: 'Notificações', exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: 'Teste — aparência', exact: true }).click()
   const appearance = page.getByRole('region', { name: 'Opções de Aparência', exact: true })
   await expect(appearance).toBeVisible()
@@ -947,7 +948,7 @@ test('catálogo alterna margem e giro com cores e consulta histórico só quando
   await expect(row).toContainText('15 dias')
   await expect(row.locator('[data-tone="yellow"]').last()).toContainText('Acompanhar')
   expect(histories).toBe(2)
-  await page.getByRole('button', { name: 'Filtros', exact: true }).click()
+  await page.getByRole('button', { name: 'Filtro de produtos', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Giro', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Giro', exact: true }).click()
   await expect(page.getByRole('columnheader', { name: 'Giro (30 dias)', exact: true })).toHaveCount(0)
@@ -1008,7 +1009,7 @@ test('reposição exibe saldo e mínimo usando unidade-base correta do fracionad
   await expect(page.getByRole('table')).toContainText('200 ml')
   await expect(page.getByRole('table')).toContainText('500 ml')
   await expect(page.getByRole('table')).not.toContainText('200 garrafa')
-  await expect(page.getByText(/Consulte até 5 alertas/)).toBeVisible()
+  await expect(page.getByText(/Consulte até 5 alertas/)).toHaveCount(0)
 })
 
 test('baixa de vários lotes não reenvia os já concluídos após falha parcial', async ({ page }) => {
@@ -2918,7 +2919,7 @@ test('painel operacional e formulários mantêm a largura útil de celular a des
       }
     }
     if (path === 'geral') {
-      for (const tab of ['Segurança', 'Notificações']) {
+      for (const tab of ['Segurança', 'Geral']) {
         await page.getByRole('link', { name: tab, exact: true }).click()
         await expect(page.getByRole('region', { name: tab, exact: true })).toBeVisible()
         await expectResponsiveBounds(page, tab)

@@ -80,7 +80,6 @@ function InvoiceTable({eligible}){
   return <>
     <section className={sales.panel}>
       <FilterHeader className={sales.filterHeading}><h2><button className={sales.collapse} type="button" aria-controls="invoice-filter-fields" aria-expanded={expanded} onClick={()=>setExpanded(!expanded)}><SlidersHorizontal size={17} aria-hidden="true"/>Filtros de {eligible?'pedidos para emissão':'notas fiscais'}<ChevronDown size={17} aria-hidden="true" className={expanded?sales.rotated:undefined}/></button></h2><FilterActions compact onClear={clear} onRefresh={query.reload} refreshing={query.loading}/></FilterHeader>
-      <p>{eligible?'Localize pedidos concluídos pelo período de conclusão.':'Consulte as notas por situação, período de emissão, número ou documento do consumidor.'}</p>
       {expanded&&<div id="invoice-filter-fields" className={sales.grid}>
         {!eligible&&<><label>Número da nota<input {...field('numero')} placeholder="Ex.: 328"/></label><label>CPF ou CNPJ<TaxDocumentInput value={draft.documentoCliente} onChange={documentoCliente=>setDraft(previous=>({...previous,documentoCliente}))}/></label>
         <label>Situação<select {...field('status')}><option value="">Todas</option>{Object.entries(statusNames).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label></>}

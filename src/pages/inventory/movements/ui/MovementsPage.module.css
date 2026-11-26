@@ -14,7 +14,7 @@
 .actions { display: flex; flex-wrap: wrap; gap: 12px; }
 .actions button { font-size: 12px; }
 .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; }
-.filters label, .search, .export { display: grid; gap: 8px; font-size: 12px; color: var(--dim); font-weight: 500; min-width: 0; }
+.filters label, .search, .export { display: grid; gap: 8px; font-size: 12px; color:var(--filter-label); font-weight: 500; min-width: 0; }
 .filters select, .filters input, .search input, .search select { height: 42px; width: 100%; min-width: 0; }
 .searchRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 20px; border-top: 1px solid var(--line); padding-top: 20px; margin-top: 20px; }
 .search { width: 100%; }

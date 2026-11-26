@@ -1,0 +1,60 @@
+.period {
+  position: relative;
+  flex: none;
+}
+
+.period .trigger {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  min-width: 52px;
+  padding: 5px 8px;
+  color: var(--dim);
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.trigger svg { color: var(--gold2); }
+
+.trigger[aria-expanded='true'] {
+  border-color: var(--accent-line);
+  background: var(--active-bg);
+  color: var(--gold2);
+}
+
+.options {
+  position: absolute;
+  z-index: 3;
+  inset-block-start: calc(100% + 6px);
+  inset-inline-start: 0;
+  min-width: 142px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--card);
+  box-shadow: 0 8px 24px rgb(0 0 0 / .22);
+}
+
+.period[data-align-end] .options {
+  inset-inline: auto 0;
+}
+
+.options:not([hidden]) {
+  display: grid;
+  gap: 2px;
+}
+
+.options button {
+  justify-content: space-between;
+  min-height: 35px;
+  padding: 6px 9px;
+  border-color: transparent;
+  background: transparent;
+  font-size: 13px;
+}
+
+.options button:is(:hover, [aria-pressed='true']) {
+  background: var(--active-bg);
+  color: var(--gold2);
+}
+

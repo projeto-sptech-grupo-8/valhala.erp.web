@@ -9,7 +9,7 @@ import { pages } from '@/entities/access'
 import s from '@/shared/styles/panel.module.css'
 
 /* Cabeçalho com retorno para a tela de origem, título e descrição. */
-export function PageHeader({ page, navigate, extra, onBack, help, onActionsMount }) {
+export function PageHeader({ page, navigate, extra, onBack, help, onActionsMount, action }) {
   const helpId = useId()
   const meta = pages[page]
   if (!meta) return null
@@ -17,7 +17,7 @@ export function PageHeader({ page, navigate, extra, onBack, help, onActionsMount
   const helpText = help || (page === 'reposicao' ? 'Os indicadores resumem os dados do servidor. A lista abaixo mostra os alertas prioritários retornados e pode ser limitada; não corresponde a uma lista completa de compras.' : null)
   const title = extra || meta.title
   const backTarget = meta.parent || (meta.section === 'Catálogo' && page !== 'produtos' ? 'produtos' : meta.section === 'Estoque' && page !== 'movimentacoes' ? 'movimentacoes' : 'dashboard')
-  const headerLayout = page === 'dashboard' ? ui.dashboardHeader : page === 'relatorios' ? ui.reportsHeader : ''
+  const headerLayout = page === 'dashboard' ? ui.dashboardHeader : (page === 'relatorios' || action) ? ui.inlineActionsHeader : ''
   const hasFinanceHelp = page === 'financeiro' || page === 'relatorios'
 
   return (
@@ -34,7 +34,8 @@ export function PageHeader({ page, navigate, extra, onBack, help, onActionsMount
       </h1>
       <p>{page === 'novo' && extra === 'Novo produto padrão' ? 'Cadastre a identificação, os preços e o estoque de um produto vendido por unidade ou de forma fracionada.' : page === 'novo' && extra === 'Novo drink' ? 'Defina o preço e os ingredientes da receita para controlar o consumo de cada drink.' : meta.desc}</p>
       {page === 'dashboard' && <div ref={onActionsMount} id="dashboard-header-actions" className={ui.dashboardActions} />}
-      {page === 'relatorios' && <div ref={onActionsMount} className={ui.reportActions} />}
+      {page === 'relatorios' && <div ref={onActionsMount} className={ui.inlineActions} />}
+      {action && <div className={ui.inlineActions}>{action}</div>}
     </header>
   )
 }

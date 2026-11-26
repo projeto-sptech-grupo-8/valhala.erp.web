@@ -49,7 +49,7 @@ export function ProfilesList({ navigate, pageParams }) {
 
   const columns = [
     {
-      key: 'nome', header: 'Perfil',
+      key: 'nome', header: 'Perfil', width: 312,
       render: p => (
         <span className={a.profileCell}>
           <i aria-hidden="true"><KeyRound size={14} /></i>
@@ -61,7 +61,7 @@ export function ProfilesList({ navigate, pageParams }) {
       ),
     },
     {
-      key: 'func', header: 'Funcionalidades', width: 320, sort: p => p.codigos.length,
+      key: 'func', header: 'Funcionalidades', sort: p => p.codigos.length,
       render: p => {
         const mods = funcs.data ? agruparPorModulo(funcs.data.filter(f => p.codigos.includes(f.codigo))) : []
         return (
@@ -73,7 +73,7 @@ export function ProfilesList({ navigate, pageParams }) {
       },
     },
     {
-      key: 'users', header: 'Usuários', width: 110, align: 'right', sort: usersKnown ? p => usuariosDo(p.id).length : false,
+      key: 'users', header: 'Usuários', sort: usersKnown ? p => usuariosDo(p.id).length : false,
       render: p => {
         const n = usuariosDo(p.id).length
         if (!usersKnown) return <span className={a.muted}>{users.loading ? 'Carregando…' : 'Indisponível'}</span>
@@ -83,7 +83,7 @@ export function ProfilesList({ navigate, pageParams }) {
       },
     },
     {
-      key: 'acoes', header: 'Ações', width: 80, sort: false, align: 'center',
+      key: 'acoes', header: 'Ações', sort: false, align: 'center',
       render: p => {
         const n = usuariosDo(p.id).length
         return (
@@ -104,7 +104,7 @@ export function ProfilesList({ navigate, pageParams }) {
     <>
       <AccessTabs active="perfis" navigate={navigate} can={can} />
       <section className={ui.panel} aria-labelledby="profile-filter-title">
-        <FilterHeader className={ui.heading}><div><h2 id="profile-filter-title"><button type="button" className={ui.collapse} aria-expanded={filtersOpen} aria-controls="profile-filter-fields" onClick={() => setFiltersOpen(open => !open)}><SlidersHorizontal size={17} aria-hidden="true" />Filtros de perfis<ChevronDown size={17} aria-hidden="true" className={filtersOpen ? ui.expanded : undefined} /></button></h2><p>Encontre perfis pelo nome, pelas funcionalidades e pela quantidade de usuários vinculados.</p></div><FilterActions compact onClear={() => { setQ(''); setRange({ funcMin: '', funcMax: '', userMin: '', userMax: '' }) }} onRefresh={() => { perfis.reload(); users.reload(); funcs.reload() }} refreshing={perfis.loading || users.loading}><button className="gold" onClick={() => navigate('novoperfil')}><Plus size={14} aria-hidden="true" />Novo perfil</button></FilterActions></FilterHeader>
+        <FilterHeader className={ui.heading}><div><h2 id="profile-filter-title"><button type="button" className={ui.collapse} aria-expanded={filtersOpen} aria-controls="profile-filter-fields" onClick={() => setFiltersOpen(open => !open)}><SlidersHorizontal size={17} aria-hidden="true" />Filtros de perfis<ChevronDown size={17} aria-hidden="true" className={filtersOpen ? ui.expanded : undefined} /></button></h2></div><FilterActions compact onClear={() => { setQ(''); setRange({ funcMin: '', funcMax: '', userMin: '', userMax: '' }) }} onRefresh={() => { perfis.reload(); users.reload(); funcs.reload() }} refreshing={perfis.loading || users.loading}><button className="gold" onClick={() => navigate('novoperfil')}><Plus size={14} aria-hidden="true" />Novo perfil</button></FilterActions></FilterHeader>
         <div id="profile-filter-fields" hidden={!filtersOpen}><div className={filters.ranges}>
           {[['func', 'Quantidade de funcionalidades', ListChecks], ['user', 'Quantidade de usuários', Users]].map(([key, title, Icon]) => <fieldset key={key} aria-label={title} disabled={key === 'user' && !usersKnown}><legend><Icon size={16} aria-hidden="true" />{title}<QuantityHelp kind={key} /></legend><div className={filters.bounds}>
             {['Min', 'Max'].map(bound => <label key={bound}>{bound === 'Min' ? 'No mínimo' : 'No máximo'}<input type="number" min="0" step="1" value={range[key + bound]} placeholder={bound === 'Min' ? 'Ex.: 0' : 'Sem limite'} onChange={e => { const value = e.target.value; if (value === '' || /^\d+$/.test(value)) setRange(current => ({ ...current, [key + bound]: value })) }} /></label>)}
@@ -117,15 +117,17 @@ export function ProfilesList({ navigate, pageParams }) {
 
       {perfis.error && perfis.data && <ErrorBlock error={perfis.error} onRetry={perfis.reload} />}
       {perfis.loading ? <LoadingBlock lines={5} label="Carregando perfis" /> : (
-        <DataTable
-          key={JSON.stringify([q, range])}
-          caption="Perfis de acesso"
-          columns={columns}
-          rows={rows}
-          initialSort={{ key: 'nome', dir: 'asc' }}
-          onRowClick={p => setDetailId(p.id)}
-          emptyText={hasFilters || invalidRange ? 'Nenhum perfil encontrado com os filtros informados.' : 'Nenhum perfil cadastrado. Crie o primeiro para poder cadastrar usuários.'}
-        />
+        <div className={filters.profileTable}>
+          <DataTable
+            key={JSON.stringify([q, range])}
+            caption="Perfis de acesso"
+            columns={columns}
+            rows={rows}
+            initialSort={{ key: 'nome', dir: 'asc' }}
+            onRowClick={p => setDetailId(p.id)}
+            emptyText={hasFilters || invalidRange ? 'Nenhum perfil encontrado com os filtros informados.' : 'Nenhum perfil cadastrado. Crie o primeiro para poder cadastrar usuários.'}
+          />
+        </div>
       )}
 
       {detailId && <ProfileDetailsDrawer key={detailId} profileId={detailId} users={users} funcs={funcs} onClose={() => setDetailId(null)} />}
