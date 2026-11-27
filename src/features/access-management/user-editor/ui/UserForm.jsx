@@ -54,7 +54,7 @@ export function UserForm({ navigate, userId, setTitle }) {
   const isSelf = isEdit && userId === me?.id
 
   const user = useResource(() => (isEdit ? api.usuarios.obter(userId) : null), [userId])
-  const perfis = useResource(() => (can('PERFIS_GERENCIAR') ? api.perfis.listar() : []), [])
+  const perfis = useResource(() => api.perfis.atribuiveis(), [])
   const funcs = useResource(() => (can('PERFIS_GERENCIAR') || can('PERMISSOES_GERENCIAR') ? api.funcionalidades.listar() : []), [])
 
   const [form, setForm] = useState(null)
@@ -111,6 +111,7 @@ export function UserForm({ navigate, userId, setTitle }) {
     setErrors(errs)
     if (Object.keys(errs).length) { focusFirstError(); return }
 
+    if (!isEdit && !perfilSel) return
     setSaveError('')
     setBusy(true)
     try {
@@ -131,10 +132,11 @@ export function UserForm({ navigate, userId, setTitle }) {
       } else {
         const u = await api.usuarios.criar({
           name: form.name.trim(), email: form.email.trim(), phone: form.phone || undefined,
-          password: form.password, profileId: form.profileId,
+          password: form.password, nomePerfil: perfilSel.nome,
         })
         toast(`${u.name} já pode entrar com o e-mail ${u.email}.`, { title: 'Usuário criado' })
-        navigate('usuarios', { detalhe: u.id })
+        if (can('USUARIOS_VISUALIZAR')) navigate('usuarios', { detalhe: u.id })
+        else { setForm(initial); setErrors({}); setSubmitted(false) }
       }
     } catch (err) {
       const fe = err.fieldErrors || {}
@@ -149,7 +151,8 @@ export function UserForm({ navigate, userId, setTitle }) {
     }
   }
 
-  const cancel = () => (dirty ? setLeave(true) : navigate(isEdit ? 'usuario' : 'usuarios', isEdit ? { id: userId } : {}))
+  const listPage = can('USUARIOS_VISUALIZAR') ? 'usuarios' : 'dashboard'
+  const cancel = () => (dirty ? setLeave(true) : navigate(isEdit ? 'usuario' : listPage, isEdit ? { id: userId } : {}))
   const perfilSel = (perfis.data || []).find(p => p.id === form.profileId)
   const score = passwordScore(form.password)
   const errCount = Object.keys(errors).length
@@ -166,7 +169,7 @@ export function UserForm({ navigate, userId, setTitle }) {
         </div>
       </div>}
 
-      {uncertain && <Notice tone="warning" title="Cadastro sem confirmação">A conexão caiu antes da confirmação. Consulte a lista antes de tentar cadastrar novamente. <button type="button" onClick={() => navigate('usuarios')}>Consultar usuários</button></Notice>}
+      {uncertain && <Notice tone="warning" title="Cadastro sem confirmação">A conexão caiu antes da confirmação. Confirme se a conta foi criada antes de tentar novamente. {can('USUARIOS_VISUALIZAR') && <button type="button" onClick={() => navigate('usuarios')}>Consultar usuários</button>}</Notice>}
       {saveError && <Notice title="Não foi possível salvar o usuário" focus>{saveError}</Notice>}
       {errCount > 0 && (
         <div className={s.errSummary} role="alert">
@@ -229,15 +232,15 @@ export function UserForm({ navigate, userId, setTitle }) {
                 <p className={s.sectionDesc}>A troca de perfil altera as permissões, por isso tem confirmação própria.</p>
                 <div className={a.currentProfile}>
                   <ProfileChip nome={user.data.profileName} />
-                  {can('USUARIOS_EDITAR') && perfis.data && (
+                  {actions.canChangeProfile(user.data) && (
                     <button type="button" onClick={() => actions.open.changeProfile(user.data)}><KeyRound size={13} aria-hidden="true" /> Mudar perfil</button>
                   )}
                 </div>
               </>
             ) : perfis.error ? (
               <ErrorBlock error={perfis.error} onRetry={perfis.reload} />
-            ) : !can('PERFIS_GERENCIAR') ? (
-              <p className={a.warnBox}>Seu acesso não permite listar perfis. Peça ao gerente para criar este usuário.</p>
+            ) : !perfis.loading && !perfis.data?.length ? (
+              <Notice tone="warning">Nenhum perfil pode ser atribuído com as suas permissões.{can('PERFIS_GERENCIAR') && <button type="button" onClick={() => navigate('novoperfil')}>Criar perfil</button>}</Notice>
             ) : (
               <>
                 <Field name="profileId" label="Perfil" required error={errors.profileId} hint="Define o que o usuário pode fazer no sistema.">
@@ -250,10 +253,10 @@ export function UserForm({ navigate, userId, setTitle }) {
                   <div className={a.preview} aria-live="polite">
                     <p className={a.previewHead}><b>{perfilSel.nome}</b> · {perfilSel.codigos.length} funcionalidade{perfilSel.codigos.length === 1 ? '' : 's'}</p>
                     {perfilSel.descricao && <p className={a.muted}>{perfilSel.descricao}</p>}
-                    {funcs.data && <FuncionalidadesPicker readOnly funcionalidades={funcs.data} value={perfilSel.codigos} />}
+                    {!!funcs.data?.length && <FuncionalidadesPicker readOnly funcionalidades={funcs.data} value={perfilSel.codigos} />}
                   </div>
                 )}
-                <button type="button" className={a.linkBtn} onClick={() => navigate('novoperfil')}>Precisa de outro perfil? Criar perfil</button>
+                {can('PERFIS_GERENCIAR') && <button type="button" className={a.linkBtn} onClick={() => navigate('novoperfil')}>Precisa de outro perfil? Criar perfil</button>}
               </>
             )}
           </section>
@@ -261,7 +264,7 @@ export function UserForm({ navigate, userId, setTitle }) {
       </div>
 
       </fieldset>
-      {!isEdit && <div className={layout.footer}><button type="button" onClick={cancel} disabled={busy}>Cancelar</button><button type="submit" className="gold" disabled={busy || uncertain || perfis.loading || !!perfis.error}>{busy ? 'Salvando…' : 'Criar usuário'}{!busy && <CheckCircle size={15} aria-hidden="true" />}</button></div>}
+      {!isEdit && <div className={layout.footer}><button type="button" onClick={cancel} disabled={busy}>Cancelar</button><button type="submit" className="gold" disabled={busy || uncertain || perfis.loading || !!perfis.error || !perfis.data?.length}>{busy ? 'Salvando…' : 'Criar usuário'}{!busy && <CheckCircle size={15} aria-hidden="true" />}</button></div>}
 
       {leave && (
         <Modal
@@ -269,7 +272,7 @@ export function UserForm({ navigate, userId, setTitle }) {
           onClose={() => setLeave(false)}
           footer={<>
             <button type="button" onClick={() => setLeave(false)} data-autofocus>Continuar editando</button>
-            <button type="button" className={s.dangerBtn} onClick={() => navigate(isEdit ? 'usuario' : 'usuarios', isEdit ? { id: userId } : {})}>Descartar</button>
+            <button type="button" className={s.dangerBtn} onClick={() => navigate(isEdit ? 'usuario' : listPage, isEdit ? { id: userId } : {})}>Descartar</button>
           </>}
         />
       )}

@@ -104,6 +104,9 @@ aside > footer button {
   margin: 0 auto;
 }
 
+.cashFullscreen { --cash-menu-offset: 0px; }
+.cashFullscreen > .content { max-width: none; }
+
 :global(.stats) {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -333,7 +336,7 @@ aside > footer button {
 
 .tabs button {
   border: 0;
-  color: var(--dim);
+  color: var(--secondary-text);
 }
 
 .tabs button.on {
@@ -2020,7 +2023,7 @@ aside nav a {
   letter-spacing: -.3px;
   color: var(--text);
 }
-.pageHeader > p { margin: 0; font-size: 14px; color: var(--dim); }
+.pageHeader > p { margin: 0; font-size: 14px; color: var(--secondary-text); }
 
 .crumbs ol {
   display: flex;
@@ -2664,3 +2667,6 @@ aside nav { overflow-x: hidden; }
   .countList li { grid-template-columns: 1fr; }
   .invHead { grid-template-columns: 1fr; }
 }
+
+/* Cores originais de navegação e perfil. */
+.app > aside, .flyout { --text:var(--navigation-text); --dim:var(--secondary-text); --faint:var(--muted-text); }

@@ -110,7 +110,7 @@ export default function Login({ go, onSuccess }) {
             <label className={styles.check}>
               <input type="checkbox" /> Lembrar de mim
             </label>
-            <button type="button" className={styles.forgot} onClick={() => go('forgot')}>Esqueceu a senha?</button>
+            <button type="button" className={styles.forgot} onClick={() => go('forgot')}>Pedir ajuda com o acesso</button>
           </div>
 
           <button type="submit" className={'gold ' + styles.submit} disabled={loading}>

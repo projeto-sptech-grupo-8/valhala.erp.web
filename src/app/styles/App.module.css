@@ -22,9 +22,13 @@
   --line: rgba(201, 162, 39, .17);
   --gold: #c9a227;
   --gold2: #e8c660;
-  --text: #e8e4dc;
-  --dim: #9c9890;
-  --faint: #8f8b83;         /* 4.8:1 sobre --card (WCAG AA) */
+  --text: #ffffff;
+  --dim: #ffffff;
+  --secondary-text: #9c9890;
+  --filter-label: #dedad3;
+  --muted-text: #8f8b83;
+  --navigation-text: #e8e4dc;
+  --faint: #ffffff;
   --green: #7fa86b;
   --red: #d4715e;           /* 4.9:1 sobre --card */
   --brand-mark: #e8c660;
@@ -32,7 +36,7 @@
   --c-operacional: #86a8bd;
   --c-vendas: #c29a83;
   --c-administrativo: #a596c9;
-  --ink: 232 228 220;
+  --ink: 255 255 255;
   --accent: 201 162 39;
   --danger: 212 113 94;
   --success: 127 168 107;
@@ -69,8 +73,12 @@
   --gold: #b08a1e;
   --gold2: #7a5c0c;         /* 6.3:1 sobre branco · 5.2:1 sobre --active-bg */
   --text: #221e19;          /* 16:1 */
-  --dim: #625b51;           /* 6.7:1 */
-  --faint: #6b645a;         /* 5.9:1 sobre branco · 4.9:1 sobre --active-bg */
+  --dim: var(--text);
+  --secondary-text: #625b51;
+  --filter-label: #514b42;
+  --muted-text: #6b645a;
+  --navigation-text: #221e19;
+  --faint: var(--text);
   --green: #356a24;         /* 6.5:1 sobre branco · 5.5:1 sobre --ok-bg */
   --red: #b3402c;           /* 5.6:1 */
   --brand-mark: #7a5c0c;
@@ -207,3 +215,11 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
 }
 
 :global(:root[data-theme='light']) input[type="date"]::-webkit-calendar-picker-indicator { filter: none; opacity: .7; }
+
+:global(input::placeholder), :global(textarea::placeholder) { color:var(--muted-text); opacity:1; }
+
+/* Títulos de campos nos painéis de filtro. */
+:global(section:has(> [data-filter-header]) label),
+:global(article:has(> [data-filter-header]) label),
+:global(div:has(> [data-filter-header]) label),
+:global([data-filter-header] ~ * :is(div,fieldset):has(> input, > select) > span:first-child) { color:var(--filter-label) !important; }

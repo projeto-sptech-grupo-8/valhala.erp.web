@@ -79,6 +79,34 @@ function AppRoutes() {
     return restorePromise.current
   }, [user])
 
+  useEffect(() => {
+    const userId = user?.id
+    if (!userId) return
+
+    let active = true
+    let checking = false
+    async function checkAccess() {
+      if (document.hidden || checking) return
+      checking = true
+      try {
+        const account = await api.me()
+        if (active) setUser(current => current?.id === userId ? account : current)
+      } catch (error) {
+        if (active && error.status === 401) {
+          setSessionStatus('anonymous')
+          setUser(null)
+        }
+      } finally {
+        checking = false
+      }
+    }
+    window.addEventListener('focus', checkAccess)
+    return () => {
+      active = false
+      window.removeEventListener('focus', checkAccess)
+    }
+  }, [user?.id])
+
   const go = useCallback((mode) => {
     navigate(MODE_PATHS[mode] ?? mode)
   }, [navigate])

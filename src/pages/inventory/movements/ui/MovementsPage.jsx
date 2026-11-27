@@ -1,22 +1,23 @@
+import { DateRangeFilter } from '@/shared/ui/filters/DateRangeFilter.jsx'
 import { FilterActions, FilterHeader } from '@/shared/ui/filters/FilterActions.jsx'
 import { MovementTypeBadge } from '@/entities/inventory/ui/MovementTypeBadge.jsx'
 import { Notice } from '@/shared/ui/feedback/ManagementFeedback.jsx'
-import { ImportProductsModal } from '@/pages/inventory/invoice-import/ui/InvoiceImportPage.jsx'
 import { Navigate } from 'react-router-dom'
 import { useState } from 'react'
 import { api } from '@/shared/api/api.js'
 import { useStore } from '@/entities/store'
 import { useListParams, useQueryResource } from '@/shared/lib/hooks/usePagedQuery.js'
 import { DataTable } from '@/shared/ui/data-table/DataTable.jsx'
+import { PageSizeControl } from '@/shared/ui/data-table/PageSizeControl.jsx'
 import { Drawer } from '@/shared/ui/drawer/Drawer.jsx'
 import { fmtNum, fmtDateTime } from '@/shared/lib/format.js'
 import { stamp } from '@/shared/lib/csv.js'
-import { QueryFeedback, PageSize } from '@/features/catalog/remote/RemoteControls.jsx'
+import { QueryFeedback } from '@/features/catalog/remote/RemoteControls.jsx'
 import { RecordAutocomplete } from '@/features/catalog/product-editor/ui/CategoryAutocomplete.jsx'
 import { lotDate } from '@/entities/inventory/model/remoteLots.js'
 import ui from './MovementsPage.module.css'
 import filterUi from '@/pages/catalog/products/ui/ProductsPage.module.css'
-import { Eye, Download, SlidersHorizontal, ChevronDown, Plus, FileUp, ArrowDownToLine, ArrowUpFromLine, FileText } from 'lucide-react'
+import { Eye, Download, SlidersHorizontal, ChevronDown, Plus, ArrowDownToLine, ArrowUpFromLine, FileText } from 'lucide-react'
 
 const TYPES = { ENTRADA_INICIAL: 'Entrada inicial', ENTRADA: 'Entrada', SAIDA: 'Saída', SAIDA_DRINK: 'Saída de drink', PERDA: 'Perda', AJUSTE_POSITIVO: 'Ajuste positivo', AJUSTE_NEGATIVO: 'Ajuste negativo' }
 const POSITIVE = ['ENTRADA_INICIAL', 'ENTRADA', 'AJUSTE_POSITIVO']
@@ -32,8 +33,8 @@ function MovementHistory({ navigate }) {
   const canListUsers = can('USUARIOS_VISUALIZAR')
   const operators = useQueryResource(signal => canListUsers ? api.usuarios.listar(signal) : Promise.resolve([]), [canListUsers])
   const [detail, setDetail] = useState(null)
-  const [importOpen, setImportOpen] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(true)
+  const selectedPeriod = params.periodo || (!params.dataInicial && !params.dataFinal ? 'todos' : undefined)
   const invalidDates = params.dataInicial && params.dataFinal && params.dataInicial > params.dataFinal
   const request = { produtoId: params.produtoId, tipo: params.tipo, usuarioId: params.usuarioId, dataInicial: params.dataInicial, dataFinal: params.dataFinal,
     pagina: params.pagina, tamanho: params.tamanho, ordenarPor: ['ocorridoEm', 'tipo', 'quantidade', 'saldoPosterior'].includes(params.ordenarPor) ? params.ordenarPor : 'ocorridoEm', direcao: params.direcao }
@@ -64,26 +65,24 @@ function MovementHistory({ navigate }) {
   }
   return <>
     <section className={ui.panel} aria-labelledby="movement-filter-title">
-      <FilterHeader className={ui.heading}><div><h2 id="movement-filter-title"><button type="button" className={filterUi.collapse} aria-expanded={filtersOpen} aria-controls="movement-filter-fields" onClick={() => setFiltersOpen(open => !open)}><SlidersHorizontal size={16} aria-hidden="true" />Filtros de movimentações<ChevronDown size={17} aria-hidden="true" className={filtersOpen ? filterUi.expanded : undefined} /></button></h2><p>Consulte entradas, saídas, perdas e ajustes do estoque por produto e período.</p></div><FilterActions onClear={clear} onRefresh={query.reload} refreshing={query.loading} compact={can('MOVIMENTAR_ESTOQUE')}>{can('MOVIMENTAR_ESTOQUE') && <button className="gold" onClick={() => navigate('novamovimentacao', { retorno: JSON.stringify(params) })}><Plus size={15} aria-hidden="true" />Nova movimentação</button>}</FilterActions></FilterHeader>
-      <div id="movement-filter-fields" hidden={!filtersOpen}><div className={ui.filters}>
+      <FilterHeader className={ui.heading}><div><h2 id="movement-filter-title"><button type="button" className={filterUi.collapse} aria-expanded={filtersOpen} aria-controls="movement-filter-fields" onClick={() => setFiltersOpen(open => !open)}><SlidersHorizontal size={16} aria-hidden="true" />Filtros de movimentações<ChevronDown size={17} aria-hidden="true" className={filtersOpen ? filterUi.expanded : undefined} /></button></h2></div><FilterActions onClear={clear} onRefresh={query.reload} refreshing={query.loading} compact={can('MOVIMENTAR_ESTOQUE')}>{can('MOVIMENTAR_ESTOQUE') && <button className="gold" onClick={() => navigate('novamovimentacao', { retorno: JSON.stringify(params) })}><Plus size={15} aria-hidden="true" />Nova movimentação</button>}</FilterActions></FilterHeader>
+      <div id="movement-filter-fields" hidden={!filtersOpen}><div className={ui.filters} data-operator={canListUsers || undefined}>
 
       <label>Tipo<select aria-label="Filtrar por tipo" value={params.tipo || ''} onChange={e => update({ tipo: e.target.value })}><option value="">Todos</option>{Object.entries(TYPES).map(([value, text]) => <option key={value} value={value}>{text}</option>)}</select></label>
-      <label>Data inicial<input type="date" value={params.dataInicial || ''} onChange={e => update({ dataInicial: e.target.value })} /></label>
-      <label>Data final<input type="date" value={params.dataFinal || ''} onChange={e => update({ dataFinal: e.target.value })} /></label>
+      <DateRangeFilter label="Período" className={ui.periodFilter} selected={selectedPeriod}
+        onChange={({ id, dataInicio, dataFim }) => update({ periodo: id === 'todos' ? '' : id, dataInicial: dataInicio, dataFinal: dataFim })} />
       {canListUsers && <label>Operador<select aria-label="Filtrar por operador" disabled={operators.loading || !!operators.error} value={params.usuarioId || ''} onChange={e => update({ usuarioId: e.target.value })}><option value="">{operators.loading ? 'Carregando operadores…' : operators.error ? 'Operadores indisponíveis' : 'Todos os operadores'}</option>{params.usuarioId && !operators.data?.some(user => user.id === params.usuarioId) && <option value={params.usuarioId}>Operador selecionado</option>}{operators.data?.map(user => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}</select>{operators.error && <button type="button" onClick={operators.reload}>Tentar carregar operadores</button>}</label>}
-      <PageSize value={params.tamanho} onChange={tamanho => update({ tamanho })} />
       </div>
       </div>
-      <div className={ui.searchRow}><div className={ui.search}><RecordAutocomplete kind="produtos" active={false} productType={null} label="Buscar produto" placeholder="Digite o nome ou código do produto" value={params.produtoId} onChange={produtoId => update({ produtoId })} /></div><div className={ui.export}><span>Ações</span><div className={ui.actions}>{can('MOVIMENTAR_ESTOQUE') && <button onClick={() => setImportOpen(true)}><FileUp size={15} aria-hidden="true" />Importar produtos</button>}<button title="Exportar em Excel todas as movimentações que correspondem aos filtros" disabled={exporting || !rows.length || query.loading || !!query.error} onClick={exportPage}><Download size={15} aria-hidden="true" />{exporting ? 'Exportando…' : 'Exportar'}</button></div></div></div>
+      <div className={ui.searchRow}><div className={ui.search}><RecordAutocomplete kind="produtos" active={false} productType={null} label="Buscar produto" placeholder="Digite o nome ou código do produto" value={params.produtoId} onChange={produtoId => update({ produtoId })} /></div><div className={ui.export}><span>Ações</span><div className={ui.actions}><button title="Exportar em Excel todas as movimentações que correspondem aos filtros" disabled={exporting || !rows.length || query.loading || !!query.error} onClick={exportPage}><Download size={15} aria-hidden="true" />{exporting ? 'Exportando…' : 'Exportar'}</button></div></div></div>
     </section>
     {exportError && <Notice title="Não foi possível exportar" focus>{exportError}</Notice>}
     <QueryFeedback query={query} />
-    <DataTable caption="Histórico de movimentações" columns={columns} rows={rows} pageSize={params.tamanho}
+    <DataTable caption="Histórico de movimentações" columns={columns} rows={rows} pageSize={params.tamanho} paginationControls={<PageSizeControl value={params.tamanho} onChange={tamanho => update({ tamanho })} />} compactColumns={['produtoNome', 'tipo', 'quantidade', 'acao']}
       emptyText={query.loading ? 'Carregando histórico…' : query.error ? 'Consulta indisponível.' : 'Nenhuma movimentação encontrada neste período e filtros.'}
       remote={{ page: params.pagina, total: query.data?.totalItens || 0, loading: query.loading,
         sort: { key: request.ordenarPor, dir: params.direcao.toLowerCase() },
         onPage: pagina => update({ pagina }, false), onSort: sort => update({ ordenarPor: sort.key, direcao: sort.dir.toUpperCase() }) }} />
-    {importOpen && can('MOVIMENTAR_ESTOQUE') && <ImportProductsModal navigate={navigate} onClose={() => { setImportOpen(false); query.reload() }} />}
     {detail && <Drawer title="Detalhes da movimentação" onClose={() => setDetail(null)}>
       <header className={ui.detailHeader}>
         <span className={ui.badge}>{POSITIVE.includes(detail.tipo) ? <ArrowDownToLine size={14} aria-hidden="true" /> : <ArrowUpFromLine size={14} aria-hidden="true" />}{TYPES[detail.tipo] || detail.tipo}</span>

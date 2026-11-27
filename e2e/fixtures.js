@@ -10,7 +10,7 @@ export const ADMIN = { email: 'admin@valhalla.local', senha: 'Senha@123' }
  * shot(nome): print numerado em e2e/evidencias/<arquivo-do-teste>/.
  */
 export const test = base.extend({
-  page: async ({ page }, use, info) => {
+  page: async ({ page }, provide) => {
     const problems = []
     const allowed = []
     page.allowStatus = (status, urlPart) => allowed.push({ status, urlPart })
@@ -26,14 +26,14 @@ export const test = base.extend({
       if (allowed.some(a => a.status === st && url.includes(a.urlPart))) return
       problems.push(`http ${st} ${res.request().method()} ${url}`)
     })
-    await use(page)
+    await provide(page)
     expect(problems, 'erros de console/rede durante o teste').toEqual([])
   },
-  shot: async ({ page }, use, info) => {
+  shot: async ({ page }, provide, info) => {
     const dir = path.join('e2e', 'evidencias', path.basename(info.file, '.spec.js'))
     fs.mkdirSync(dir, { recursive: true })
     let n = 0
-    await use(async (name) => {
+    await provide(async (name) => {
       n += 1
       const slug = `${info.title}-${name}`.toLowerCase().normalize('NFD').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '')
       await page.screenshot({ path: path.join(dir, `${String(n).padStart(2, '0')}-${slug}.png`), fullPage: true })

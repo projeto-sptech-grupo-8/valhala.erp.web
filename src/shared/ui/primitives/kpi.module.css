@@ -61,31 +61,3 @@
   background: rgb(var(--ink) / .42);
   transition: width .5s ease;
 }
-
-/* faixa horizontal de KPIs (Financeiro / Movimentações) */
-.strip {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  padding: 0 !important;
-  margin-bottom: 14px;
-  overflow: hidden;
-}
-.item {
-  display: grid;
-  align-content: start;
-  gap: 4px;
-  padding: 16px 18px 14px;
-  border-left: 1px solid var(--line);
-}
-.item:first-child { border-left: 0; }
-.itemHead { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.itemHead p { margin: 0; font-size: 12px; color: var(--dim); }
-.item > b {
-  font: 600 20px/1.2 Inter, sans-serif;
-  letter-spacing: -.3px;
-  font-variant-numeric: tabular-nums;
-  color: var(--text);
-  white-space: nowrap;
-}
-.item > span { font-size: 12px; color: var(--dim); }
-.item .meter { margin: 2px 0 0; }

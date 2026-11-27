@@ -1,5 +1,8 @@
 import { useState } from 'react'
 import { Check, Ban, Search } from 'lucide-react'
+import { api } from '@/shared/api/api.js'
+import { ConfirmModal, Modal, Notice } from '@/shared/ui/feedback/ManagementFeedback.jsx'
+import { useToast } from '@/shared/ui/notifications/useToast.js'
 import { agruparPorModulo } from '@/shared/config/funcionalidades.js'
 import a from '@/entities/access/ui/access.module.css'
 
@@ -89,6 +92,69 @@ export function FuncionalidadesPicker({ funcionalidades, value, onChange, baseli
       </div>
     </div>
   )
+}
+
+export function UserOverridesModal({ user, funcionalidades, permissoes, can, onClose, onSaved }) {
+  const original = Object.fromEntries(permissoes.filter(p => p.origem !== 'PERFIL').map(p => [p.codigo, p.origem]))
+  const [adjustments, setAdjustments] = useState(original)
+  const [confirm, setConfirm] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
+  const toast = useToast()
+  const changed = Object.entries(adjustments).some(([codigo, efeito]) => efeito !== (original[codigo] || 'PERFIL'))
+  const query = search.trim().toLowerCase()
+  const groups = agruparPorModulo(funcionalidades.filter(f => can(f.codigo)
+    && (f.nome.toLowerCase().includes(query) || f.codigo.toLowerCase().includes(query))))
+
+  async function save() {
+    if (busy || !changed) return
+    setError('')
+    setBusy(true)
+    try {
+      const sobrescritas = Object.entries(adjustments).filter(([, efeito]) => efeito !== 'PERFIL')
+        .map(([codigoFuncionalidade, efeito]) => ({ codigoFuncionalidade, efeito }))
+      await api.permissoes.substituirSobrescritas(user.id, sobrescritas)
+      toast('Os ajustes individuais foram salvos.', { title: 'Permissões atualizadas' })
+      onSaved()
+    } catch (ex) {
+      setError(ex.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (confirm) return <ConfirmModal title="Aplicar ajustes de permissões?" busy={busy} error={error}
+    confirmLabel="Aplicar e encerrar sessão" onConfirm={save} onClose={() => { setConfirm(false); setError('') }}>
+    <p>As sessões de {user.name} serão encerradas ao salvar. As permissões atualizadas valerão no próximo acesso.</p>
+  </ConfirmModal>
+
+  return <Modal title="Ajustar permissões" subtitle={user.name} width={720} onClose={onClose} footer={<>
+    <button type="button" onClick={onClose}>Cancelar</button>
+    <button type="button" className="gold" disabled={!changed} onClick={() => setConfirm(true)}>Salvar ajustes</button>
+  </>}>
+    <label className={a.searchBox}>
+      <Search size={15} aria-hidden="true" />
+      <input type="search" value={search} onChange={event => setSearch(event.target.value)}
+        placeholder="Filtrar funcionalidades…" aria-label="Filtrar funcionalidades" />
+    </label>
+    {groups.length === 0 && <Notice tone="info">Nenhuma funcionalidade encontrada.</Notice>}
+    <div className={a.groups}>
+      {groups.map(group => <section className={a.group} key={group.id}>
+        <h3>{group.nome}</h3>
+        {group.itens.map(f => <fieldset key={f.codigo} role="radiogroup" aria-label={f.nome}>
+          <legend>{f.nome}</legend>
+          {Object.entries({ PERFIL: 'Herdar do perfil', GRANT: 'Conceder', REVOKE: 'Revogar' }).map(([value, label]) =>
+            <label key={value} className={a.fn}>
+              <input type="radio" name={'override-' + f.codigo} checked={(adjustments[f.codigo] || 'PERFIL') === value}
+                onChange={() => setAdjustments(current => ({ ...current, [f.codigo]: value }))} />
+              <span>{label}</span>
+            </label>
+          )}
+        </fieldset>)}
+      </section>)}
+    </div>
+  </Modal>
 }
 
 /* ─── Permissões efetivas (com origem) ─── */

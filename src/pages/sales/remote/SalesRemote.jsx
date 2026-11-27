@@ -1,5 +1,9 @@
+import { DateRangeFilter } from '@/shared/ui/filters/DateRangeFilter.jsx'
 import { useFiscalCheckout } from '@/pages/sales/invoices/fiscalContext.js'
+import { needsInvoice } from '@/pages/sales/invoices/fiscalApi.js'
+import { OrderInvoice } from '@/pages/sales/invoices/ui/OrderInvoice.jsx'
 import { FilterActions, FilterHeader } from '@/shared/ui/filters/FilterActions.jsx'
+import { SearchInput } from '@/features/catalog/remote/RemoteControls.jsx'
 import { CashRatesPanel } from '@/features/sales/cash-settings/ui/CashRatesPanel.jsx'
 import { CashEquipmentPanel } from '@/features/sales/cash-settings/ui/CashEquipmentPanel.jsx'
 import { CashPolicyModal } from '@/features/sales/cash-settings/ui/CashPolicyModal.jsx'
@@ -10,12 +14,15 @@ import { CashBoxRegistration } from './CashBoxRegistration.jsx'
 import { SalePaymentModal } from '@/features/sales/payments/ui/SalePaymentModal.jsx'
 import { CashWorkspace } from './CashWorkspace.jsx'
 import { useEffect, useRef, useState, useId } from 'react'
-import { readCash as read, writeCash as write, countOpenCashOrders, MAX_OPEN_CASH_ORDERS } from '@/entities/sales/api/cashApi.js'
+import { readCash as read, writeCash as write, countOpenCashOrders } from '@/entities/sales/api/cashApi.js'
 import { CashOpening } from './CashOpening.jsx'
 import { CashHistory } from './CashHistory.jsx'
+import { CashSessionBadge } from './CashSessionBadge.jsx'
+import { CashSessionDetail } from './CashSessionDetail.jsx'
 import { useStore } from '@/entities/store'
 import { useListParams, useQueryResource } from '@/shared/lib/hooks/usePagedQuery.js'
 import { DataTable } from '@/shared/ui/data-table/DataTable.jsx'
+import { PageSizeControl } from '@/shared/ui/data-table/PageSizeControl.jsx'
 import { Drawer } from '@/shared/ui/drawer/Drawer.jsx'
 import { Modal, Notice, LoadingBlock, ErrorBlock } from '@/shared/ui/feedback/ManagementFeedback.jsx'
 
@@ -27,8 +34,9 @@ const states={PENDENTE:'Pendente',PENDENTE_NA_POINT:'Aguardando Point',EM_TERMIN
 const paymentNames={DINHEIRO:'Dinheiro',PIX:'Pix',DEBITO:'Cartão de débito',CREDITO:'Cartão de crédito',VALOR:'Valor em reais (R$)',PERCENTUAL:'Percentual (%)'}
 const channels={BALCAO:'Balcão',MESA:'Mesa',RETIRADA:'Retirada',DELIVERY:'Delivery'}
 function Badge({value}) {
- const good=['APROVADO','CONCLUIDO','FECHADA','ABERTA'].includes(value)
- const bad=['CANCELADO','RECUSADO','EXPIRADO','EM_FECHAMENTO'].includes(value)
+ if (['ABERTA','FECHADA','EM_FECHAMENTO','CANCELADA'].includes(value)) return <CashSessionBadge value={value} />
+ const good=['APROVADO','CONCLUIDO'].includes(value)
+ const bad=['CANCELADO','RECUSADO','EXPIRADO'].includes(value)
  const Icon=good?CheckCircle2:bad?AlertCircle:Clock3
  return <span className={s.badge} data-tone={good?'success':bad?'danger':value==='PAGAMENTO_PARCIAL'?'info':'pending'}><Icon size={13} aria-hidden="true"/>{states[value]||value||'Não informado'}</span>
 }
@@ -66,17 +74,30 @@ function FormModal({spec,close,done}){
 }
 export function SalesList({kind='pedidos'}){
  const {user,can}=useStore()
+ const {invoiceRevision}=useFiscalCheckout()
  const [responsibleName,setResponsibleName]=useState('')
  const {params,update,clear}=useListParams(kind==='sessoes'?'abertaEm':kind==='auditoria'?'ocorridoEm':'atualizadoEm','DESC');const [expanded,setExpanded]=useState(true),[selected,setSelected]=useState(null)
- const request={pagina:params.pagina,tamanho:params.tamanho,ordenarPor:params.ordenarPor,direcao:params.direcao,dataInicio:params.dataInicio,dataFim:params.dataFim,...(kind==='pedidos'?{status:params.status,canal:params.canal,sessaoCaixaId:params.sessaoCaixaId}:kind==='sessoes'?{status:params.status}:{tipoEvento:params.tipoEvento,sessaoCaixaId:params.sessaoCaixaId,usuarioId:params.usuarioId})}
- const query=useQueryResource(signal=>params.dataInicio&&params.dataFim&&params.dataInicio>params.dataFim?Promise.reject(new Error('Confira o período: a data inicial deve ser anterior à final.')):read(kind,request,signal),[kind,request]);const rows=query.loading||query.error?[]:query.data?.itens||[]
+ const invoiceRefreshKey=kind==='pedidos'?invoiceRevision:undefined
+ const pendingOnly=kind==='pedidos'&&params.nfcePendente==='true'
+ const compactColumns=kind==='pedidos'?['numero','total','status','actions']:kind==='sessoes'?['caixaNome','abertaEm','status','actions']:['tipoEvento','usuarioNome','actions']
+ const detailId=kind==='pedidos'?params.pedidoId:selected?.id
+ function openDetail(row) {
+  if(kind==='pedidos')update({pedidoId:row.id},false)
+  else setSelected(row)
+ }
+ function closeDetail() {
+  if(kind==='pedidos')update({pedidoId:null},false)
+  else setSelected(null)
+ }
+ const request={pagina:params.pagina,tamanho:params.tamanho,ordenarPor:params.ordenarPor,direcao:params.direcao,dataInicio:params.dataInicio,dataFim:params.dataFim,...(kind==='pedidos'?{status:pendingOnly?undefined:params.status,canal:params.canal,sessaoCaixaId:params.sessaoCaixaId,numero:params.numero,nfcePendente:pendingOnly||undefined}:kind==='sessoes'?{status:params.status}:{tipoEvento:params.tipoEvento,sessaoCaixaId:params.sessaoCaixaId,usuarioId:params.usuarioId})}
+ const query=useQueryResource(signal=>params.dataInicio&&params.dataFim&&params.dataInicio>params.dataFim?Promise.reject(new Error('Confira o período: a data inicial deve ser anterior à final.')):read(kind,request,signal),[kind,request],{refreshKey:invoiceRefreshKey});const rows=query.loading||query.error?[]:query.data?.itens||[]
  const cols=kind==='pedidos'?[
   {key:'numero',header:'Pedido',render:r=><strong className={s.orderNumber}>#{r.numero}</strong>},
   {key:'criadoEm',header:'Data e hora',render:r=><span className={s.orderDate}>{r.criadoEm?fmtDateTime(r.criadoEm):'—'}</span>},
   {key:'canal',header:'Canal / Identificação',sort:false,render:r=><div className={s.orderIdentity}><strong>{channels[r.canal]||r.canal||'Não informado'}</strong>{r.identificadorAtendimento?.trim()&&<span>{r.identificadorAtendimento}</span>}</div>},
   {key:'total',header:'Total',align:'right',render:r=>r.total==null?'—':fmtBRL(r.total)},
   {key:'saldoRestante',header:'Pagamento',sort:false,render:r=><OrderPaymentSummary order={r}/>},
-  {key:'status',header:'Situação',render:r=><Badge value={r.status}/>}
+  {key:'status',header:'Situação',render:r=><div className={s.orderStatuses}><Badge value={r.status}/>{needsInvoice(r)&&<Badge value="NFC-e pendente"/>}</div>}
  ]:kind==='sessoes'?[{key:'caixaNome',header:'Caixa',sort:false},{key:'operadorNome',header:'Operador',sort:false},{key:'abertaEm',header:'Abertura',render:r=>fmtDateTime(r.abertaEm)},{key:'diferenca',header:'Diferença',render:r=>r.diferenca==null?'—':fmtBRL(r.diferenca)},{key:'status',header:'Situação',render:r=><Badge value={r.status}/>}]:[
   {key:'ocorridoEm',header:'Data e hora',render:r=><span className={s.orderDate}>{auditDateLabel(r.ocorridoEm)}</span>},
   {key:'tipoEvento',header:'Evento',render:r=><AuditEventBadge code={r.tipoEvento}/>},
@@ -85,13 +106,97 @@ export function SalesList({kind='pedidos'}){
   {key:'valor',header:'Valor',align:'right',render:r=>r.valor==null?'—':fmtBRL(r.valor)},
   {key:'descricao',header:'Resumo',sort:false,render:r=><span className={s.auditSummary} title={r.descricao||undefined}>{r.descricao||'—'}</span>}
  ]
- cols.push({key:'actions',header:'Ações',sort:false,render:r=><button type="button" onClick={()=>setSelected(r)}><Eye size={15} aria-hidden="true"/>Ver detalhes</button>})
- const filterActions=<FilterActions onClear={clear} onRefresh={query.reload} refreshing={query.loading}/>
- return <><section className={s.panel}><FilterHeader className={s.filterHeading}><h2><button className={s.collapse} onClick={()=>setExpanded(!expanded)} aria-expanded={expanded}><SlidersHorizontal size={17}/>Filtros de {kind==='sessoes'?'sessões de caixa':kind==='auditoria'?'auditoria':'pedidos'}<ChevronDown size={17} className={expanded?s.rotated:undefined} aria-hidden="true"/></button></h2>{filterActions}</FilterHeader><p>{kind==='pedidos'?'Localize os pedidos por período, canal e situação. Confira os pagamentos e consulte os detalhes de cada atendimento.':kind==='sessoes'?'Acompanhe os turnos e confira fechamentos que precisam de atenção.':'Consulte as operações realizadas, os responsáveis e suas justificativas.'}</p>{expanded&&<div className={s.grid}>{kind==='auditoria'&&<AuditFilters params={params} update={update} user={user} responsibleName={responsibleName} canReadUsers={can('USUARIOS_VISUALIZAR')} onResponsibleChange={(id,name)=>{setResponsibleName(name);update({usuarioId:id})}}/ >}{kind!=='auditoria'&&<label>Situação<select value={params.status||''} onChange={e=>update({status:e.target.value})}><option value="">Todas</option>{(kind==='sessoes'?['ABERTA','EM_FECHAMENTO','FECHADA']:['EM_ATENDIMENTO','AGUARDANDO_MAQUINA','AGUARDANDO_PAGAMENTO','PAGAMENTO_PARCIAL','CONCLUIDO','CANCELADO','ESTORNADO']).map(v=><option key={v} value={v}>{states[v]}</option>)}</select></label>}{kind==='pedidos'&&<label>Canal<select value={params.canal||''} onChange={e=>update({canal:e.target.value})}><option value="">Todos</option>{['BALCAO','MESA','RETIRADA','DELIVERY'].map(v=><option key={v} value={v}>{channels[v]||v}</option>)}</select></label>}<label>Data inicial<input type="date" value={params.dataInicio||''} onChange={e=>update({dataInicio:e.target.value})}/></label><label>Data final<input type="date" value={params.dataFim||''} onChange={e=>update({dataFim:e.target.value})}/></label><label>Por página<select value={params.tamanho} onChange={e=>update({tamanho:e.target.value})}>{[10,20,50].map(n=><option key={n}>{n}</option>)}</select></label></div>}</section><Feedback query={query}/><DataTable caption={kind} pageSize={params.tamanho} columns={cols} rows={rows} emptyText="Nenhum registro nesta consulta." remote={{page:params.pagina,total:query.data?.totalItens||0,loading:query.loading,sort:{key:params.ordenarPor,dir:params.direcao.toLowerCase()},onPage:pagina=>update({pagina},false),onSort:o=>update({ordenarPor:o.key,direcao:o.dir.toUpperCase()})}}/>{selected&&(kind==='auditoria'?<CashAuditDetail event={selected} onClose={()=>setSelected(null)}/>:<Detail kind={kind} row={selected} close={()=>setSelected(null)} done={query.reload}/>)}</>
+ cols.push({key:'actions',header:'Ações',sort:false,render:r=><button type="button" onClick={()=>openDetail(r)}><Eye size={15} aria-hidden="true"/>Ver detalhes</button>})
+ const filterTitle=kind==='sessoes'?'sessões de caixa':kind==='auditoria'?'auditoria':'pedidos'
+ const statusOptions=kind==='sessoes'?['ABERTA','EM_FECHAMENTO','FECHADA']:
+  ['EM_ATENDIMENTO','AGUARDANDO_MAQUINA','AGUARDANDO_PAGAMENTO','PAGAMENTO_PARCIAL','CONCLUIDO','CANCELADO','ESTORNADO']
+ const divergencia=params.status==='EM_FECHAMENTO'
+ const hasExtraFilter=kind==='auditoria' && can('USUARIOS_VISUALIZAR')
+ const selectedPeriod=params.periodo || (!params.dataInicio && !params.dataFim ? 'todos' : undefined)
+ function changePeriod({id,dataInicio,dataFim}) {
+  update({periodo:id==='todos'?'':id,dataInicio,dataFim})
+ }
+ const pagination={
+  page:params.pagina,total:query.data?.totalItens||0,loading:query.loading,
+  sort:{key:params.ordenarPor,dir:params.direcao.toLowerCase()},
+  onPage:pagina=>update({pagina},false),
+  onSort:sort=>update({ordenarPor:sort.key,direcao:sort.dir.toUpperCase()}),
+ }
+ return <>
+  <section className={s.panel + ' ' + s.dateFilters}>
+   <FilterHeader className={s.filterHeading}>
+    <h2><button type="button" className={s.collapse} onClick={()=>setExpanded(value=>!value)} aria-expanded={expanded} aria-controls="sales-filter-fields">
+     <SlidersHorizontal size={17} aria-hidden="true"/>Filtros de {filterTitle}
+     <ChevronDown size={17} className={expanded?s.rotated:undefined} aria-hidden="true"/>
+    </button></h2>
+    <FilterActions onClear={clear} onRefresh={query.reload} refreshing={query.loading}>
+     {kind==='pedidos'&&<button type="button" aria-pressed={pendingOnly}
+      onClick={()=>update({nfcePendente:pendingOnly?'':'true',status:''})}>
+      <Eye size={17} aria-hidden="true"/>NFC-e pendente
+     </button>}
+     {kind==='sessoes'&&<button type="button" aria-pressed={divergencia}
+      onClick={()=>update({status:divergencia?'':'EM_FECHAMENTO'})}>
+      <Eye size={17} aria-hidden="true"/>Ver divergências pendentes
+     </button>}
+    </FilterActions>
+   </FilterHeader>
+   <div id="sales-filter-fields" hidden={!expanded}>
+    <div className={kind==='pedidos' ? s.grid : s.grid + ' ' + s.dateFilterGrid} data-extra-field={hasExtraFilter || undefined}>
+     {kind==='auditoria'?<AuditFilters params={params} update={update} user={user} responsibleName={responsibleName}
+      canReadUsers={can('USUARIOS_VISUALIZAR')} onResponsibleChange={(id,name)=>{setResponsibleName(name);update({usuarioId:id})}}/>:
+      <label>Situação<select disabled={pendingOnly} value={pendingOnly?'CONCLUIDO':params.status||''} onChange={event=>update({status:event.target.value})}>
+       <option value="">Todas</option>{statusOptions.map(value=><option key={value} value={value}>{states[value]}</option>)}
+      </select></label>}
+     {kind==='pedidos'&&<label>Canal<select value={params.canal||''} onChange={event=>update({canal:event.target.value})}>
+      <option value="">Todos</option>{['BALCAO','MESA','RETIRADA','DELIVERY'].map(value=><option key={value} value={value}>{channels[value]}</option>)}
+     </select></label>}
+     {kind!=='pedidos'&&<DateRangeFilter label={kind==='sessoes'?'Período de abertura':'Período'} className={s.dateFilterPeriod}
+      selected={selectedPeriod} onChange={changePeriod} />}
+    </div>
+   </div>
+   {kind==='pedidos'&&<div className={s.orderSearch}>
+    <label>Número do pedido<SearchInput label="Buscar número do pedido" placeholder="Ex.: 345" inputMode="numeric" maxLength={16}
+     value={params.numero||''} onChange={value=>update({numero:value.replace(/\D/g,'').replace(/^0+/,'')})}/></label>
+    <DateRangeFilter label="Período" className={s.dateFilterPeriod} selected={selectedPeriod} onChange={changePeriod} />
+   </div>}
+  </section>
+  <Feedback query={query}/>
+  <DataTable compactColumns={compactColumns} caption={filterTitle} pageSize={params.tamanho} columns={cols} rows={rows}
+   paginationControls={<PageSizeControl value={params.tamanho} onChange={tamanho => update({ tamanho })} />}
+   emptyText="Nenhum registro nesta consulta." remote={pagination}/>
+  {detailId&&(kind==='auditoria'?<CashAuditDetail event={selected} onClose={closeDetail}/>:
+   <Detail key={detailId} kind={kind} id={detailId} close={closeDetail} done={query.reload} invoiceRevision={invoiceRefreshKey}/>)}
+ </>
 }
-function Detail({kind,row,close,done}){
- const {can}=useStore();const query=useQueryResource(signal=>kind==='auditoria'?Promise.resolve(row):read(kind+'/'+row.id,{},signal),[kind,row.id]);const [op,setOp]=useState(null);const d=query.data
- return <Drawer title="Detalhes" onClose={close}><h2 className={s.drawerTitle}><Receipt size={22} aria-hidden="true"/>Detalhes {kind==='pedidos'?'do pedido':kind==='sessoes'?'da sessão':'do evento'}</h2><Feedback query={query}/>{!query.loading&&!query.error&&d&&<><h3>{d.caixaNome||d.identificadorAtendimento||d.descricao}</h3><p>{states[d.status]||d.tipoEvento} · {d.operadorNome||d.usuarioNome}</p>{kind==='pedidos'?<OrderContent order={d} refresh={()=>{query.reload();done()}}/>:<><div className={s.stats}>{Object.entries(d.resumoFechamento||d.resumoAtual||{}).filter(([,v])=>typeof v==='number').map(([k,v])=><div key={k}><span>{{qtdVendas:'Pedidos com recebimento',totalVendas:'Recebido aprovado',dinheiroEsperado:'Esperado na gaveta',dinheiroContado:'Dinheiro contado',fundoTroco:'Fundo de troco',sangrias:'Sangrias',reforcos:'Reforços',diferenca:'Diferença'}[k]||k}</span><strong>{k==='qtdVendas'?v:fmtBRL(v)}</strong></div>)}</div><p>{d.motivo||d.justificativaDivergencia||d.observacaoAbertura}</p>{d.movimentacoes?.map(m=><p key={m.id}>{m.tipo} · {fmtBRL(m.valor)} · {m.motivo}</p>)}{d.status==='EM_FECHAMENTO'&&can('CAIXA_RESOLVER_DIVERGENCIA')&&<button onClick={()=>setOp({title:'Resolver divergência',fields:[field('observacao','Observação')],run:v=>write('sessoes/'+d.id+'/resolucao-divergencia',v)})}>Resolver divergência</button>}{['dadosAnteriores','dadosNovos'].map(k=>d[k]&&<section key={k}><h3>{k==='dadosAnteriores'?'Antes':'Depois'}</h3><dl>{Object.entries(typeof d[k]==='object'?d[k]:{Detalhe:d[k]}).map(([label,value])=><div key={label}><dt>{label}</dt><dd className={s.wrap}>{typeof value==='object'?JSON.stringify(value):String(value??'—')}</dd></div>)}</dl></section>)}</>}</>}{op&&<FormModal spec={op} close={()=>setOp(null)} done={()=>{query.reload();done()}}/>}</Drawer>
+function Detail({kind,id,close,done,invoiceRevision}){
+ const {can}=useStore()
+ const query=useQueryResource(signal=>read(kind+'/'+id,{},signal),[kind,id],{refreshKey:invoiceRevision})
+ const [op,setOp]=useState(null)
+ const d=query.data
+ function refresh() { query.reload(); done() }
+
+ if(kind==='sessoes'){
+  const resolve=can('CAIXA_RESOLVER_DIVERGENCIA') ? id=>setOp({
+   title:'Resolver divergência',
+   fields:[field('observacao','Observação')],
+   run:values=>write('sessoes/'+id+'/resolucao-divergencia',values),
+  }) : undefined
+  return <>
+   <CashSessionDetail query={query} onClose={close} onResolve={resolve}/>
+   {op&&<FormModal spec={op} close={()=>setOp(null)} done={refresh}/>}
+  </>
+ }
+
+ return <Drawer title="Detalhes" onClose={close}>
+  <h2 className={s.drawerTitle}><Receipt size={22} aria-hidden="true"/>Detalhes do pedido</h2>
+  <Feedback query={query}/>
+  {!query.loading&&!query.error&&d&&<>
+   <h3>{d.caixaNome||d.identificadorAtendimento||d.descricao||'Pedido #'+d.numero}</h3>
+   <p>{states[d.status]||d.tipoEvento} · {d.operadorNome||d.usuarioNome}</p>
+   <OrderInvoice order={d} canIssue={can('CAIXA_OPERAR')} onIssued={refresh}/>
+   <OrderContent order={d} refresh={refresh}/>
+  </>}
+ </Drawer>
 }
 export const OrdersPage=p=><SalesList {...p}/>
 export const SessionsPage=p=><SalesList {...p} kind="sessoes"/>
@@ -108,13 +213,23 @@ function OrderContent({order,refresh,onQuantity,itemBusy,hideStatus=false}){
  useEffect(()=>{if(!pendingPayment||op||paymentOpen)return;const timer=setInterval(()=>{if(!document.hidden)refreshRef.current()},5000);return()=>clearInterval(timer)},[pendingPayment,order.id,op,paymentOpen])
  const config=useQueryResource(signal=>read('configuracao',{},signal),[])
  const auth=[field('motivo','Motivo'),field('autorizadorEmail','E-mail do autorizador, se necessário','email',false),field('autorizadorSenha','Senha do autorizador, se necessário','password',false)]
+ const hasItems = !!order.itens?.length
+ const canCancel = can('CAIXA_OPERAR') && !['CONCLUIDO','CANCELADO','ESTORNADO'].includes(order.status)
+   && !order.pagamentos?.some(payment => ['APROVADO','PENDENTE','PENDENTE_NA_POINT','EM_TERMINAL','PENDENTE_CONCILIACAO'].includes(payment.status))
+ const cancellationFields = [
+   field('motivo', 'Motivo', 'text', hasItems),
+   ...(hasItems && !can('CAIXA_CANCELAR') ? [
+     field('autorizadorEmail', 'E-mail do autorizador', 'email'),
+     field('autorizadorSenha', 'Senha do autorizador', 'password'),
+   ] : []),
+ ]
  function pay(){setPaymentOpen(true)}
  return <><div className={s.stats}>{[['Total',order.total],['Recebido aprovado',order.totalPago],['Restante',order.saldoRestante]].map(([k,v])=><div key={k}><span>{k}</span><strong>{fmtBRL(v)}</strong></div>)}</div>{!hideStatus&&<div className={s.orderState}><span>Situação do pedido</span><Badge value={order.status}/></div>}<h3 className={s.sectionTitle}><Package size={18} aria-hidden="true"/>Itens do pedido</h3>{!order.itens?.length&&<div className={s.empty}><Package size={28} aria-hidden="true"/><b>O pedido está vazio</b><p>Busque um produto acima para adicionar o primeiro item.</p></div>}{order.itens?.map(i=><div className={s.itemRow} key={i.id}>{onQuantity&&can('CAIXA_OPERAR')&&order.status==='EM_ATENDIMENTO'&&!order.pagamentos?.some(p=>!['CANCELADO','RECUSADO','EXPIRADO'].includes(p.status))?<div className={s.quantityControls}><button type="button" disabled={itemBusy} aria-label={'Diminuir '+i.descricaoProduto} onClick={()=>onQuantity(i,Math.max(0,Number(i.quantidade)-1))}>−</button><span>{i.quantidade}</span><button type="button" disabled={itemBusy} aria-label={'Aumentar '+i.descricaoProduto} onClick={()=>onQuantity(i,Number(i.quantidade)+1)}>+</button></div>:<span className={s.itemQuantity}>{i.quantidade}×</span>}<strong>{i.descricaoProduto}</strong><span className={s.itemAmount}>{fmtBRL(i.subtotal)}</span> {order.status==='EM_ATENDIMENTO'&&!order.pagamentos?.length&&can('CAIXA_OPERAR')&&<button onClick={()=>setOp({title:'Remover item?',fields:[],danger:true,run:()=>write(base,{itens:order.itens.filter(item=>item.id!==i.id).map(item=>({produtoId:item.produtoId,quantidade:item.quantidade}))},'PUT')})}>Remover</button>}</div>)}<div className={s.discountLine}><span>Desconto aplicado</span><strong>{fmtBRL(order.desconto)}</strong>{order.statusDesconto==='PENDENTE_AUTORIZACAO'&&<Badge value="Aguardando aprovação"/>}</div>
  <div className={s.actions}>{order.status==='CONCLUIDO' && (can('CAIXA_ESTORNAR') || can('CAIXA_OPERAR')) && <button className={s.danger} onClick={()=>setOp({
    title:'Estornar pedido concluído?', description:'O estorno é integral e registra a devolução dos itens ao estoque. Confira o pedido antes de confirmar.',
    fields:[{...auth[0],maxLength:500},...(can('CAIXA_ESTORNAR')?[]:[field('autorizadorEmail','E-mail do autorizador','email'),field('autorizadorSenha','Senha do autorizador','password')])],
    danger:true, confirm:'Confirmar estorno', run:values=>write(base+'/estorno',values)
- })}>Estornar pedido</button>}{can('CAIXA_OPERAR')&&order.saldoRestante>0&&!order.pagamentos?.some(p=>['PENDENTE','PENDENTE_NA_POINT','EM_TERMINAL','CANCELAMENTO_SOLICITADO','ACAO_NECESSARIA','PENDENTE_CONCILIACAO','ESTORNO_EM_ANDAMENTO'].includes(p.status))&&!['CANCELADO','ESTORNADO','CONCLUIDO'].includes(order.status)&&<button className="gold" disabled={config.loading||!!config.error||order.statusDesconto==='PENDENTE_AUTORIZACAO'} onClick={pay}>Receber pagamento</button>}{can('CAIXA_OPERAR')&&order.status==='EM_ATENDIMENTO'&&<button onClick={()=>setOp({title:'Desconto',description:'Acima da alçada, informe autorização ou envie somente o motivo para solicitar aprovação.',fields:[{key:'tipoDesconto',label:'Tipo',options:['VALOR','PERCENTUAL'],required:true},field('valorDescontoInformado','Desconto informado','number'),...auth],run:v=>write(base+'/desconto',v,'PUT')})}>Aplicar desconto</button>}{order.statusDesconto==='PENDENTE_AUTORIZACAO'&&can('CAIXA_OPERAR')&&<button onClick={()=>setOp({title:'Remover solicitação de desconto?',fields:[],run:()=>write(base+'/desconto',undefined,'DELETE')})}>Remover solicitação</button>}{order.statusDesconto==='PENDENTE_AUTORIZACAO'&&can('CAIXA_AUTORIZAR_DESCONTO')&&<button onClick={()=>setOp({title:'Decidir desconto',fields:[field('aprovado','Aprovar solicitação','checkbox',false),field('observacao','Justificativa')],run:v=>write(base+'/desconto/decisao',v)})}>Decidir desconto</button>}{order.status!=='CONCLUIDO'&&!['CANCELADO','ESTORNADO'].includes(order.status)&&can('CAIXA_CANCELAR')&&<button className={s.danger} onClick={()=>setOp({title:'Cancelar pedido?',danger:true,fields:auth,run:v=>write(base+'/cancelamento',v)})}>Cancelar pedido</button>}</div><Feedback query={config}/><h3 className={s.sectionTitle}><CreditCard size={18} aria-hidden="true"/>Pagamentos</h3>{!order.pagamentos?.length&&<p className={s.emptyNote}>Os recebimentos deste pedido aparecerão aqui após o primeiro registro.</p>}{order.pagamentos?.map(p=><section className={s.panel} key={p.id}><b>{paymentNames[p.forma]||p.forma} · {fmtBRL(p.valorCobrado??p.valor)}</b><div className={s.paymentState}><Badge value={p.status}/>{p.statusDetalhe&&<p>{p.statusDetalhe}</p>}</div>{can('CAIXA_OPERAR')&&<div className={s.actions}>{['PENDENTE','PENDENTE_NA_POINT','EM_TERMINAL','ACAO_NECESSARIA','CANCELAMENTO_SOLICITADO'].includes(p.status)&&<><button onClick={()=>setOp({title:'Verificar pagamento',fields:[],run:()=>updateCharge(base+'/pagamentos/'+p.id+'/sincronizar')})}>Verificar agora</button><button onClick={()=>setOp({title:'Solicitar cancelamento na Point?',fields:[],danger:true,run:()=>write(base+'/pagamentos/'+p.id+'/cancelamento-point')})}>Cancelar cobrança</button></>}{p.status==='PENDENTE_CONCILIACAO'&&<button onClick={()=>setOp({title:'Conferir recebimento externo',description:'Confira o comprovante antes de confirmar.',fields:[field('aprovado','Recebimento confirmado','checkbox',false),field('motivo','Justificativa'),field('comprovanteReferencia','Referência','text',false)],run:v=>updateCharge(base+'/pagamentos/'+p.id+'/conciliacao',v)})}>Conciliar recebimento</button>}</div>}</section>)}{op&&<FormModal spec={op} close={()=>setOp(null)} done={refresh}/ >}{paymentOpen&&<SalePaymentModal order={order} onClose={()=>{setPaymentOpen(false);refresh()}}/>}</>
+ })}>Estornar pedido</button>}{can('CAIXA_OPERAR')&&order.saldoRestante>0&&!order.pagamentos?.some(p=>['PENDENTE','PENDENTE_NA_POINT','EM_TERMINAL','CANCELAMENTO_SOLICITADO','ACAO_NECESSARIA','PENDENTE_CONCILIACAO','ESTORNO_EM_ANDAMENTO'].includes(p.status))&&!['CANCELADO','ESTORNADO','CONCLUIDO'].includes(order.status)&&<button className="gold" disabled={config.loading||!!config.error||order.statusDesconto==='PENDENTE_AUTORIZACAO'} onClick={pay}>Receber pagamento</button>}{can('CAIXA_OPERAR')&&order.status==='EM_ATENDIMENTO'&&<button onClick={()=>setOp({title:'Desconto',description:'Acima da alçada, informe autorização ou envie somente o motivo para solicitar aprovação.',fields:[{key:'tipoDesconto',label:'Tipo',options:['VALOR','PERCENTUAL'],required:true},field('valorDescontoInformado','Desconto informado','number'),...auth],run:v=>write(base+'/desconto',v,'PUT')})}>Aplicar desconto</button>}{order.statusDesconto==='PENDENTE_AUTORIZACAO'&&can('CAIXA_OPERAR')&&<button onClick={()=>setOp({title:'Remover solicitação de desconto?',fields:[],run:()=>write(base+'/desconto',undefined,'DELETE')})}>Remover solicitação</button>}{order.statusDesconto==='PENDENTE_AUTORIZACAO'&&can('CAIXA_AUTORIZAR_DESCONTO')&&<button onClick={()=>setOp({title:'Decidir desconto',fields:[field('aprovado','Aprovar solicitação','checkbox',false),field('observacao','Justificativa')],run:v=>write(base+'/desconto/decisao',v)})}>Decidir desconto</button>}{canCancel&&<button className={s.danger} onClick={()=>setOp({title:'Cancelar pedido?',danger:true,fields:cancellationFields,run:v=>write(base+'/cancelamento',v)})}>Cancelar pedido</button>}</div><Feedback query={config}/><h3 className={s.sectionTitle}><CreditCard size={18} aria-hidden="true"/>Pagamentos</h3>{!order.pagamentos?.length&&<p className={s.emptyNote}>Os recebimentos deste pedido aparecerão aqui após o primeiro registro.</p>}{order.pagamentos?.map(p=><section className={s.panel} key={p.id}><b>{paymentNames[p.forma]||p.forma} · {fmtBRL(p.valorCobrado??p.valor)}</b><div className={s.paymentState}><Badge value={p.status}/>{p.statusDetalhe&&<p>{p.statusDetalhe}</p>}</div>{can('CAIXA_OPERAR')&&<div className={s.actions}>{['PENDENTE','PENDENTE_NA_POINT','EM_TERMINAL','ACAO_NECESSARIA','CANCELAMENTO_SOLICITADO'].includes(p.status)&&<><button onClick={()=>setOp({title:'Verificar pagamento',fields:[],run:()=>updateCharge(base+'/pagamentos/'+p.id+'/sincronizar')})}>Verificar agora</button><button onClick={()=>setOp({title:'Solicitar cancelamento na Point?',fields:[],danger:true,run:()=>write(base+'/pagamentos/'+p.id+'/cancelamento-point')})}>Cancelar cobrança</button></>}{p.status==='PENDENTE_CONCILIACAO'&&<button onClick={()=>setOp({title:'Conferir recebimento externo',description:'Confira o comprovante antes de confirmar.',fields:[field('aprovado','Recebimento confirmado','checkbox',false),field('motivo','Justificativa'),field('comprovanteReferencia','Referência','text',false)],run:v=>updateCharge(base+'/pagamentos/'+p.id+'/conciliacao',v)})}>Conciliar recebimento</button>}</div>}</section>)}{op&&<FormModal spec={op} close={()=>setOp(null)} done={refresh}/ >}{paymentOpen&&<SalePaymentModal order={order} onClose={()=>{setPaymentOpen(false);refresh()}}/>}</>
 }
 export function CashRemote({navigate,pageParams}){
  const {can}=useStore();const session=useQueryResource(signal=>read('sessoes/atual',{},signal),[])
@@ -136,8 +251,8 @@ export function CashRemote({navigate,pageParams}){
  if((session.loading&&!session.data)||session.error)return <Feedback query={session}/>
  if(!session.data)return <CashOpening onOpened={session.reload} navigate={navigate}/>
  const turn=session.data,r=turn.resumoAtual||{}
- return <><section className={s.panel + (turnExpanded?'':' '+s.turnCollapsed)}><header className={s.turnHeader}><div className={s.turnIdentity}><div className={s.turnTitle}><span className={s.headingIcon}><Wallet size={21} aria-hidden="true"/></span><h2><button type="button" className={s.turnToggle} onClick={()=>setTurnExpanded(value=>!value)} aria-expanded={turnExpanded} aria-controls="cash-turn-summary" title={turnExpanded?'Recolher dados do caixa':'Exibir dados do caixa'}>{turn.caixaNome}<ChevronDown size={17} aria-hidden="true" className={turnExpanded?s.rotated:undefined}/></button></h2><Badge value="ABERTA"/></div><dl id="cash-turn-metadata" className={s.turnMetadata}><div><dt>Operador</dt><dd>{turn.operadorNome}</dd></div><div><dt>Abertura</dt><dd>{turn.abertaEm?fmtDateTime(turn.abertaEm):'Horário não informado'}</dd></div></dl></div><div className={s.turnPrimary}><div className={s.turnPrimaryButtons}><button type="button" className={s.turnRefresh} onClick={refresh} disabled={session.loading} aria-label="Atualizar caixa" title="Atualizar os dados do caixa" aria-busy={session.loading||undefined}><RefreshCw size={17} aria-hidden="true" className={session.loading?s.turnRefreshing:undefined}/></button></div><small>{can('CAIXA_OPERAR')?'Selecione uma posição livre abaixo para iniciar um atendimento.':'Consulte os dados atualizados deste turno.'}</small><small className={s.turnCapacity} role="status">{openOrders.loading?'Conferindo pedidos abertos…':openOrders.error?'Não foi possível conferir o limite. Atualize o caixa.':`${openOrders.data} de ${MAX_OPEN_CASH_ORDERS} pedidos abertos`}</small>{!openOrders.loading&&!openOrders.error&&openOrders.data>=MAX_OPEN_CASH_ORDERS&&<small>Conclua ou cancele um pedido para liberar outra.</small>}</div></header><div id="cash-turn-summary" hidden={!turnExpanded} className={s.stats}><div><span>Recebido aprovado</span><strong>{fmtBRL(r.totalVendas)}</strong></div><div><span>Dinheiro esperado</span><strong>{fmtBRL(r.dinheiroEsperado)}</strong></div></div><div className={s.actions + ' ' + s.turnActions} aria-label="Ações do turno">{can('CAIXA_OPERAR')&&<div className={s.turnActionGroup} role="group" aria-label="Movimentar dinheiro"><span>Movimentar dinheiro</span><div>{['SANGRIA','REFORCO'].map(tipo=><button key={tipo} onClick={()=>operation(tipo==='SANGRIA'?'Sangria':'Reforço','sessoes/'+turn.id+'/movimentacoes',[{...field('valor','Valor','number'),fullWidth:true},field('motivo','Motivo')],{tipo})}>{tipo==='SANGRIA'?<ArrowUpCircle size={15} aria-hidden="true"/>:<ArrowDownCircle size={15} aria-hidden="true"/>}{tipo==='SANGRIA'?'Sangria':'Reforço'}</button>)}</div></div>}<div className={s.turnActionGroup} role="group" aria-label="Consultar"><span>Consultar</span><div><button type="button" onClick={()=>setHistoryOpen(true)}><History size={15} aria-hidden="true"/>Histórico caixa</button><button onClick={()=>navigate('pedidos',{sessaoCaixaId:turn.id})}>Pedidos do turno</button></div></div>{can('CAIXA_FECHAR')&&<div className={s.turnActionGroup + ' ' + s.turnEndGroup} role="group" aria-label="Encerrar turno"><span>Encerrar turno</span><div><button type="button" className={s.turnClose} onClick={()=>operation('Conferência de fechamento','sessoes/'+turn.id+'/fechamento',[field('dinheiroContado','Dinheiro contado','number'),field('justificativaDivergencia','Justificativa se houver diferença','text',false),field('observacao','Observação','text',false)])}><LockKeyhole size={15} aria-hidden="true"/>Fechar caixa</button></div></div>}</div></section>
- <CashWorkspace key={turn.id} creationRevision={orderRevision} sessionId={turn.id} selectedId={id} onSelect={setId} canOperate={can('CAIXA_OPERAR')} onChanged={refresh} OrderView={OrderContent} StatusView={Badge}/>{op&&<FormModal spec={op} close={()=>setOp(null)} done={refresh}/>}<>{historyOpen&&<CashHistory sessionId={turn.id} onClose={()=>setHistoryOpen(false)}/>}</></>
+ return <><section className={s.panel + (turnExpanded?'':' '+s.turnCollapsed)}><header className={s.turnHeader}><div className={s.turnTitle}><span className={s.headingIcon}><Wallet size={21} aria-hidden="true"/></span><h2><button type="button" className={s.turnToggle} onClick={()=>setTurnExpanded(value=>!value)} aria-expanded={turnExpanded} aria-controls="cash-turn-summary" title={turnExpanded?'Recolher dados do caixa':'Exibir dados do caixa'}>{turn.caixaNome}<ChevronDown size={17} aria-hidden="true" className={turnExpanded?s.rotated:undefined}/></button></h2></div><div className={s.turnState}><Badge value="ABERTA"/><dl className={s.turnMetadata}><div><dt>Abertura</dt><dd>{turn.abertaEm ? <time dateTime={turn.abertaEm}>{fmtDateTime(turn.abertaEm).replace(' · ', ' às ')}</time> : 'Horário não informado'}</dd></div></dl></div><button type="button" className={s.turnRefresh} onClick={refresh} disabled={session.loading} aria-label="Atualizar caixa" title="Atualizar os dados do caixa" aria-busy={session.loading||undefined}><RefreshCw size={17} aria-hidden="true" className={session.loading?s.turnRefreshing:undefined}/></button></header><div id="cash-turn-summary" hidden={!turnExpanded} className={s.stats}><div><span>Recebido aprovado</span><strong>{fmtBRL(r.totalVendas)}</strong></div><div><span>Dinheiro esperado</span><strong>{fmtBRL(r.dinheiroEsperado)}</strong></div></div><div className={s.actions + ' ' + s.turnActions} aria-label="Ações do turno">{can('CAIXA_OPERAR')&&<div className={s.turnActionGroup} role="group" aria-label="Movimentar dinheiro"><span>Movimentar dinheiro</span><div>{['SANGRIA','REFORCO'].map(tipo=><button key={tipo} onClick={()=>operation(tipo==='SANGRIA'?'Sangria':'Reforço','sessoes/'+turn.id+'/movimentacoes',[{...field('valor','Valor','number'),fullWidth:true},field('motivo','Motivo')],{tipo})}>{tipo==='SANGRIA'?<ArrowUpCircle size={15} aria-hidden="true"/>:<ArrowDownCircle size={15} aria-hidden="true"/>}{tipo==='SANGRIA'?'Sangria':'Reforço'}</button>)}</div></div>}<div className={s.turnActionGroup} role="group" aria-label="Consultar"><span>Consultar</span><div><button type="button" onClick={()=>setHistoryOpen(true)}><History size={15} aria-hidden="true"/>Histórico caixa</button><button onClick={()=>navigate('pedidos',{sessaoCaixaId:turn.id})}><Receipt size={15} aria-hidden="true"/>Pedidos do turno</button></div></div>{can('CAIXA_FECHAR')&&<div className={s.turnActionGroup + ' ' + s.turnEndGroup} role="group" aria-label="Encerrar turno"><span>Encerrar turno</span><div><button type="button" className={s.turnClose} onClick={()=>operation('Conferência de fechamento','sessoes/'+turn.id+'/fechamento',[field('dinheiroContado','Dinheiro contado','number'),field('justificativaDivergencia','Justificativa se houver diferença','text',false),field('observacao','Observação','text',false)])}><LockKeyhole size={15} aria-hidden="true"/>Fechar caixa</button></div></div>}</div></section>
+ <CashWorkspace key={turn.id} creationRevision={orderRevision} sessionId={turn.id} selectedId={id} onSelect={setId} canOperate={can('CAIXA_OPERAR')} onChanged={refresh} openOrders={openOrders} OrderView={OrderContent} StatusView={Badge}/>{op&&<FormModal spec={op} close={()=>setOp(null)} done={refresh}/>}<>{historyOpen&&<CashHistory sessionId={turn.id} onClose={()=>setHistoryOpen(false)}/>}</></>
 }
 export function CashSettings({pageParams,navigate}){
  const [policyOpen,setPolicyOpen]=useState(false),[policySaved,setPolicySaved]=useState(false)
@@ -149,8 +264,20 @@ export function CashSettings({pageParams,navigate}){
  const booleanFields=['pointHabilitado','dinheiroHabilitado','debitoHabilitado','creditoHabilitado','pixHabilitado','parcelamentoHabilitado','imprimirComprovante','permitirPagamentoManual']
  const names={pointHabilitado:'Point integrada',dinheiroHabilitado:'Dinheiro',debitoHabilitado:'Débito',creditoHabilitado:'Crédito',pixHabilitado:'Pix',parcelamentoHabilitado:'Parcelamento',imprimirComprovante:'Imprimir comprovante no aparelho',permitirPagamentoManual:'Permitir contingência manual'}
  function editBox(box){setOp({title:'Editar caixa',width:'min(640px, calc(100vw - 32px))',description:box.emUso?'Este caixa está com turno aberto e não pode ser inativado.':'Inativar preserva sessões e pagamentos anteriores. Com a Point habilitada, mantenha uma maquininha ativa disponível.',initial:{nome:box.nome,ativo:box.ativo},fields:[{...field('nome','Nome do caixa'),maxLength:100,placeholder:'Ex.: Caixa Principal'},field('ativo','Caixa ativo','checkbox',false)],confirm:'Salvar caixa',run:v=>write('caixas/'+box.id,v,'PATCH')})}
- function addTerminal(box){setOp({title:'Adicionar maquininha',width:'min(640px, calc(100vw - 32px))',description:'Vincule um dispositivo do Mercado Pago ao caixa '+box.nome+'. O identificador do dispositivo deve ser único.',fields:[{...field('nome','Nome da maquininha'),maxLength:100,placeholder:'Ex.: Maquininha do balcão'},{...field('terminalId','Identificador no Mercado Pago'),maxLength:100,placeholder:'Ex.: PAX_A910__SMARTPOS1234567890'}],confirm:'Adicionar maquininha',run:v=>write('caixas/'+box.id+'/terminais',v)})}
- function editTerminal(box,terminal){setOp({title:'Editar maquininha',width:'min(640px, calc(100vw - 32px))',description:'O identificador do dispositivo não pode ser alterado. Para trocar de dispositivo, inative este vínculo e adicione outro. A Point habilitada exige ao menos uma maquininha ativa disponível.',initial:{nome:terminal.nome,ativo:terminal.ativo},fields:[{...field('nome','Nome da maquininha'),maxLength:100,placeholder:'Ex.: Maquininha do balcão'},field('ativo','Maquininha ativa','checkbox',false)],confirm:'Salvar maquininha',run:v=>write('caixas/'+box.id+'/terminais/'+terminal.id,v,'PATCH')})}
+ function addTerminal(box){
+  setOp({
+   title:'Adicionar maquininha',
+   width:'min(640px, calc(100vw - 32px))',
+   description:'Vincule um dispositivo do Mercado Pago ao caixa '+box.nome+'. O identificador do dispositivo deve ser único.',
+   fields:[
+    {...field('nome','Nome da maquininha'),fullWidth:true,maxLength:100,placeholder:'Ex.: Maquininha do balcão'},
+    {...field('terminalId','Identificador no Mercado Pago'),fullWidth:true,maxLength:100,placeholder:'Ex.: PAX_A910__SMARTPOS1234567890'},
+   ],
+   confirm:'Adicionar maquininha',
+   run:values=>write('caixas/'+box.id+'/terminais',values),
+  })
+ }
+ function editTerminal(box,terminal){setOp({title:'Editar maquininha',width:'min(640px, calc(100vw - 32px))',description:`Vinculada ao caixa ${box.nome}. Para trocar de dispositivo, desative este vínculo e adicione outro. Com a Point habilitada, mantenha ao menos uma maquininha ativa disponível.`,initial:{nome:terminal.nome,ativo:terminal.ativo},fields:[{...field('nome','Nome da maquininha'),maxLength:100,placeholder:'Ex.: Maquininha do balcão'},field('ativo','Maquininha ativa','checkbox',false)],confirm:'Salvar maquininha',run:v=>write('caixas/'+box.id+'/terminais/'+terminal.id,v,'PATCH')})}
  function changeMode(terminal){setOp({title:'Modo de operação',width:'min(640px, calc(100vw - 32px))',description:'Altera o modo do dispositivo '+terminal.nome+' no Mercado Pago. PDV recebe cobranças integradas ao caixa; independente permite operar pelo aparelho.',fields:[{key:'modoOperacao',label:'Modo do aparelho',options:[{value:'PDV',label:'Integrada ao caixa (PDV)'},{value:'STANDALONE',label:'Uso independente (Standalone)'}],required:true}],confirm:'Alterar modo',run:v=>write('terminais/'+terminal.id+'/modo-operacao',v,'PATCH')})}
  function deleted(box){setEquipmentMessage('O caixa '+box.nome+' foi excluído.');if(page>0&&d?.itens?.length===1)setPage(value=>value-1);else query.reload()}
  return <>

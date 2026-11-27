@@ -3,12 +3,13 @@ import { useRef, useState } from 'react'
 import { Tag, ListChecks, CheckCircle, AlertTriangle } from 'lucide-react'
 import { api } from '@/shared/api/api.js'
 import { useResource } from '@/shared/lib/hooks/useResource.js'
+import { useStore } from '@/entities/store'
 import { useToast } from '@/shared/ui/notifications/useToast.js'
 import { Modal } from '@/shared/ui/feedback/ManagementFeedback.jsx'
 import { ErrorBlock, LoadingBlock } from '@/shared/ui/feedback/ManagementFeedback.jsx'
 import { FuncionalidadesPicker } from '@/features/access-management/permissions/ui/PermissionsEditor.jsx'
 import { agruparPorModulo } from '@/shared/config/funcionalidades.js'
-import { validarNomePerfil } from '@/entities/access'
+import { isManagerProfile, validarNomePerfil } from '@/entities/access'
 import s from '@/shared/styles/panel.module.css'
 import a from '@/entities/access/ui/access.module.css'
 import layout from './ProfileForm.module.css'
@@ -31,6 +32,7 @@ function groupProfilePermissions(functionalities) {
 /* ─── Novo perfil ─── */
 export function ProfileForm({ navigate, copyFrom }) {
   const toast = useToast()
+  const { can } = useStore()
   const perfis = useResource(() => api.perfis.listar(), [])
   const funcs = useResource(() => api.funcionalidades.listar(), [])
 
@@ -48,7 +50,7 @@ export function ProfileForm({ navigate, copyFrom }) {
   // pré-preenche ao duplicar um perfil (uma vez, quando os perfis chegam)
   if (codigos === null && perfis.data) {
     const src = perfis.data.find(p => p.id === copyFrom)
-    setCodigos(src ? [...src.codigos] : [])
+    setCodigos(src?.codigos.filter(can) ?? [])
     if (src) { setNome(`${src.nome} (cópia)`); setDescricao(src.descricao) }
   }
 
@@ -62,13 +64,13 @@ export function ProfileForm({ navigate, copyFrom }) {
   function applyBase(id) {
     setBase(id)
     const src = perfis.data.find(p => p.id === id)
-    setCodigos(src ? [...src.codigos] : [])
+    setCodigos(src?.codigos.filter(can) ?? [])
   }
 
   async function submit(e) {
     e.preventDefault()
     if (busy || uncertain) return
-    const err = validarNomePerfil(nome, perfis.data)
+    const err = isManagerProfile(nome) ? 'Gerente é um nome reservado.' : validarNomePerfil(nome, perfis.data)
     setErrors(err ? { nome: err } : {})
     if (err) { nomeRef.current?.focus(); return }
     setSaveError('')
@@ -109,7 +111,7 @@ export function ProfileForm({ navigate, copyFrom }) {
               <option value="">Perfil em branco</option>
               {perfis.data.map(p => <option key={p.id} value={p.id}>Copiar de {p.nome} ({p.codigos.length})</option>)}
             </select>
-            <small className={s.hint}>Copia as funcionalidades; você ajusta abaixo.</small>
+            <small className={s.hint}>Copia as funcionalidades que você pode conceder.</small>
           </label>
         </div>
         <label htmlFor="pf-desc">
@@ -121,9 +123,9 @@ export function ProfileForm({ navigate, copyFrom }) {
       <section className={`card form`} aria-labelledby="pf-func">
         <h3 id="pf-func"><ListChecks size={19} aria-hidden="true" />Funcionalidades</h3>
         <p className={s.sectionDesc}>Marque o que os usuários com este perfil poderão fazer.</p>
-        <FuncionalidadesPicker className={layout.functionPicker} groupBy={groupProfilePermissions} funcionalidades={funcs.data} value={codigos} onChange={setCodigos} idPrefix="new" />
+        <FuncionalidadesPicker className={layout.functionPicker} groupBy={groupProfilePermissions} funcionalidades={funcs.data.filter(f => can(f.codigo))} value={codigos} onChange={setCodigos} idPrefix="new" />
         {codigos.length === 0 && (
-          <p className={a.warnBox}><AlertTriangle size={14} aria-hidden="true" /> Sem funcionalidades, usuários com este perfil não conseguirão usar nenhuma tela.</p>
+          <p className={a.warnBox}><AlertTriangle size={14} aria-hidden="true" /> Sem funcionalidades, o perfil terá acesso ao início e às configurações da conta.</p>
         )}
       </section>
 

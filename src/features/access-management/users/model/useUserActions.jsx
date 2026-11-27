@@ -3,6 +3,7 @@ import { Eye, Pencil, KeyRound, UserX, UserCheck, Trash2 } from 'lucide-react'
 import { api } from '@/shared/api/api.js'
 import { useToast } from '@/shared/ui/notifications/useToast.js'
 import { useStore } from '@/entities/store'
+import { isManagerProfile } from '@/entities/access'
 import { ConfirmModal } from '@/shared/ui/feedback/ManagementFeedback.jsx'
 import { ChangeProfileModal } from '@/features/access-management/user-editor/ui/ChangeProfileModal.jsx'
 import a from '@/entities/access/ui/access.module.css'
@@ -11,7 +12,7 @@ import a from '@/entities/access/ui/access.module.css'
  * Ações sobre usuários (lista e detalhe compartilham as mesmas regras e confirmações).
  * Retorna { menuItems(user, opts), open, modals }.
  */
-export function useUserActions({ navigate, onView, onEdit, perfis = [], funcionalidades = [], overrides, onChanged, onDeleted }) {
+export function useUserActions({ navigate, onView, onEdit, perfis = [], funcionalidades = [], onChanged, onDeleted }) {
   const { user: me, can, session } = useStore()
   const toast = useToast()
   const [modal, setModal] = useState(null) // { type, user | users }
@@ -19,7 +20,12 @@ export function useUserActions({ navigate, onView, onEdit, perfis = [], funciona
   const [error, setError] = useState('')
   const showModal = value => { setError(''); setModal(value) }
 
-  const isSelf = (u) => u?.id === me?.id
+  const manager = isManagerProfile(me?.profileName)
+  const isSelf = u => u?.id === me?.id
+  const canManage = u => manager || !isManagerProfile(u.profileName)
+  const canEdit = u => can('USUARIOS_EDITAR') && canManage(u)
+  const canChangeStatus = u => canEdit(u) && !isSelf(u)
+  const canChangeProfile = u => canEdit(u) && (manager || !isSelf(u)) && perfis.some(p => p.id !== u.profileId)
   const close = () => { if (!busy) { setError(''); setModal(null) } }
 
   async function run(fn, { title, message }) {
@@ -40,24 +46,26 @@ export function useUserActions({ navigate, onView, onEdit, perfis = [], funciona
   }
 
   const open = {
-    changeProfile: (user) => showModal({ type: 'perfil', user }),
-    toggleActive: (user) => showModal({ type: user.active ? 'inativar' : 'reativar', user }),
+    changeProfile: (user) => { if (canChangeProfile(user)) showModal({ type: 'perfil', user }) },
+    toggleActive: (user) => { if (canChangeStatus(user)) showModal({ type: user.active ? 'inativar' : 'reativar', user }) },
     remove: (user) => showModal({ type: 'excluir', user }),
-    bulkActive: (users, active) => showModal({ type: 'lote', users: users.filter(u => !isSelf(u) && u.active !== active), active }),
+    bulkActive: (users, active) => showModal({ type: 'lote', users: users.filter(u => canChangeStatus(u) && u.active !== active), active }),
   }
 
   function menuItems(u, { view = true, edit = true } = {}) {
     const self = isSelf(u)
+    const editTarget = canEdit(u)
+    const deleteTarget = can('USUARIOS_EXCLUIR') && canManage(u)
     return [
       view && { label: 'Ver detalhes', icon: Eye, onClick: () => onView ? onView(u) : navigate('usuario', { id: u.id }) },
-      edit && can('USUARIOS_EDITAR') && { label: 'Editar dados', icon: Pencil, onClick: () => onEdit ? onEdit(u) : navigate('editarusuario', { id: u.id }) },
-      can('USUARIOS_EDITAR') && { label: 'Mudar perfil', icon: KeyRound, onClick: () => open.changeProfile(u) },
-      (can('USUARIOS_EDITAR') || can('USUARIOS_EXCLUIR')) && { divider: true },
-      can('USUARIOS_EDITAR') && {
+      edit && editTarget && { label: 'Editar dados', icon: Pencil, onClick: () => onEdit ? onEdit(u) : navigate('editarusuario', { id: u.id }) },
+      canChangeProfile(u) && { label: 'Mudar perfil', icon: KeyRound, onClick: () => open.changeProfile(u) },
+      (editTarget || deleteTarget) && { divider: true },
+      editTarget && (manager || !self) && {
         label: u.active ? 'Inativar acesso' : 'Reativar acesso', icon: u.active ? UserX : UserCheck,
         disabled: self, hint: 'Você não pode inativar a própria conta', onClick: () => open.toggleActive(u),
       },
-      can('USUARIOS_EXCLUIR') && {
+      deleteTarget && {
         label: 'Excluir usuário', icon: Trash2, danger: true,
         disabled: self, hint: 'Você não pode excluir a própria conta', onClick: () => open.remove(u),
       },
@@ -69,10 +77,13 @@ export function useUserActions({ navigate, onView, onEdit, perfis = [], funciona
     <>
       {m?.type === 'perfil' && (
         <ChangeProfileModal
-          user={m.user} perfis={perfis} funcionalidades={funcionalidades} overrides={overrides} isSelf={isSelf(m.user)} busy={busy} error={error} onClose={close}
+          user={m.user} perfis={perfis} funcionalidades={funcionalidades} isSelf={isSelf(m.user)} busy={busy} error={error} onClose={close}
           onConfirm={(novo) => run(async () => {
-            const u = await api.usuarios.atualizar(m.user.id, { profileId: novo.id })
-            if (isSelf(m.user)) session.updateSelf({ profileId: novo.id, profileName: novo.nome })
+            const u = await api.usuarios.atualizar(m.user.id, { nomePerfil: novo.nome })
+            if (isSelf(m.user)) {
+              session.updateSelf(u)
+              await session.logout()
+            }
             onChanged?.(u)
           }, { title: 'Perfil alterado', message: `${m.user.name} agora tem o perfil ${novo.nome}.` })}
         />
@@ -108,7 +119,7 @@ export function useUserActions({ navigate, onView, onEdit, perfis = [], funciona
           title={`Excluir ${m.user.name}?`}
           subtitle="Esta ação é permanente e não pode ser desfeita."
           confirmLabel="Excluir definitivamente" danger busy={busy} error={error} requireText={m.user.email} onClose={close}
-          extraActions={can('USUARIOS_EDITAR') && m.user.active && (
+          extraActions={canChangeStatus(m.user) && m.user.active && (
             <button type="button" className={a.linkBtn} disabled={busy} onClick={() => open.toggleActive(m.user)}>Inativar em vez disso</button>
           )}
           onConfirm={() => run(async () => { await api.usuarios.excluir(m.user.id); onDeleted?.(m.user) },
@@ -145,5 +156,5 @@ export function useUserActions({ navigate, onView, onEdit, perfis = [], funciona
     </>
   )
 
-  return { menuItems, open, modals, isSelf }
+  return { menuItems, open, modals, isSelf, canChangeProfile, canChangeStatus }
 }

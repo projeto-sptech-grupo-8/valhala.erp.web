@@ -25,14 +25,13 @@ export function AccessHistory() {
       {events?.length === 0 && <p className={styles.hint}>Sua conta ainda não tem eventos de acesso registrados.</p>}
       {events?.length > 0 && (
         <ul className={styles.accessList} aria-label="Eventos recentes da sua conta">
-          {events.map(({ id, tipoEvento, dispositivo, ipOrigem, ocorridoEm }) => {
+          {events.map(({ id, tipoEvento, dispositivo, ocorridoEm }) => {
             const type = eventTypes[tipoEvento] ?? { label: 'Evento da conta', tone: styles.off }
             return (
               <li key={id}>
                 <div className={styles.accessEvent}>
                   <strong className={`${styles.chip} ${type.tone}`}>{type.label}</strong>
                   <span>{dispositivo || 'Dispositivo não identificado'}</span>
-                  {ipOrigem && <small>IP {ipOrigem}</small>}
                 </div>
                 {ocorridoEm && <time dateTime={ocorridoEm}>{fmtDateTime(ocorridoEm)}</time>}
               </li>

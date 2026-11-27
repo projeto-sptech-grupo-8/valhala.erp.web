@@ -1,73 +1,51 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid,
 } from 'recharts'
 import {
-  ArrowDownLeft, ArrowUpRight, CalendarClock, CalendarDays, ChartNoAxesCombined, Check, ChevronDown,
-  CircleCheck, CircleMinus, CircleX, LayoutDashboard, ReceiptText, Wallet,
+  ArrowUpRight, CalendarClock, CalendarDays, ChartColumnIncreasing, ChartNoAxesCombined, Check, ChevronDown, ChevronRight, ChevronLeft,
+  Banknote, Percent, FilePlus2, Package, ReceiptText, TrendingUp, Wallet,
 } from 'lucide-react'
-import { METAS, TONE_COLOR, toneHigher, toneLower } from '@/entities/reports'
+import { METAS, toneHigher, toneLower } from '@/entities/reports'
 import { fmtBRL, fmtNum } from '@/shared/lib/format.js'
+import { MetricCard } from '@/shared/ui/primitives/MetricCard.jsx'
 import { ChartTip } from '@/shared/ui/charts/ChartTip.jsx'
+import { PeriodSelector } from '@/shared/ui/period-selector/PeriodSelector.jsx'
 import { axisTick } from '@/shared/ui/charts/chartStyles.js'
+import { ActionMenu } from '@/entities/access/ui'
 import { useStore } from '@/entities/store'
 import { useQueryResource } from '@/shared/lib/hooks/usePagedQuery.js'
 import { ErrorBlock, LoadingBlock } from '@/shared/ui/feedback/ManagementFeedback.jsx'
 import { financeApi } from '../model/financeApi.js'
 import { acrescentarDias, CENTROS_CUSTO, diaBR, periodosFinanceiro, rotuloMes } from '../model/financePresentation.js'
-import { FinanceAccounts } from './FinanceAccounts.jsx'
+import { FinanceAccounts, AccountList } from './FinanceAccounts.jsx'
 import s from './FinancePage.module.css'
 
 const tabs = [
-  { id: 'visao', label: 'Visão geral', Icon: LayoutDashboard },
-  { id: 'dre', label: 'Resultado', Icon: ReceiptText },
+  { id: 'visao', label: 'Saldos e contas a pagar', Icon: Wallet },
+  { id: 'dre', label: 'Resultado e vendas', Icon: ChartColumnIncreasing },
 ]
 const centros = [['', 'Todos'], ...Object.entries(CENTROS_CUSTO)]
 const statusIndicador = {
-  ok: { label: 'Bom', Icon: CircleCheck },
-  warn: { label: 'Médio', Icon: CircleMinus },
-  bad: { label: 'Ruim', Icon: CircleX },
-  neutral: { label: 'Sem meta' },
+  ok: 'Bom',
+  warn: 'Médio',
+  bad: 'Ruim',
 }
 
 const fmtPct = value => value == null ? '—' : fmtNum(value) + '%'
 
-function prazoTone(dias, tipo) {
-  if (tipo === 'RECEBER') return 'ok'
-  if (dias <= 3) return 'bad'
+function prazoTone(dias) {
+  if (dias == null) return 'neutral'
+  if (dias < 0) return 'bad'
   if (dias <= 7) return 'warn'
   return 'ok'
 }
 
-function SeloIndicador({ tone }) {
-  const status = statusIndicador[tone] ?? statusIndicador.neutral
-
-  return (
-    <span className={s.metricStatus}>
-      {status.Icon && <status.Icon size={17} aria-hidden="true" />}
-      {status.label}
-    </span>
-  )
-}
-
-function Indicador({ label, value, description, tone = 'neutral', Icon, featured, title }) {
-  return (
-    <article className={s.metric} data-tone={tone} data-featured={featured || undefined} title={title}>
-      <div className={s.metricTitleRow}>
-        <h3>{Icon && <span className={s.metricIcon}><Icon size={18} aria-hidden="true" /></span>}{label}</h3>
-        <SeloIndicador tone={tone} />
-      </div>
-      <strong>{value}</strong>
-      <p>{description}</p>
-    </article>
-  )
-}
-
-function FluxoDeCaixa({ fluxo }) {
+export function FluxoDeCaixa({ fluxo }) {
   const cashFlowData = fluxo.map(item => ({ ...item, m: rotuloMes(item.mes) }))
   return (
-    <section className={s.card} aria-labelledby="finance-fluxo">
+    <section className={s.overviewSection} aria-labelledby="finance-fluxo">
       <header className={s.cardHead}>
         <div>
           <h2 id="finance-fluxo"><ChartNoAxesCombined size={18} aria-hidden="true" />Fluxo de caixa</h2>
@@ -99,17 +77,6 @@ function FluxoDeCaixa({ fluxo }) {
           </AreaChart>
         </ResponsiveContainer>
       </div>
-      <details className={s.monthDetails}>
-        <summary>Ver valores por mês <ChevronDown size={16} aria-hidden="true" /></summary>
-        <table>
-          <thead><tr><th scope="col">Mês</th><th scope="col">Receitas</th><th scope="col">Despesas</th></tr></thead>
-          <tbody>
-            {cashFlowData.map(mes => (
-              <tr key={mes.m}><th scope="row">{mes.m}</th><td>{fmtBRL(mes.receitas)}</td><td>{fmtBRL(mes.despesas)}</td></tr>
-            ))}
-          </tbody>
-        </table>
-      </details>
     </section>
   )
 }
@@ -117,58 +84,50 @@ function FluxoDeCaixa({ fluxo }) {
 function Vencimentos({ referencia, revision, onOpen }) {
   const [centroCusto, setCentroCusto] = useState('')
   const consulta = useQueryResource(signal => financeApi.contas({
-    status: 'ABERTA', centroCusto, vencimentoAte: acrescentarDias(referencia, 30), pagina: 0, tamanho: 5,
+    tipo: 'PAGAR', status: 'ABERTA', centroCusto, vencimentoAte: acrescentarDias(referencia, 30), pagina: 0, tamanho: 5,
   }, signal), [referencia, centroCusto, revision])
   const contas = !consulta.loading && !consulta.error ? consulta.data?.itens : null
 
   return (
-    <section className={s.card} aria-labelledby="finance-vencimentos">
-      <header className={s.cardHead}>
+    <details className={s.overviewSection + ' ' + s.collapsibleDue}>
+      <summary aria-label="Expandir ou recolher próximos vencimentos" title="Expandir ou recolher próximos vencimentos"><CalendarClock size={18} aria-hidden="true"/><span>Próximos vencimentos</span><ChevronRight size={17} aria-hidden="true"/></summary>
+      <header className={s.cardHead + ' ' + s.dueHeading}>
         <div>
-          <h2 id="finance-vencimentos"><CalendarClock size={18} aria-hidden="true" />Próximos vencimentos</h2>
-          <p>Contas a pagar e a receber</p>
+          <p>Vencidas e a vencer em até 30 dias</p>
         </div>
-        <button type="button" onClick={event => onOpen(event, { mode: 'list' })}>Ver todas as contas</button>
+        <div className={s.dueFilter}>
+          <ActionMenu label="Filtrar vencimentos por centro de custo"
+            trigger={<><span>{CENTROS_CUSTO[centroCusto] || 'Centro de custo'}</span><ChevronDown size={15} aria-hidden="true"/></>}
+            items={centros.map(([value,label])=>({ label, icon:centroCusto===value?Check:undefined, onClick:()=>setCentroCusto(value) }))}/>
+        </div>
       </header>
-      <div className={s.filters} role="group" aria-label="Filtrar por centro de custo">
-        {centros.map(([value, label]) => (
-          <button key={value} type="button" aria-pressed={centroCusto === value} onClick={() => setCentroCusto(value)}>
-            {label}
-          </button>
-        ))}
-      </div>
       {consulta.loading && <LoadingBlock label="Consultando vencimentos…" lines={2} />}
       {consulta.error && <ErrorBlock error={consulta.error} onRetry={consulta.reload} />}
       {contas?.length === 0 && <p className={s.financeEmpty}>Nenhuma conta em aberto para os próximos 30 dias.</p>}
       {contas?.length > 0 && <ul className={s.dueList}>
         {contas.map(conta => {
           const dias = conta.diasParaVencer
-          const receber = conta.tipo === 'RECEBER'
-          const prazo = dias < 0 ? 'Vencido' : dias === 0 ? 'Vence hoje' : dias === 1 ? 'Em 1 dia' : 'Em ' + dias + ' dias'
+          const prazo = dias == null ? 'Prazo não informado' : dias < 0 ? 'Vencida há ' + Math.abs(dias) + (dias === -1 ? ' dia' : ' dias') : dias === 0 ? 'Vence hoje' : 'Vence em ' + dias + (dias === 1 ? ' dia' : ' dias')
           return (
             <li key={conta.id} className={s.dueRow}>
-              <div className={s.dueDate}>
-                <time dateTime={conta.vencimento}>{diaBR(conta.vencimento).slice(0, 5)}</time>
-              </div>
               <div className={s.dueName}>
                 <button className={s.accountLink} type="button" aria-label={`Ver conta ${conta.descricao}`}
                   onClick={event => onOpen(event, { mode: 'detail', id: conta.id })}>{conta.descricao}</button>
-                <span>{CENTROS_CUSTO[conta.centroCusto]}</span>
+                <span>{CENTROS_CUSTO[conta.centroCusto]} · <time dateTime={conta.vencimento}>{diaBR(conta.vencimento).slice(0,5)}</time></span>
               </div>
               <div className={s.dueAmount}>
-                <strong>{receber ? '+' : '−'} {fmtBRL(conta.valor)}</strong>
-                <span>{receber ? 'A receber' : 'A pagar'}</span>
+                <strong>{fmtBRL(conta.valor)}</strong>
               </div>
-              <span className={s.dueStatus} data-tone={prazoTone(dias, conta.tipo)}>{prazo}</span>
+              <span className={s.dueStatus} data-tone={prazoTone(dias)}><CalendarClock size={13} aria-hidden="true"/>{prazo}</span>
             </li>
           )
         })}
       </ul>}
-    </section>
+    </details>
   )
 }
 
-function IndicadoresResultado({ resultado, percentual, setPercentual }) {
+function IndicadoresResultado({ resultado, percentual }) {
   const { lucroBruto, lucroLiquido: lucroLiq, cmv, margemBrutaPercentual: margemBruta,
     margemLiquidaPercentual: margemLiq, cmvPercentual: cmvPct } = resultado
   const toneMargemLiq = toneHigher(margemLiq, METAS.margemLiquida)
@@ -176,6 +135,8 @@ function IndicadoresResultado({ resultado, percentual, setPercentual }) {
     {
       label: 'Lucro líquido',
       labelPercentual: 'Margem líquida',
+      Icon: Wallet,
+      ajuda: 'Lucro bruto menos as despesas fixas e variáveis do período. Quando essas despesas somam R$ 0,00, os dois lucros são iguais. A margem é o lucro líquido dividido pela receita líquida, vezes 100.',
       valor: lucroLiq,
       margem: margemLiq,
       base: 'da receita líquida',
@@ -185,6 +146,8 @@ function IndicadoresResultado({ resultado, percentual, setPercentual }) {
     {
       label: 'Lucro bruto',
       labelPercentual: 'Margem bruta',
+      Icon: TrendingUp,
+      ajuda: 'Receita líquida menos o custo das mercadorias vendidas (CMV). A margem é o lucro bruto dividido pela receita líquida, vezes 100.',
       valor: lucroBruto,
       margem: margemBruta,
       base: 'da receita líquida',
@@ -194,6 +157,8 @@ function IndicadoresResultado({ resultado, percentual, setPercentual }) {
     {
       label: 'Custo das mercadorias vendidas',
       labelPercentual: 'Custo sobre a receita',
+      Icon: Package,
+      ajuda: 'Custo dos produtos e ingredientes das vendas do período. Em porcentagem, mostra quanto esse custo representa da receita líquida.',
       valor: cmv,
       margem: cmvPct,
       base: 'da receita líquida',
@@ -202,113 +167,61 @@ function IndicadoresResultado({ resultado, percentual, setPercentual }) {
     },
   ]
   return (
-    <section aria-labelledby="finance-indicadores-resultado">
-      <div className={s.resultControls}>
-        <div>
-          <h3 id="finance-indicadores-resultado">Indicadores do resultado</h3>
-          <p className={s.resultScrollHint}>Deslize para ver mais.</p>
-        </div>
-        <div className={s.resultUnits} role="group" aria-label="Exibir indicadores">
-          <button type="button" aria-pressed={!percentual} onClick={() => setPercentual(false)}>Reais</button>
-          <button type="button" aria-pressed={percentual} onClick={() => setPercentual(true)}>Porcentagem</button>
-        </div>
-      </div>
+    <section aria-label="Indicadores do resultado">
       <div className={s.resultMetrics} role="region" aria-label="Indicadores em linha" tabIndex={0}>
-        {indicadores.map(({ label, labelPercentual, valor, margem, base, meta, tone }) => (
-          <article key={label} className={s.resultMetric} data-tone={tone}>
-            <div className={s.metricTitleRow}>
-              <h4>{percentual ? labelPercentual : label}</h4>
-              <SeloIndicador tone={tone} />
-            </div>
-            <div>
-              <strong>{percentual ? fmtPct(margem) : fmtBRL(valor)}</strong>
-              <span className={s.resultMetricBase}>{margem == null ? 'Sem receita de referência' : percentual ? base : fmtPct(margem) + ' ' + base}</span>
-            </div>
-            <p>{meta}</p>
-          </article>
+        {indicadores.map(({ label, labelPercentual, Icon, ajuda, valor, margem, base, meta, tone }) => (
+          <MetricCard key={label} label={percentual ? labelPercentual : label} Icon={Icon} help={ajuda} tone={tone}
+            value={percentual ? fmtPct(margem) : fmtBRL(valor)}
+            reference={margem == null ? 'Sem receita de referência' : percentual ? base : fmtPct(margem) + ' ' + base}
+            description={meta} statusLabel={margem != null ? statusIndicador[tone] : undefined} />
         ))}
       </div>
     </section>
   )
 }
 
-function PeriodoResultado({ periodos, periodo, onChange }) {
-  const id = useId()
-  const container = useRef(null)
-  const trigger = useRef(null)
-  const [open, setOpen] = useState(false)
-
-  useEffect(() => {
-    if (!open) return
-    function handleOutside(event) {
-      if (!container.current?.contains(event.target)) setOpen(false)
-    }
-    document.addEventListener('pointerdown', handleOutside)
-    return () => document.removeEventListener('pointerdown', handleOutside)
-  }, [open])
-
-  function close() {
-    setOpen(false)
-    trigger.current?.focus()
-  }
-
-  return (
-    <div ref={container} className={s.period}
-      onBlur={event => {
-        if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) setOpen(false)
-      }}
-      onKeyDown={event => {
-        if (open && event.key === 'Escape') {
-          event.preventDefault()
-          close()
-        }
-      }}>
-      <button ref={trigger} className={s.periodTrigger} type="button" aria-expanded={open} aria-controls={id}
-        aria-label={`Período (${periodo.label})`} aria-describedby="finance-periodo-ajuda" title={periodo.label}
-        onClick={() => { trigger.current?.focus(); setOpen(current => !current) }}>
-        <CalendarDays size={19} aria-hidden="true" />
-        <span>Período</span>
-      </button>
-      <div id={id} className={s.periodOptions} role="group" aria-label="Opções de período" hidden={!open}>
-        {periodos.map(opcao => (
-          <button key={opcao.id} type="button" aria-pressed={opcao.id === periodo.id}
-            onClick={() => { onChange(opcao.id); close() }}>
-            {opcao.label}
-            {opcao.id === periodo.id && <Check size={15} aria-hidden="true" />}
-          </button>
-        ))}
-      </div>
-    </div>
-  )
+function ComparacaoMensal({ data }) {
+  if (!(data.faturamento.vendasMesAtual > 0)) return null
+  const crescimento = data.faturamento.crescimentoPercentual
+  const tone = crescimento == null || crescimento === 0 ? 'neutral' : crescimento > 0 ? 'positive' : 'negative'
+  return <section className={s.monthComparison} aria-labelledby="month-comparison">
+    <header><h3 id="month-comparison"><CalendarDays size={17} aria-hidden="true"/>Faturamento — mês atual</h3>
+      <p>Até {diaBR(data.referencia)} · mesmo intervalo do mês anterior</p></header>
+    <dl>
+      <div className={s.monthCurrent}><dt>Faturamento do mês</dt><dd>{fmtBRL(data.faturamento.mesAtual)}</dd></div>
+      <div><dt>Mesmo intervalo anterior</dt><dd>{fmtBRL(data.faturamento.mesAnteriorMesmoPeriodo)}</dd></div>
+      <div data-change={tone}><dt>Variação</dt><dd>{crescimento == null ? 'Sem base para comparação' : (crescimento>0?'+':'')+fmtPct(crescimento)}</dd></div>
+    </dl>
+  </section>
 }
 
-function Resultado({ periodos, periodo, onPeriodoChange, acoes, resumo, consulta }) {
+function Resultado({ periodos, periodo, onPeriodoChange, resumo, consulta }) {
   const [percentual, setPercentual] = useState(false)
   const resultado = !consulta.loading && !consulta.error && periodo ? consulta.data : null
   return (
     <section className={s.resultGrid} aria-labelledby="finance-resultado">
       <header className={s.cardHead + ' ' + s.resultHeader}>
         <div>
-          <h2 id="finance-resultado"><ReceiptText size={18} aria-hidden="true" />Resultado do exercício</h2>
+          <h2 id="finance-resultado"><ReceiptText size={18} aria-hidden="true" />Resultado do período</h2>
           <p id="finance-periodo-ajuda">{periodo ? `${diaBR(periodo.inicio)} a ${diaBR(periodo.fim)}` : 'Receitas e despesas por período'}</p>
         </div>
         <div className={s.resultHeaderControls}>
-          {periodo && <PeriodoResultado periodos={periodos} periodo={periodo} onChange={onPeriodoChange} />}
-          {acoes}
+          <div className={s.resultUnits} role="group" aria-label="Exibir indicadores">
+            <button type="button" title="Exibir em reais (R$)" aria-label="Exibir em reais" aria-pressed={!percentual} onClick={()=>setPercentual(false)}><Banknote size={18} aria-hidden="true"/></button>
+            <button type="button" title="Exibir em porcentagem (%)" aria-label="Exibir em porcentagem" aria-pressed={percentual} onClick={()=>setPercentual(true)}><Percent size={18} aria-hidden="true"/></button>
+          </div>
+          {periodo && <PeriodSelector options={periodos} selected={periodo} onChange={onPeriodoChange} describedBy="finance-periodo-ajuda" />}
         </div>
       </header>
       {((resumo.loading && !periodo) || consulta.loading) && <LoadingBlock label="Consultando resultado…" />}
       {!periodo && resumo.error && <ErrorBlock error={resumo.error} onRetry={resumo.reload} />}
       {consulta.error && <ErrorBlock error={consulta.error} onRetry={consulta.reload} />}
       {resultado && <>
-        <IndicadoresResultado resultado={resultado} percentual={percentual} setPercentual={setPercentual} />
-        <section className={s.card} aria-labelledby="finance-resultado-detalhe">
-          <header className={s.cardHead}>
-            <div>
-              <h3 id="finance-resultado-detalhe" className={s.resultDetailTitle}>Detalhamento do resultado</h3>
-              <p>Das vendas ao lucro líquido</p>
-            </div>
-          </header>
+        <IndicadoresResultado resultado={resultado} percentual={percentual} />
+        {!resumo.loading && !resumo.error && resumo.data && <ComparacaoMensal data={resumo.data}/>}
+        <div className={s.resultContent}>
+        <section className={s.card + ' ' + s.resultComposition} aria-labelledby="result-composition">
+          <h3 id="result-composition"><ReceiptText size={17} aria-hidden="true"/>Composição do resultado</h3>
           <dl className={s.resultRows}>
             <div><dt>Receita bruta</dt><dd>{fmtBRL(resultado.receitaBruta)}</dd></div>
             <div><dt>Cancelamentos</dt><dd>− {fmtBRL(resultado.cancelamentos)}</dd></div>
@@ -317,17 +230,23 @@ function Resultado({ periodos, periodo, onPeriodoChange, acoes, resumo, consulta
             <div className={s.subtotal}><dt>Lucro bruto</dt><dd>{fmtBRL(resultado.lucroBruto)}</dd></div>
             <div><dt>Despesas fixas</dt><dd>− {fmtBRL(resultado.despesasFixas)}</dd></div>
             <div><dt>Despesas variáveis</dt><dd>− {fmtBRL(resultado.despesasVariaveis)}</dd></div>
-            <div className={s.resultTotal}><dt>Lucro líquido</dt><dd>{fmtBRL(resultado.lucroLiquido)}</dd></div>
+            <div className={s.resultTotal} data-result={resultado.lucroLiquido<0?'negative':resultado.lucroLiquido>0?'positive':'zero'}><dt>Lucro líquido</dt><dd>{fmtBRL(resultado.lucroLiquido)}</dd></div>
           </dl>
         </section>
+        <VendasPorCategoria key={resultado.inicio + '/' + resultado.fim} resultado={resultado}/>
+        </div>
       </>}
     </section>
   )
 }
 
 function VendasPorCategoria({ resultado }) {
+  const [page, setPage] = useState(0)
+  const categories = [...resultado.vendasPorCategoria].sort((a,b)=>b.valor-a.valor)
+  const pages = Math.max(1, Math.ceil(categories.length / 3))
+  const currentPage = Math.min(page, pages - 1)
   return (
-    <section className={s.card} aria-labelledby="finance-vendas">
+    <section className={s.card + ' ' + s.categoryCard} aria-labelledby="finance-vendas">
       <header className={s.cardHead}>
         <div>
           <h2 id="finance-vendas"><ChartNoAxesCombined size={18} aria-hidden="true" />Vendas por categoria</h2>
@@ -338,16 +257,15 @@ function VendasPorCategoria({ resultado }) {
       {resultado.vendasPorCategoria.length ? <table className={s.salesTable}>
         <thead><tr><th scope="col">Categoria</th><th scope="col">Participação</th><th scope="col">Valor vendido</th></tr></thead>
         <tbody>
-          {resultado.vendasPorCategoria.map(categoria => {
+          {categories.slice(currentPage * 3, currentPage * 3 + 3).map(categoria => {
             const pct = categoria.participacaoPercentual
-            const tone = toneHigher(pct, METAS.participacaoCategoria)
             return (
               <tr key={categoria.categoria}>
                 <th scope="row">{categoria.categoria}</th>
                 <td>
                   <div className={s.share}>
                     <span className={s.shareTrack} aria-hidden="true">
-                      <i style={{ width: Math.min(100, Math.max(0, pct ?? 0)) + '%', backgroundColor: TONE_COLOR[tone] }} />
+                      <i style={{ width: Math.min(100, Math.max(0, pct ?? 0)) + '%', backgroundColor: 'var(--gold)' }} />
                     </span>
                     <span>{fmtPct(pct)}</span>
                   </div>
@@ -358,6 +276,13 @@ function VendasPorCategoria({ resultado }) {
           })}
         </tbody>
       </table> : <p className={s.financeEmpty}>Nenhuma venda por categoria no período.</p>}
+      {pages > 1 && <nav className={s.categoryPagination} aria-label="Paginação das categorias">
+        <button type="button" aria-label="Categorias anteriores" disabled={currentPage === 0} onClick={()=>setPage(currentPage-1)}><ChevronLeft size={16} aria-hidden="true"/></button>
+        <span aria-live="polite">{currentPage+1} de {pages}</span>
+        <button type="button" aria-label="Próximas categorias" disabled={currentPage === pages-1} onClick={()=>setPage(currentPage+1)}><ChevronRight size={16} aria-hidden="true"/></button>
+      </nav>}
+
+
     </section>
   )
 }
@@ -372,14 +297,17 @@ export function Finance({ pageParams }) {
   const resumo = useQueryResource(financeApi.resumo, [])
   const data = resumo.error ? null : resumo.data
   const periodos = periodosFinanceiro(resumo.data?.referencia)
-  const periodo = finTab === 'dre' ? periodos.find(item => item.id === drePeriodo) : periodos[0]
+  const periodo = finTab === 'dre' ? periodos.find(item => item.id === drePeriodo) : null
   const resultado = useQueryResource(signal => periodo ? financeApi.resultado(periodo.inicio, periodo.fim, signal) : null,
     [periodo?.inicio, periodo?.fim])
   const { vencidas, vencemEmAte7Dias } = data?.aPagar30Dias ?? {}
-  const tonePagar = vencidas ? 'bad' : vencemEmAte7Dias ? 'warn' : 'ok'
-  const crescimento = data?.faturamento.crescimentoPercentual
-  const cmvPct = data?.faturamento.cmvPercentual
+  const vencimentosDisponiveis = vencidas != null && vencemEmAte7Dias != null
+  const tonePagar = vencidas ? 'bad' : vencemEmAte7Dias ? 'warn' : vencimentosDisponiveis ? 'info' : 'neutral'
+  const statusPagar = vencidas ? 'Contas vencidas' : vencemEmAte7Dias ? 'Vencimentos próximos'
+    : vencimentosDisponiveis ? 'Sem urgências' : undefined
   const cobertura = data?.coberturaContasAPagar
+  const toneSaldo = cobertura != null ? toneHigher(cobertura, METAS.coberturaPagar)
+    : data?.saldoRealizado > 0 ? 'ok' : data?.saldoRealizado < 0 ? 'bad' : 'neutral'
 
   function abrirConta(event, options) {
     event.currentTarget.focus({ preventScroll: true })
@@ -394,11 +322,8 @@ export function Finance({ pageParams }) {
 
   const acoes = canManage && (
     <div className={s.actions}>
-      <button type="button" onClick={event => abrirConta(event, { mode: 'create', tipo: 'PAGAR' })}>
-        <ArrowUpRight size={16} aria-hidden="true" />Nova conta a pagar
-      </button>
-      <button type="button" className="gold" onClick={event => abrirConta(event, { mode: 'create', tipo: 'RECEBER' })}>
-        <ArrowDownLeft size={16} aria-hidden="true" />Nova conta a receber
+      <button type="button" className="gold" onClick={event => abrirConta(event, { mode: 'create' })}>
+        <FilePlus2 size={16} aria-hidden="true" />Nova conta
       </button>
     </div>
   )
@@ -415,45 +340,38 @@ export function Finance({ pageParams }) {
       {finTab === 'visao' && (
         <>
           <div className={s.viewHeading}>
-            <h2>Saldos e compromissos</h2>
+            <h2 className={s.overviewTitle}><Wallet size={20} aria-hidden="true"/>Saldos e compromissos</h2>
             {acoes}
           </div>
           {resumo.loading && !data && <LoadingBlock label="Consultando o resumo financeiro…" />}
           {resumo.error && <ErrorBlock error={resumo.error} onRetry={resumo.reload} />}
           {data && <>
             <section className={s.balanceGrid} aria-label="Saldos e compromissos" aria-busy={resumo.loading}>
-              <Indicador label="Saldo em caixa" value={fmtBRL(data.saldoRealizado)} Icon={Wallet} featured
-                tone={toneHigher(cobertura, METAS.coberturaPagar)}
+              <MetricCard label="Saldo financeiro acumulado" value={fmtBRL(data.saldoRealizado)} Icon={Wallet} help="Recebimentos acumulados das vendas somados às baixas das contas financeiras. A gaveta do turno é consultada na tela Caixa."
+                tone={toneSaldo} statusLabel={cobertura != null ? statusIndicador[toneSaldo] : undefined}
                 description={cobertura == null ? 'Sem contas a pagar no intervalo' : `Equivale a ${fmtNum(cobertura)}× as contas a pagar em 30 dias`} />
-              <Indicador label="A pagar em 30 dias" value={fmtBRL(data.aPagar30Dias.valor)} Icon={ArrowUpRight} tone={tonePagar}
-                description={vencidas ? (vencidas === 1 ? '1 conta vencida' : vencidas + ' contas vencidas')
+              <MetricCard label="A pagar em 30 dias" value={fmtBRL(data.aPagar30Dias?.valor)} Icon={ArrowUpRight}
+                tone={tonePagar} statusLabel={statusPagar}
+                description={!vencimentosDisponiveis ? 'Vencimentos indisponíveis' : vencidas ? (vencidas === 1 ? '1 conta vencida' : vencidas + ' contas vencidas')
                   : (vencemEmAte7Dias === 1 ? '1 conta vence em até 7 dias' : vencemEmAte7Dias + ' contas vencem em até 7 dias')} />
-              <Indicador label="A receber em 30 dias" value={fmtBRL(data.aReceber30Dias.valor)} Icon={ArrowDownLeft}
-                description={data.aReceber30Dias.quantidade === 1 ? '1 conta em aberto' : data.aReceber30Dias.quantidade + ' contas em aberto'} />
             </section>
-            <div className={s.overviewGrid}>
+            <div className={s.card + ' ' + s.overviewGrid} role="group" aria-label="Vencimentos e fluxo financeiro">
               <FluxoDeCaixa fluxo={data.fluxoCaixa} />
               <Vencimentos referencia={data.referencia} revision={revision} onOpen={abrirConta} />
             </div>
-            <section className={s.monthGrid} aria-labelledby="finance-mes">
-              <h2 id="finance-mes">Indicadores do mês</h2>
-              <Indicador label="Faturamento" value={fmtBRL(data.faturamento.mesAtual)} Icon={ChartNoAxesCombined}
-                tone={toneHigher(crescimento, METAS.crescimento)}
-                description={crescimento == null ? 'Sem faturamento de referência no mês anterior'
-                  : `${crescimento > 0 ? '+' : ''}${fmtPct(crescimento)} em relação ao mesmo intervalo do mês anterior`} />
-              <Indicador label="Custo das mercadorias vendidas" value={fmtBRL(data.faturamento.cmvMesAtual)} Icon={ReceiptText}
-                tone={toneLower(cmvPct, METAS.cmv)} description={cmvPct == null ? 'Sem faturamento de referência' : `${fmtPct(cmvPct)} do faturamento · meta de até ${METAS.cmv.ok}%`} />
-            </section>
-            {resultado.loading && <LoadingBlock label="Consultando vendas por categoria…" />}
-            {resultado.error && <ErrorBlock error={resultado.error} onRetry={resultado.reload} />}
-            {!resultado.loading && !resultado.error && resultado.data && <VendasPorCategoria resultado={resultado.data} />}
           </>}
         </>
       )}
 
+      {finTab === 'visao' && <AccountList revision={revision} referencia={data?.referencia} canManage={canManage}
+        onSelect={(id, mode) => setDialog({ id, mode })} />}
+
       {finTab === 'dre' && (
-        <Resultado periodos={periodos} periodo={periodo} onPeriodoChange={setDrePeriodo}
-          resumo={resumo} consulta={resultado} acoes={acoes} />
+        <>
+          <Resultado periodos={periodos} periodo={periodo} onPeriodoChange={setDrePeriodo}
+            resumo={resumo} consulta={resultado} />
+
+        </>
       )}
       {dialog && <FinanceAccounts initial={dialog} canManage={canManage} referencia={resumo.data?.referencia}
         onChange={atualizarFinanceiro} onClose={() => setDialog(null)} />}

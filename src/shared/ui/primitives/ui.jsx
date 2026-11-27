@@ -44,25 +44,6 @@ export const Stat = ({ a, b, c, tone = 'neutral', badge, trend, progress, progre
   </article>
 )
 
-/* Faixa horizontal de KPIs */
-export function KpiStrip({ items, label }) {
-  return (
-    <section className={`card ${k.strip}`} aria-label={label}>
-      {items.map(it => (
-        <div key={it.label} className={`${k.item} ${toneClass(it.tone)}`} title={it.title}>
-          <div className={k.itemHead}>
-            <p>{it.label}</p>
-            {(it.badge || (it.tone && it.tone !== 'neutral')) && <ToneBadge tone={it.tone} label={it.badge} trend={it.trend} />}
-          </div>
-          <b>{it.value}</b>
-          {it.progress != null && <Meter pct={it.progress} label={it.label} />}
-          <span>{it.sub}</span>
-        </div>
-      ))}
-    </section>
-  )
-}
-
 export function Sel({ children, className, style, ...props }) {
   return (
     <div style={{ position: 'relative', display: 'grid', ...style }} className={className}>

@@ -50,7 +50,11 @@ export function InvoiceDetail({id,canCancel,canOperate,close,refresh}) {
           <p>Série {n.serie} · Pedido #{n.pedidoNumero}</p>
           <div className={s.badges}><strong data-status={n.status}>{{AUTORIZADA:'Autorizada',CANCELADA:'Cancelada',REJEITADA:'Rejeitada'}[n.status] || n.status}</strong>
             {n.ambiente && <span>{n.ambiente==='HOMOLOGACAO'?'Homologação · sem valor fiscal':n.ambiente}</span>}</div>
-          {n.motivoCancelamento && <p>Motivo do cancelamento · {n.motivoCancelamento}</p>}
+          {n.status === 'CANCELADA' && <dl className={s.cancellation} aria-label="Dados do cancelamento">
+            <div><dt>Cancelada em</dt><dd>{n.canceladaEm ? fmtDateTime(n.canceladaEm) : '—'}</dd></div>
+            <div><dt>Responsável</dt><dd>{n.canceladaPorNome || '—'}</dd></div>
+            <div><dt>Motivo</dt><dd>{n.motivoCancelamento || '—'}</dd></div>
+          </dl>}
         </header>
         <section className={s.summary} aria-label="Resumo da nota">
           <span>Total da nota</span><strong>{fmtBRL(n.valorTotal)}</strong>
@@ -58,7 +62,7 @@ export function InvoiceDetail({id,canCancel,canOperate,close,refresh}) {
             <div><dt>Consumidor</dt><dd>{n.contraparteNome || n.contraparteDocumento || 'Não identificado'}{n.contraparteNome && n.contraparteDocumento && <small>{n.contraparteDocumento}</small>}</dd></div></dl>
         </section>
         <div className={s.fileActions} data-screen-only>
-          <button className="gold" onClick={()=>downloadInvoice(n).catch(e=>setError(e.message))}><Download size={16} aria-hidden="true"/>Baixar</button>
+          <button className="gold" onClick={()=>downloadInvoice(n).catch(e=>setError(e.message))}><Download size={16} aria-hidden="true"/>Baixar XML</button>
           <button aria-label="Imprimir DANFE 80 mm" onClick={()=>printDanfe(receipt.current)}><Printer size={16} aria-hidden="true"/>Imprimir DANFE</button>
         </div>
         <section className={s.section}><h3><ShoppingBasket size={16} aria-hidden="true"/>Itens da venda</h3>

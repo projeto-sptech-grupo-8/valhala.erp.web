@@ -67,6 +67,8 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
   }
 
   /* ─── Catálogo remoto: API + campos locais ─── */
+  const can = makeCan(user)
+  const stockAccess = can('VISUALIZAR_ESTOQUE')
   const [catalog, setCatalog] = useState({ status: 'loading', error: null })
 
   async function syncCatalog() {
@@ -99,7 +101,7 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
     }
   }
 
-  useEffect(() => { if (!remotePage && staleCatalog.current) syncCatalog() }, [remotePage]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!remotePage && stockAccess && staleCatalog.current) syncCatalog() }, [remotePage, stockAccess]) // eslint-disable-line react-hooks/exhaustive-deps
   const invalidateCatalog = () => { staleCatalog.current = true }
   const reloadCatalog = () => { setCatalog(c => ({ ...c, status: 'loading' })); return syncCatalog() }
 
@@ -194,7 +196,6 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
   useEffect(() => { applyTheme(theme) }, [theme])
   useEffect(() => clearTheme, [])
   const setTheme = (t) => { setThemeState(t); saveTheme(t) }
-  const can = makeCan(user)
   // sessão: atualizar dados do usuário logado e encerrar a sessão (ex.: permissões revogadas)
   const session = { updateSelf: (u) => onUserChange?.({ ...user, ...u }), logout: () => onLogout?.() }
   return (

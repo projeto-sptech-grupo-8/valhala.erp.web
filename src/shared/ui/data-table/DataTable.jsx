@@ -14,6 +14,7 @@ export function DataTable({
   rows,
   rowKey = (r) => r.id,
   pageSize = 10,
+  paginationControls,
   initialSort,
   selectable = false,
   bulkActions,
@@ -22,10 +23,12 @@ export function DataTable({
   onRowClick,
   rowClassName,
   remote,
+  compactColumns,
 }) {
   const [localSort, setSort] = useState(initialSort || null) // { key, dir: 'asc' | 'desc' }
   const [rawPage, setPage] = useState(0)
   const [selected, setSelected] = useState(() => new Set())
+  const [showAllColumns, setShowAllColumns] = useState(false)
 
   const sort = remote ? remote.sort : localSort
   const sorted = useMemo(() => {
@@ -81,7 +84,7 @@ export function DataTable({
   const to = Math.min(total, page * pageSize + visible.length)
 
   return (
-    <div className={s.wrap}>
+    <div className={s.wrap} data-compact-table={compactColumns ? true : undefined} data-all-columns={showAllColumns || undefined}>
       {selectable && selectedRows.length > 0 && (
         <div className={s.bulk} role="region" aria-label="Ações em lote">
           <span><b>{selectedRows.length}</b> selecionado{selectedRows.length > 1 ? 's' : ''}</span>
@@ -92,6 +95,9 @@ export function DataTable({
         </div>
       )}
 
+      {compactColumns && <button type="button" className={s.columnToggle} aria-expanded={showAllColumns} onClick={() => setShowAllColumns(value => !value)}>
+        {showAllColumns ? 'Mostrar colunas principais' : 'Mostrar todas as colunas'}
+      </button>}
       <div className={s.scroll}>
         <table className={s.table}>
           {caption && <caption className={s.caption}>{caption}</caption>}
@@ -109,6 +115,7 @@ export function DataTable({
                   <th
                     key={col.key}
                     scope="col"
+                    data-secondary-column={compactColumns && !compactColumns.includes(col.key) || undefined}
                     style={{ width: col.width, textAlign: col.align }}
                     aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}
                   >
@@ -137,7 +144,7 @@ export function DataTable({
                     </td>
                   )}
                   {columns.map(col => (
-                    <td key={col.key} className={col.className} style={{ textAlign: col.align }}>
+                    <td key={col.key} className={col.className} style={{ textAlign: col.align }} data-secondary-column={compactColumns && !compactColumns.includes(col.key) || undefined}>
                       {col.render ? col.render(row) : row[col.key]}
                     </td>
                   ))}
@@ -153,14 +160,19 @@ export function DataTable({
         </table>
       </div>
 
-      {(total > 0 || remote?.page > 0) && (
+      {(total > 0 || remote?.page > 0 || paginationControls) && (
         <div className={s.pager}>
-          <span>{from}–{to} de {total}</span>
-          {(pages > 1 || page > 0) && (
-            <div>
-              <button onClick={() => remote ? remote.onPage(page - 1) : setPage(page - 1)} disabled={page === 0 || remote?.loading} aria-label="Página anterior"><ChevronLeft size={14} /></button>
-              <span>Página {page + 1} de {pages}</span>
-              <button onClick={() => remote ? remote.onPage(page + 1) : setPage(page + 1)} disabled={page >= pages - 1 || remote?.loading} aria-label="Próxima página"><ChevronRight size={14} /></button>
+          {(total > 0 || remote?.page > 0) && <span>{from}–{to} de {total}</span>}
+          {(paginationControls || pages > 1 || page > 0) && (
+            <div className={s.pageControls}>
+              {paginationControls}
+              {(pages > 1 || page > 0) && (
+                <div className={s.pageNavigation}>
+                  <button onClick={() => remote ? remote.onPage(page - 1) : setPage(page - 1)} disabled={page === 0 || remote?.loading} aria-label="Página anterior"><ChevronLeft size={14} /></button>
+                  <span>Página {page + 1} de {pages}</span>
+                  <button onClick={() => remote ? remote.onPage(page + 1) : setPage(page + 1)} disabled={page >= pages - 1 || remote?.loading} aria-label="Próxima página"><ChevronRight size={14} /></button>
+                </div>
+              )}
             </div>
           )}
         </div>

@@ -4,7 +4,8 @@ import { api } from '@/shared/api/api.js'
 import { useToast } from '@/shared/ui/notifications/useToast.js'
 import { Modal } from '@/shared/ui/feedback/ManagementFeedback.jsx'
 import { ConfirmModal } from '@/shared/ui/feedback/ManagementFeedback.jsx'
-import { validarNomePerfil } from '@/entities/access'
+import { FuncionalidadesPicker } from '@/features/access-management/permissions/ui/PermissionsEditor.jsx'
+import { isManagerProfile, validarNomePerfil } from '@/entities/access'
 import s from '@/shared/styles/panel.module.css'
 import a from '@/entities/access/ui/access.module.css'
 
@@ -56,7 +57,7 @@ export function EditProfileModal({ perfil, perfis, onClose, onSaved }) {
         <fieldset disabled={busy} style={{ border: 0, padding: 0, margin: 0, display: 'grid', gap: 16 }}>
         <label className={errors.nome ? s.fieldError : undefined}>
           <span>Nome do perfil <i className={s.req} aria-hidden="true">*</i></span>
-          <input value={nome} onChange={e => { setNome(e.target.value); setErrors({}) }} maxLength={100} data-autofocus aria-invalid={!!errors.nome} />
+          <input value={nome} disabled={isManagerProfile(perfil.nome)} onChange={e => { setNome(e.target.value); setErrors({}) }} maxLength={100} data-autofocus aria-invalid={!!errors.nome} />
           <small className={s.hint}>{nome.trim().length}/100</small>
           {errors.nome && <small className={s.errMsg}>{errors.nome}</small>}
         </label>
@@ -68,6 +69,42 @@ export function EditProfileModal({ perfil, perfis, onClose, onSaved }) {
       </form>
     </Modal>
   )
+}
+
+export function EditProfilePermissionsModal({ perfil, funcionalidades, onClose, onSaved }) {
+  const [codigos, setCodigos] = useState(perfil.codigos)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const toast = useToast()
+  const changed = codigos.length !== perfil.codigos.length || codigos.some(codigo => !perfil.codigos.includes(codigo))
+
+  async function save() {
+    if (busy || !changed) return
+    setError('')
+    setBusy(true)
+    try {
+      await api.perfis.substituirFuncionalidades(perfil.id, codigos)
+      toast(`Funcionalidades de ${perfil.nome} atualizadas.`, { title: 'Permissões atualizadas' })
+      onSaved({ ...perfil, codigos })
+    } catch (ex) {
+      setError(ex.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return <Modal title="Editar funcionalidades" subtitle={perfil.nome}
+    width={720} busy={busy} onClose={onClose} footer={<>
+      <button type="button" onClick={onClose} disabled={busy}>Cancelar</button>
+      <button type="button" className="gold" disabled={!changed || busy} onClick={save}>Salvar permissões</button>
+    </>}>
+    {error && <Notice title="Não foi possível atualizar as permissões" focus>{error}</Notice>}
+    <p>Ao salvar, as sessões dos usuários vinculados a este perfil serão encerradas.</p>
+    <fieldset disabled={busy} className={a.modalForm}>
+      <FuncionalidadesPicker funcionalidades={funcionalidades} value={codigos} baseline={perfil.codigos}
+        onChange={setCodigos} idPrefix="edit-profile" />
+    </fieldset>
+  </Modal>
 }
 
 /* ─── Excluir perfil (bloqueado com usuários vinculados — regra da API) ─── */
@@ -110,7 +147,7 @@ export function DeleteProfileModal({ perfil, usuarios, onClose, onDeleted }) {
         }
       }}
     >
-      <p>Nenhum usuário usa este perfil. Suas {perfil.codigos.length} funcionalidade(s) deixarão de estar disponíveis como conjunto.</p>
+      <p>O perfil será removido se estiver sem usuários vinculados.</p>
     </ConfirmModal>
   )
 }

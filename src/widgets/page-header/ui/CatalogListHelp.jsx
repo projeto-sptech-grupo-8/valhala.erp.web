@@ -7,14 +7,15 @@ export function CatalogListHelp() {
   return <span className={ui.help}>
     <button type="button" className={ui.helpButton} aria-label="Sobre os tipos e indicadores de produtos e drinks" aria-describedby={id}><CircleHelp size={19} aria-hidden="true" /></button>
     <span id={id} role="tooltip" className={ui.helpText + ' ' + ui.auditLegend}>
-      <strong className={ui.legendTitle}>Tipos de produto e cores</strong>
+      <strong className={ui.legendTitle}>Cores do catálogo</strong>
       {[
-        ['var(--gold2)', 'Drink · amarelo', 'Preparo por receita. A linha amarela destaca o drink; ela não indica estoque baixo nem confirma que a receita está completa.'],
-        ['#3b82f6', 'Padrão · azul', 'Produto com estoque próprio, fracionado ou não. Corresponde ao tipo PADRAO do servidor.'],
-        ['#14b8a6', 'Dose · verde-água', 'Identifica o produto fracionado, com estoque em mililitros. Quando aparece sozinha, Dose mostra o volume da embalagem em ml ao lado do ícone. Não é uma medida fixa de cada dose. Se houver fardo, os ícones ficam lado a lado.'],
-        ['#a855f7', 'Fardo · roxo', 'Forma de venda complementar abaixo da tag principal. Quando aparece sozinha, mostra Fardo e as unidades ao lado do ícone. Com dose e fardo juntos, mostra apenas os dois ícones; passe o mouse para consultar as quantidades. Acompanha o tipo Padrão; não é um segundo tipo de produto.'],
+        ['var(--red)', 'Zerado · linha vermelha', 'Produto com estoque próprio e sem saldo em estoque. O Status Ativo ou Inativo é um controle separado do cadastro.'],
+        ['var(--gold2)', 'Drink · linha amarela', 'O consumo baixa o estoque dos ingredientes. Clique em Por receita ou Na receita para consultar os ingredientes.'],
+        ['#3b82f6', 'Padrão · azul', 'Produto com estoque próprio. O saldo e o mínimo aparecem na unidade de controle.'],
+        ['#14b8a6', 'Dose · verde-água', 'Venda fracionada com estoque em mililitros. O número ao lado do ícone indica o volume da embalagem.'],
+        ['#a855f7', 'Fardo · roxo', 'Venda em grupo de unidades. Passe o mouse sobre os ícones de dose ou fardo para ver as quantidades quando ambos aparecem juntos.'],
       ].map(([color, title, text]) => <span className={ui.legendRow} key={title}><span className={ui.legendDot} style={{ background: color }} aria-hidden="true" /><span><strong style={{ color }}>{title}</strong><span>{text}</span></span></span>)}
-      <span className={ui.legendFooter}><strong>Indicadores opcionais</strong><br />Margem bruta = (preço − custo) ÷ preço × 100. Não inclui impostos, taxas ou despesas.<br />Cobertura = saldo ÷ consumo médio diário dos últimos 30 dias completos. É uma estimativa para produtos com estoque próprio.<br />Passe o mouse em Margem e Giro para consultar as faixas de cores e as limitações de cada cálculo. As cores das tags identificam o tipo de produto; não representam essas métricas.</span>
+      <span className={ui.legendFooter}><strong>Filtros e indicadores</strong><br />Filtre por tipo, status, nome, código ou categoria. Em Exibir indicadores, Margem adiciona o percentual sobre o preço de venda. Giro adiciona o consumo dos últimos 30 dias completos e a cobertura estimada. Passe o mouse sobre os botões para ver as fórmulas e as faixas de cores.</span>
     </span>
   </span>
 }

@@ -2,6 +2,11 @@ import { authenticatedRequest } from '@/shared/api/api.js'
 import { readCash, writeCash } from '@/entities/sales/api/cashApi.js'
 
 export const invoices = 'notas-fiscais'
+
+export function needsInvoice(order) {
+  return order.status === 'CONCLUIDO' && Number(order.total) > 0 && order.notaFiscal?.status !== 'AUTORIZADA'
+}
+
 export async function issueInvoice(orderId, customer = {}) {
   const current = await readCash('pedidos/' + orderId)
   if (current.status !== 'CONCLUIDO') throw new Error('O pedido precisa estar concluído.')
