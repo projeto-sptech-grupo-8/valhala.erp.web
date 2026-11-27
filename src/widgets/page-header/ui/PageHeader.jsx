@@ -9,12 +9,12 @@ import { pages } from '@/entities/access'
 import s from '@/shared/styles/panel.module.css'
 
 /* Cabeçalho com retorno para a tela de origem, título e descrição. */
-export function PageHeader({ page, navigate, extra, onBack, help, onActionsMount, action, reportTab }) {
+export function PageHeader({ page, navigate, extra, onBack, help, onActionsMount, action, activeTab }) {
   const helpId = useId()
   const meta = pages[page]
   if (!meta) return null
   const TitleIcon = page === 'dashboard' ? meta.icon : page === 'sessoescaixa' ? CalendarClock : ['caixa', 'pedidos', 'auditoria', 'ajustescaixa', 'notafiscal', 'financeiro', 'relatorios'].includes(page) ? meta.icon : page === 'novoperfil' ? KeyRound : page === 'novousuario' ? UserPlus : page === 'novo' && extra === 'Novo produto padrão' ? Package : page === 'novo' && extra === 'Novo drink' ? Wine : ['Catálogo', 'Estoque', 'Controle de acesso', 'Sistema'].includes(meta.section) && !meta.parent ? meta.icon : null
-  const helpText = help || (page === 'reposicao' ? 'Os indicadores resumem os dados do servidor. A lista abaixo mostra os alertas prioritários retornados e pode ser limitada; não corresponde a uma lista completa de compras.' : null)
+  const helpText = help || (page === 'reposicao' ? 'Os indicadores resumem os produtos ativos. Saúde do estoque considera os produtos com mínimo definido. A tabela mostra produtos zerados ou abaixo do mínimo e a quantidade necessária para repor. A linha vermelha indica saldo zerado.' : null)
   const title = extra || meta.title
   const backTarget = meta.parent || (meta.section === 'Catálogo' && page !== 'produtos' ? 'produtos' : meta.section === 'Estoque' && page !== 'movimentacoes' ? 'movimentacoes' : 'dashboard')
   const headerLayout = page === 'dashboard' ? ui.dashboardHeader : (page === 'relatorios' || action) ? ui.inlineActionsHeader : ''
@@ -29,7 +29,7 @@ export function PageHeader({ page, navigate, extra, onBack, help, onActionsMount
         {page === 'produtos' && <CatalogListHelp />}
         {page === 'movimentacoes' && <MovementListHelp />}
         {page === 'auditoria' && <AuditColorLegend />}
-        {hasFinanceHelp && <FinanceMetricsHelp reports={page === 'relatorios'} reportTab={reportTab} />}
+        {hasFinanceHelp && <FinanceMetricsHelp reports={page === 'relatorios'} activeTab={activeTab} />}
         {helpText && <span className={ui.help}><button type="button" className={ui.helpButton} aria-label={page === 'validades' ? 'Sobre os indicadores de validade e lotes' : 'Sobre os indicadores de reposição'} aria-describedby={helpId}><CircleAlert size={19} aria-hidden="true" /></button><span id={helpId} role="tooltip" className={ui.helpText}>{helpText}</span></span>}
       </h1>
       <p>{page === 'novo' && extra === 'Novo produto padrão' ? 'Cadastre a identificação, os preços e o estoque de um produto vendido por unidade ou de forma fracionada.' : page === 'novo' && extra === 'Novo drink' ? 'Defina o preço e os ingredientes da receita para controlar o consumo de cada drink.' : meta.desc}</p>

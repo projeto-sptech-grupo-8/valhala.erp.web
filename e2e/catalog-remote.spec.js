@@ -15,9 +15,9 @@ async function setup(page, { recipeFailure = false, readOnly = false } = {}) {
     calls.push({ path, query: Object.fromEntries(url.searchParams), method: request.method(), body: request.postDataJSON() })
     const respond = (body, status = 200) => route.fulfill({ status, json: body, headers: { 'Access-Control-Allow-Origin': 'http://127.0.0.1:5184', 'Access-Control-Allow-Credentials': 'true' } })
     if (path === '/usuario') return respond([{ id: 'user-test', name: 'Teste' }])
-    if (path === '/usuario/me') return respond({ id: 'user-test', name: 'Teste', profileName: readOnly ? 'Somente leitura' : 'Administrador', permissoes: ['VISUALIZAR_ESTOQUE'] })
+    if (path === '/usuario/me') return respond({ id: 'user-test', name: 'Teste', profileName: readOnly ? 'Somente leitura' : 'Gerente', permissoes: ['VISUALIZAR_ESTOQUE'] })
     if (path === '/auth/csrf') return respond({ token: 'test-csrf' })
-    if (path === '/categorias') return respond(envelope([category]))
+    if (path === '/categorias' || path === '/categorias/venda') return respond(envelope([category]))
     if (path === '/categorias/1') return respond(category)
     if (path === '/produtos' && request.method() === 'POST') {
       const body = request.postDataJSON()
@@ -25,7 +25,7 @@ async function setup(page, { recipeFailure = false, readOnly = false } = {}) {
       return respond({ ...body, quantidadeEstoque: body.tipo === 'DRINK' ? null : body.quantidadeInicial, id: drinkId, sku: 'DRK', ativo: true })
     }
     if (path === '/produtos/' + strawberry.id && request.method() === 'PATCH') return respond({ ...strawberry, ...request.postDataJSON() })
-    if (path === '/produtos') {
+    if (path === '/produtos' || path === '/produtos/venda') {
       const pageNumber = Number(url.searchParams.get('pagina') || 0)
       const items = url.searchParams.get('busca')?.toLowerCase().includes('mor') ? [strawberry] : pageNumber ? [{ ...strawberry, nome: 'Produto da segunda página' }] : [strawberry, vodka]
       return respond(envelope(items, pageNumber, Number(url.searchParams.get('tamanho') || 20), 45))
@@ -141,6 +141,12 @@ test('movimentação envia unidade-base e tipo exato sem inferir perda pelo moti
 test('categorias navegam pelo ID e consulta preserva paginação', async ({ page }) => {
   const calls = await setup(page)
   await page.goto('/#/categorias')
+  const pageSize = page.getByRole('combobox', { name: 'Itens por página', exact: true })
+  const filter = page.getByRole('region', { name: 'Filtros de categorias', exact: true })
+  await expect(pageSize).toBeVisible()
+  await expect(filter.getByRole('combobox', { name: 'Itens por página' })).toHaveCount(0)
+  await pageSize.selectOption('50')
+  await expect.poll(() => calls.filter(c => c.path === '/categorias').at(-1)?.query.tamanho).toBe('50')
   await page.getByRole('button', { name: 'Ver Produto', exact: true }).click()
   await expect(page).toHaveURL(/categoriaId=1/)
   await expect.poll(() => calls.filter(c => c.path === '/produtos').at(-1)?.query.categoriaId).toBe('1')
@@ -467,13 +473,41 @@ test('buscas e ações permanecem visíveis ao recolher filtros de produtos', as
   await page.goto('/#/produtos')
   const toggle = page.getByRole('button', { name: 'Filtro de produtos', exact: true })
   await toggle.click()
-  await expect(page.getByRole('combobox', { name: 'Status', exact: true })).toBeHidden()
+  await expect(page.getByRole('group', { name: 'Status', exact: true })).toBeHidden()
   await expect(page.getByRole('searchbox', { name: 'Buscar nome', exact: true })).toBeVisible()
   await page.getByRole('combobox', { name: 'Buscar categoria', exact: true }).fill('Insumos')
   await page.getByRole('option', { name: 'Insumos', exact: true }).click()
   await expect.poll(() => calls.filter(c => c.path === '/produtos').at(-1)?.query.categoriaId).toBe('1')
   await expect(page.getByRole('button', { name: 'Importar produtos', exact: true })).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Exportar', exact: true })).toBeVisible()
+  const header = page.locator('[data-filter-header]').filter({ has: toggle })
+  await expect(header.getByRole('button', { name: 'Exportar', exact: true })).toBeVisible()
+  await expect(header.getByRole('button', { name: 'Etiqueta', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Giro', exact: true })).toBeVisible()
+
+  const pageSize = page.getByRole('combobox', { name: 'Itens por página', exact: true })
+  await expect(page.getByRole('region', { name: 'Filtro de produtos', exact: true }).getByRole('combobox', { name: 'Itens por página', exact: true })).toHaveCount(0)
+  await pageSize.selectOption('10')
+  await expect.poll(() => calls.filter(c => c.path === '/produtos').at(-1)?.query.tamanho).toBe('10')
+
+  await toggle.click()
+  const type = page.getByRole('group', { name: 'Tipo', exact: true })
+  const status = page.getByRole('group', { name: 'Status', exact: true })
+  const search = await page.getByRole('searchbox', { name: 'Buscar nome', exact: true }).boundingBox()
+  const typeBounds = await type.boundingBox()
+  expect(search.y).toBeGreaterThan(typeBounds.y + typeBounds.height)
+
+  await type.getByRole('button', { name: 'Drinks' }).click()
+  await status.getByRole('button', { name: 'Inativos' }).click()
+  await expect(type.getByRole('button', { name: 'Drinks' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(status.getByRole('button', { name: 'Inativos' })).toHaveAttribute('aria-pressed', 'true')
+  await expect.poll(() => calls.filter(c => c.path === '/produtos').at(-1)?.query).toMatchObject({ tipo: 'DRINK', ativo: 'false' })
+
+  await page.setViewportSize({ width: 390, height: 844 })
+  const label = page.locator('label').filter({ has: pageSize })
+  const footerLabel = await label.boundingBox()
+  const footerSelect = await pageSize.boundingBox()
+  expect(footerLabel.height).toBeLessThanOrEqual(footerSelect.height + 1)
+  expect(footerSelect.width).toBeLessThan(80)
 })
 
 test('importação XML abre modal, valida arquivo e confirma descarte sem gravar', async ({ page }) => {
@@ -793,11 +827,152 @@ test('cadastro mostra exemplos moeda brasileira e voltar protege alterações', 
   await expect(page).toHaveURL(/#\/produtos$/)
 })
 
+test('permissões efetivas controlam o menu e o acesso direto', async ({ page }) => {
+  const calls = await setup(page)
+  await page.route('http://localhost:8080/usuario/me', route => route.fulfill({
+    headers: feedbackHeaders,
+    json: { id: 'delegated', name: 'Responsável', profileName: 'Administrador', permissoes: ['PERFIS_GERENCIAR'] },
+  }))
+  await page.route('http://localhost:8080/autorizacoes/perfis', route => route.fulfill({
+    headers: feedbackHeaders, json: [{ id: 1, nome: 'Delegado', codigosFuncionalidades: [] }],
+  }))
+  await page.route('http://localhost:8080/autorizacoes/funcionalidades', route => route.fulfill({ headers: feedbackHeaders, json: [] }))
+  await page.goto('/#/dashboard')
+  await page.getByRole('link', { name: 'Controle de acesso', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Perfis de acesso', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Novo perfil', exact: true })).toBeVisible()
+  for (const route of [
+    'produtos', 'categorias', 'novo', 'editar', 'movimentacoes', 'novamovimentacao', 'reposicao', 'validades', 'entradanf',
+    'usuarios', 'novousuario', 'usuario', 'editarusuario', 'financeiro', 'relatorios',
+    'caixa', 'pedidos', 'sessoescaixa', 'ajustescaixa', 'auditoria', 'notafiscal',
+  ]) {
+    await page.goto('/#/' + route)
+    await expect(page.getByText(/não tem permissão para/)).toBeVisible()
+  }
+  expect(calls.some(call => call.path === '/usuario' || call.path === '/produtos')).toBe(false)
+  await page.goto('/#/seguranca')
+  await expect(page.getByRole('heading', { name: 'Últimos acessos', exact: true })).toBeVisible()
+})
+
+test('cadastro delegado usa perfis atribuíveis e confirma sem abrir lista bloqueada', async ({ page }) => {
+  let payload
+  await setup(page)
+  await page.route('http://localhost:8080/usuario/me', route => route.fulfill({
+    headers: feedbackHeaders,
+    json: { id: 'creator', name: 'Cadastro', profileName: 'Cadastro', permissoes: ['USUARIOS_CRIAR'] },
+  }))
+  await page.route('http://localhost:8080/autorizacoes/perfis/atribuiveis', route => route.fulfill({
+    headers: feedbackHeaders, json: [{ id: 1, nome: 'Delegado', codigosFuncionalidades: [] }],
+  }))
+  await page.route('http://localhost:8080/usuario', async route => {
+    if (route.request().method() === 'OPTIONS') return route.fallback()
+    expect(route.request().method()).toBe('POST')
+    payload = route.request().postDataJSON()
+    return route.fulfill({ headers: feedbackHeaders, status: 201, json: { id: 'new-user', nome: payload.name, email: payload.email } })
+  })
+  await page.goto('/#/novousuario')
+  await page.getByLabel('Nome completo').fill('Novo Operador')
+  await page.getByLabel('E-mail de acesso').fill('novo@valhalla.local')
+  await page.getByPlaceholder('Mínimo 8 caracteres, letras e números').fill('Senha@2026')
+  await page.getByLabel('Confirmar senha').fill('Senha@2026')
+  await page.getByRole('combobox', { name: /^Perfil/ }).selectOption({ label: 'Delegado' })
+  await page.getByRole('button', { name: 'Criar usuário', exact: true }).click()
+  await expect(page.getByText('Usuário criado', { exact: true })).toBeVisible()
+  await expect(page).toHaveURL(/#\/novousuario$/)
+  expect(payload.nomePerfil).toBe('Delegado')
+})
+
+test('ajuste individual aparece somente para quem pode gerenciar permissões', async ({ page }) => {
+  const target = { id: 'target', nome: 'Operador teste', nomePerfil: 'Caixa', idPerfil: 1, ativo: true }
+  const actor = { id: 'actor', nome: 'Acessos', nomePerfil: 'Delegado', permissoes: ['USUARIOS_VISUALIZAR', 'PERMISSOES_GERENCIAR', 'VISUALIZAR_ESTOQUE'] }
+  let overrides = []
+  await setup(page)
+  const respond = (route, json) => route.fulfill({ headers: feedbackHeaders, json })
+  await page.route('http://localhost:8080/usuario/me', route => respond(route, actor))
+  await page.route('http://localhost:8080/usuario', route => respond(route, [target]))
+  await page.route('http://localhost:8080/usuario/target', route => respond(route, target))
+  await page.route('http://localhost:8080/autorizacoes/funcionalidades', route => respond(route, [
+    { codigo: 'VISUALIZAR_ESTOQUE', nome: 'Visualizar estoque' },
+    { codigo: 'CAIXA_CONFIGURAR', nome: 'Configurar caixa' },
+  ]))
+  await page.route('http://localhost:8080/autorizacoes/usuarios/target/permissoes', route => respond(route, {
+    sobrescritas: overrides, permissoesEfetivas: overrides.map(item => item.codigoFuncionalidade),
+  }))
+  await page.route('http://localhost:8080/autorizacoes/usuarios/target/sobrescritas-permissao', route => {
+    if (route.request().method() === 'OPTIONS') return route.fallback()
+    overrides = route.request().postDataJSON().sobrescritas
+    return route.fulfill({ headers: feedbackHeaders, status: 204 })
+  })
+  await page.goto('/#/usuarios?detalhe=target')
+  await page.getByRole('button', { name: 'Ajustar permissões', exact: true }).click()
+  await expect(page.getByRole('radiogroup', { name: 'Configurar caixa' })).toHaveCount(0)
+  await page.getByRole('radiogroup', { name: 'Visualizar estoque' }).getByLabel('Conceder').check()
+  await page.getByRole('button', { name: 'Salvar ajustes', exact: true }).click()
+  await page.getByRole('button', { name: 'Aplicar e encerrar sessão', exact: true }).click()
+  await expect(page.getByText('Concedida individualmente', { exact: true }).first()).toBeVisible()
+  expect(overrides).toEqual([{ codigoFuncionalidade: 'VISUALIZAR_ESTOQUE', efeito: 'GRANT' }])
+})
+
+test('perfil delegado edita apenas funcionalidades que pode conceder', async ({ page }) => {
+  let codigos = []
+  await setup(page)
+  const respond = (route, json) => route.fulfill({ headers: feedbackHeaders, json })
+  await page.route('http://localhost:8080/usuario/me', route => respond(route, {
+    id: 'editor', nome: 'Editor de perfis', nomePerfil: 'Delegado', permissoes: ['PERFIS_GERENCIAR', 'VISUALIZAR_ESTOQUE'],
+  }))
+  await page.route('http://localhost:8080/autorizacoes/perfis', route => respond(route, [
+    { id: 1, nome: 'Consulta', codigosFuncionalidades: codigos },
+    { id: 2, nome: 'Gerente', codigosFuncionalidades: [] },
+  ]))
+  await page.route('http://localhost:8080/autorizacoes/funcionalidades', route => respond(route, [
+    { codigo: 'VISUALIZAR_ESTOQUE', nome: 'Visualizar estoque' },
+    { codigo: 'CAIXA_CONFIGURAR', nome: 'Configurar caixa' },
+  ]))
+  await page.route('http://localhost:8080/autorizacoes/perfis/1/funcionalidades/codigos', route => {
+    if (route.request().method() === 'OPTIONS') return route.fallback()
+    codigos = route.request().postDataJSON()
+    return route.fulfill({ headers: feedbackHeaders, status: 204 })
+  })
+  await page.goto('/#/perfis')
+  await page.getByRole('button', { name: 'Ações do perfil Gerente' }).click()
+  await expect(page.getByRole('menuitem', { name: /Editar|Excluir/ })).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'Ações do perfil Consulta' }).click()
+  await page.getByRole('menuitem', { name: 'Editar funcionalidades' }).click()
+  const modal = page.getByRole('dialog', { name: 'Editar funcionalidades' })
+  await expect(modal.getByText('Configurar caixa')).toHaveCount(0)
+  await modal.getByRole('checkbox', { name: /Visualizar estoque/ }).check()
+  await modal.getByRole('button', { name: 'Salvar permissões' }).click()
+  await expect(page.getByText('Permissões atualizadas', { exact: true })).toBeVisible()
+  expect(codigos).toEqual(['VISUALIZAR_ESTOQUE'])
+})
+
+test('caixa sem estoque consulta catálogo de venda e bloqueia itens esgotados', async ({ page }) => {
+  const calls = await setup(page)
+  await page.route('http://localhost:8080/usuario/me', route => route.fulfill({
+    headers: feedbackHeaders,
+    json: { id: 'cashier', nome: 'Caixa', nomePerfil: 'Caixa', permissoes: ['CAIXA_VISUALIZAR', 'CAIXA_OPERAR'] },
+  }))
+  await page.route('http://localhost:8080/caixa/**', route => {
+    const path = new URL(route.request().url()).pathname
+    const session = { id: 'open', caixaNome: 'Caixa principal', resumoAtual: {} }
+    return route.fulfill({ headers: feedbackHeaders, json: path === '/caixa/sessoes/atual' ? session : envelope([]) })
+  })
+  await page.route('http://localhost:8080/produtos/venda**', route => route.fulfill({
+    headers: feedbackHeaders,
+    json: envelope([{ id: 'sold-out', nome: 'Cerveja', tipo: 'PADRAO', precoVenda: 9, estoqueEsgotado: true }]),
+  }))
+  await page.goto('/#/caixa')
+  await expect(page.getByRole('button', { name: 'Cerveja · Estoque esgotado' })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Fechar caixa', exact: true })).toHaveCount(0)
+  expect(calls.some(call => call.path === '/produtos')).toBe(false)
+})
+
 test('detalhes do usuário abrem na lateral sem ações do card antigo', async ({ page }) => {
   await setup(page)
   const u = { id: 'user-drawer', name: 'Mariana Costa', email: 'mariana@adega.com.br', phone: '11999998888', active: true, profileName: 'Caixa' }
   const headers = { 'Access-Control-Allow-Origin': 'http://127.0.0.1:5184', 'Access-Control-Allow-Credentials': 'true' }
-  await page.route('http://localhost:8080/usuario/me', route => route.fulfill({ headers, json: { id: 'admin', name: 'Admin', profileName: 'Administrador', permissoes: ['USUARIOS_VISUALIZAR'] } }))
+  await page.route('http://localhost:8080/usuario/me', route => route.fulfill({ headers, json: { id: 'admin', name: 'Admin', profileName: 'Gerente' } }))
   await page.route('http://localhost:8080/usuario', route => route.fulfill({ headers, json: [u] }))
   await page.route('http://localhost:8080/usuario/user-drawer', route => route.fulfill({ headers, json: u }))
   await page.goto('/#/usuarios')
@@ -820,7 +995,7 @@ test('editar usuário usa pop-up salva na lista e links antigos redirecionam', a
   await setup(page)
   let u = { id: 'edit-user', name: 'Administrador Inicial', email: 'admin@adega.com.br', phone: '', active: true, profileName: 'Caixa' }
   const headers = { 'Access-Control-Allow-Origin': 'http://127.0.0.1:5184', 'Access-Control-Allow-Credentials': 'true' }
-  await page.route('http://localhost:8080/usuario/me', route => route.fulfill({ headers, json: { id: 'admin', name: 'Admin', profileName: 'Administrador' } }))
+  await page.route('http://localhost:8080/usuario/me', route => route.fulfill({ headers, json: { id: 'admin', name: 'Admin', profileName: 'Gerente' } }))
   await page.route('http://localhost:8080/usuario', route => route.fulfill({ headers, json: [u] }))
   await page.route('http://localhost:8080/usuario/edit-user', route => {
     if (route.request().method() === 'PATCH') u = { ...u, ...route.request().postDataJSON() }
@@ -927,14 +1102,54 @@ test('configurações ficam no menu lateral e conta contém apenas aparência', 
   await expect(page.getByRole('heading', { name: 'Alterar senha', exact: true })).toBeVisible()
 })
 
-test('configurações preservam acesso restrito e aparência no menu móvel', async ({ page }) => {
+test('configurações preservam acesso restrito e exibem o tema sem corte no celular', async ({ page }) => {
   await setup(page, { readOnly: true })
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/#/geral')
   const sections = page.getByRole('navigation', { name: 'Seções de configurações', exact: true })
   await expect(sections.getByRole('link', { name: 'Segurança', exact: true })).toBeVisible()
-  await expect(sections.getByRole('link', { name: 'Geral', exact: true })).toHaveCount(0)
+  await expect(sections.getByRole('link', { name: 'Geral', exact: true })).toBeVisible()
+  const appearance = page.getByRole('article').filter({ has: page.getByRole('heading', { name: 'Aparência', exact: true }) })
+  const theme = appearance.getByRole('radiogroup', { name: 'Tema do painel' })
+  await expect(theme.getByRole('radio')).toHaveCount(2)
+  await expect(theme).toBeVisible()
+  expect(await appearance.evaluate(card => card.scrollWidth <= card.clientWidth)).toBe(true)
   await expect(page.getByRole('heading', { name: 'Regras do caixa', exact: true })).toHaveCount(0)
+})
+
+test('catálogo destaca saldo zerado e explica as cores na ajuda', async ({ page }) => {
+  await setup(page)
+  const rows = [
+    { ...strawberry, quantidadeEstoque: 0 },
+    vodka,
+    { ...strawberry, id: 'unreported', nome: 'Produto sem saldo informado', quantidadeEstoque: null },
+    { ...strawberry, id: drinkId, nome: 'Gin tônica', tipo: 'DRINK', quantidadeEstoque: null },
+  ]
+  await page.route('http://localhost:8080/produtos?*', route => route.fulfill({ headers: feedbackHeaders, json: envelope(rows) }))
+  await page.goto('/#/produtos')
+  const row = name => page.getByRole('row').filter({ has: page.getByRole('button', { name, exact: true }) })
+  await expect(row('Morango')).toHaveClass(/zeroRow/)
+  await expect(row('Morango').getByText('Zerado', { exact: true })).toBeVisible()
+  await expect(row('Vodka')).not.toHaveClass(/zeroRow/)
+  await expect(row('Produto sem saldo informado')).not.toHaveClass(/zeroRow/)
+  await expect(row('Produto sem saldo informado').getByText('Zerado', { exact: true })).toHaveCount(0)
+  await expect(row('Gin tônica')).toHaveClass(/drinkRow/)
+  const help = page.getByRole('button', { name: 'Sobre os tipos e indicadores de produtos e drinks' })
+  await help.focus()
+  await expect(page.getByRole('tooltip')).toContainText('Zerado · linha vermelha')
+  await expect(page.getByRole('tooltip')).toContainText('Clique em Por receita ou Na receita')
+})
+
+test('ajuda financeira acompanha a seção aberta', async ({ page }) => {
+  await setup(page)
+  const help = page.getByRole('button', { name: 'Sobre os indicadores financeiros', exact: true })
+  await page.goto('/#/financeiro')
+  await help.focus()
+  await expect(page.getByRole('tooltip')).toContainText('Cobertura das contas a pagar em 30 dias')
+  await page.getByRole('link', { name: 'Resultado e vendas', exact: true }).press('Enter')
+  await help.focus()
+  await expect(page.getByRole('tooltip')).toContainText('O lucro líquido também desconta as despesas do período')
+  await expect(page.getByRole('tooltip')).not.toContainText('Cobertura das contas a pagar')
 })
 
 test('catálogo alterna margem e giro com cores e consulta histórico só quando solicitado', async ({ page }) => {
@@ -1366,7 +1581,7 @@ test('caixa exibe abertura na página e sessões anteriores com detalhes reais',
   requests.push({path:url.pathname,query:Object.fromEntries(url.searchParams),body:request.method()==='POST'?request.postDataJSON():null})
   if(url.pathname==='/caixa/sessoes/atual')return route.fulfill({status:204,headers:feedbackHeaders})
   if(url.pathname==='/caixa/caixas')return route.fulfill({headers:feedbackHeaders,json:envelope([{id:'box',nome:'Caixa principal',emUso:false,ativo:true}])})
-  if(url.pathname==='/caixa/sessoes/old-session')return route.fulfill({headers:feedbackHeaders,json:{...old,resumoFechamento:{totalVendas:200},justificativaDivergencia:'Diferença conferida pela gerência',movimentacoes:[]}})
+  if(url.pathname==='/caixa/sessoes/old-session')return route.fulfill({headers:feedbackHeaders,json:{...old,dinheiroEsperado:8123.45,resumoFechamento:{totalVendas:14325.67},justificativaDivergencia:'Diferença conferida pela gerência',movimentacoes:[]}})
   if(request.method()==='POST')return route.fulfill({status:409,headers:feedbackHeaders,json:{message:'Caixa ocupado por outro operador'}})
   return route.fulfill({headers:feedbackHeaders,json:envelope([old],0,5,6)})
  })
@@ -1392,6 +1607,13 @@ test('caixa exibe abertura na página e sessões anteriores com detalhes reais',
  await page.keyboard.press('Escape')
  await page.screenshot({path:'test-results/cash-opening-mobile.png',fullPage:true,animations:'disabled'})
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true)
+ await page.getByRole('button',{name:'Ver detalhes',exact:true}).click()
+ const details = page.getByRole('dialog')
+ for (const [label, amount] of [['Recebido aprovado', 'R$ 14.325,67'], ['Esperado na gaveta', 'R$ 8.123,45']]) {
+   const value = details.getByText(label, { exact: true }).locator('..').locator('dd')
+   await expect(value).toHaveText(amount)
+   expect(await value.evaluate(element => getComputedStyle(element).whiteSpace === 'nowrap' && element.scrollWidth <= element.clientWidth)).toBe(true)
+ }
 })
 test('caixa vazio leva ao cadastro em pop-up nos ajustes sem abrir turno automaticamente', async ({ page }) => {
  await setup(page)
@@ -2848,7 +3070,7 @@ test('painel operacional e formulários mantêm a largura útil de celular a des
   const screens = [
     ['dashboard', 'Visão geral', 'Prioridades de reposição'],
     ['dashboard?aba=caixa', 'Visão geral', 'Composição da gaveta'],
-    ['produtos', 'Produtos e drinks', 'Filtros'],
+    ['produtos', 'Produtos e drinks', 'Filtro de produtos'],
     ['categorias', 'Categorias', 'Filtros de categorias'],
     ['novo', 'Novo produto', 'Produto padrão'],
     ['editar?id=' + strawberry.id, 'Editar produto', 'Identificação'],
@@ -2880,6 +3102,18 @@ test('painel operacional e formulários mantêm a largura útil de celular a des
       expect(Math.abs(restock.y - expiry.y)).toBeLessThan(1)
       expect(Math.abs(restock.width - expiry.width)).toBeLessThan(1)
       expect(Math.abs(restock.height - expiry.height)).toBeLessThan(1)
+    }
+    if (path === 'produtos') {
+      await page.setViewportSize({ width: 1024, height: 900 })
+      const margin = page.getByRole('button', { name: 'Margem', exact: true })
+      const search = page.getByRole('searchbox', { name: 'Buscar nome', exact: true })
+      const indicatorGroup = margin.locator('../..')
+      await expect(indicatorGroup).toBeVisible()
+      expect((await indicatorGroup.boundingBox()).width).toBeLessThan((await search.boundingBox()).width)
+      expect(await indicatorGroup.evaluate(group => {
+        const buttonsWidth = Array.from(group.children).reduce((width, child) => width + child.getBoundingClientRect().width, 0)
+        return Math.abs(group.getBoundingClientRect().width - buttonsWidth - 2)
+      })).toBeLessThanOrEqual(1)
     }
     if (path === 'produtos' || path === 'categorias' || path === 'movimentacoes') {
       const action = path === 'produtos' ? 'Etiqueta' : path === 'categorias' ? 'Nova categoria' : 'Ver detalhes'
@@ -2963,6 +3197,36 @@ test('apresentação, login e recuperação cabem de celular a desktop', async (
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
     await expectResponsiveBounds(page, path || 'Página inicial')
   }
+})
+
+test('prévia pública usa indicadores do painel e filtros sobre dados simulados', async ({ page }) => {
+  const calls = await setup(page)
+  await page.goto('/#/demo')
+  const modules = page.getByRole('tablist', { name: 'Módulos da demonstração' })
+  const preview = page.getByRole('tabpanel')
+  await expect(preview.getByText('Saúde do estoque', { exact: true })).toBeVisible()
+  await expect(preview.getByRole('heading', { name: 'Prioridades de reposição' })).toBeVisible()
+  await preview.getByRole('button', { name: 'Caixa', exact: true }).click()
+  await expect(preview.getByText('Recebido no turno', { exact: true })).toBeVisible()
+  await expect(preview.getByText('R$ 805,70', { exact: true })).toBeVisible()
+
+  await modules.getByRole('tab', { name: 'Produtos e drinks' }).click()
+  await preview.getByRole('group', { name: 'Tipo', exact: true }).getByRole('button', { name: 'Drinks' }).click()
+  await preview.getByRole('group', { name: 'Status', exact: true }).getByRole('button', { name: 'Inativos' }).click()
+  await expect(preview.getByRole('rowheader', { name: 'Negroni' })).toBeVisible()
+  await expect(preview.getByRole('rowheader', { name: 'Gin tônica' })).toHaveCount(0)
+  await preview.getByRole('searchbox', { name: 'Buscar nome' }).fill('DRK-002')
+  await expect(preview.getByRole('rowheader', { name: 'Negroni' })).toBeVisible()
+
+  await modules.getByRole('tab', { name: 'Reposição' }).click()
+  await expect(preview.getByRole('heading', { name: 'Sem mínimo definido' })).toBeVisible()
+  await modules.getByRole('tab', { name: 'Financeiro' }).click()
+  await expect(preview.getByRole('heading', { name: 'Saldo financeiro acumulado' })).toBeVisible()
+  await expect(preview.getByRole('heading', { name: 'Fluxo de caixa' })).toBeVisible()
+  await preview.getByRole('button', { name: 'Resultado e vendas' }).click()
+  await expect(preview.getByText('R$ 12.680,00', { exact: true }).first()).toBeVisible()
+  await expect(preview.getByText('R$ 25.050,00', { exact: true })).toBeVisible()
+  expect(calls).toEqual([])
 })
 
 test('exportação da página envia os IDs e filtros ao servidor', async ({page}) => {

@@ -2,6 +2,7 @@ import { useId, useState } from 'react'
 import { ChevronDown, Download, FilterX, SlidersHorizontal } from 'lucide-react'
 import access from '@/entities/access/ui/access.module.css'
 import { DataTable } from '@/shared/ui/data-table/DataTable.jsx'
+import { PageSizeControl } from '@/shared/ui/data-table/PageSizeControl.jsx'
 import { FilterHeader } from '@/shared/ui/filters/FilterActions.jsx'
 import { Sel } from '@/shared/ui/primitives/ui.jsx'
 import s from './ReportsPage.module.css'
@@ -95,7 +96,7 @@ export function ReportTable({ title, columns, rows, searches, filters, emptyText
             {onExport && <button type="button" onClick={exportRows} disabled={exporting || !visibleRows.length}><Download size={15} aria-hidden="true" />{exporting ? 'Exportando…' : hasFilter ? 'Exportar resultados filtrados' : 'Exportar Excel'}</button>}
           </div>
         </FilterHeader>
-        <div id={id} className={s.tableFilterFields} data-field-count={searches.length + filters.length + 1} hidden={!expanded}>
+        <div id={id} className={s.tableFilterFields} hidden={!expanded}>
           {searches.map(({ key, label, placeholder }) => (
             <label key={key} className={s.tableFilterField}>
               {label}
@@ -107,16 +108,11 @@ export function ReportTable({ title, columns, rows, searches, filters, emptyText
             <ReportFilter key={filter.key} id={id + '-' + filter.key} filter={filter} value={selected[filter.key] ?? ''}
               onChange={value => setSelected(current => ({ ...current, [filter.key]: value }))} />
           ))}
-          <div className={s.tableFilterField}>
-            <label htmlFor={id + '-tamanho'}>Itens por página</label>
-            <Sel id={id + '-tamanho'} value={pageSize} onChange={event => setPageSize(Number(event.target.value))}>
-              {PAGE_SIZES.map(size => <option key={size} value={size}>{size}</option>)}
-            </Sel>
-          </div>
         </div>
       </div>
       {!tableProps.compactColumns && <p className={s.tableHint}>Deslize a tabela para ver todas as colunas.</p>}
       <DataTable {...tableProps} columns={columns} rows={visibleRows} pageSize={pageSize}
+        paginationControls={<PageSizeControl value={pageSize} options={PAGE_SIZES} onChange={setPageSize} />}
         emptyText={rows.length ? 'Nenhum resultado para os filtros aplicados.' : emptyText} />
     </section>
   )

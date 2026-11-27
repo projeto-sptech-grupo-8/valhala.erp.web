@@ -6,7 +6,7 @@ import { usePanelNavigate } from '@/shared/lib/navigation/usePanelNavigate.js'
 import { useMediaQuery } from '@/shared/lib/hooks/useMediaQuery.js'
 import Brand from '@/shared/ui/brand/Brand.jsx'
 import { useStore } from '@/entities/store'
-import { pages, canAccess, firstAllowed } from '@/entities/access'
+import { pages, canAccess } from '@/entities/access'
 import { Sidebar } from '@/widgets/sidebar/ui/Sidebar.jsx'
 import { PageHeader } from '@/widgets/page-header/ui/PageHeader.jsx'
 import { PrintHost } from '@/features/printing'
@@ -78,7 +78,7 @@ function Blocked({ icon: Icon, title, text, action, onAction }) {
 
 function Shell({ exit }) {
   const { user, role, can, products, drinks } = useStore()
-  const home = firstAllowed(role)
+  const home = 'dashboard'
   const { pathname } = useLocation()
   const [searchParams] = useSearchParams()
   const navigate = usePanelNavigate()
@@ -87,7 +87,7 @@ function Shell({ exit }) {
   const params = Object.fromEntries(searchParams)
 
   const known = !!pages[page]
-  const allowed = known && canAccess(role, page, can)
+  const allowed = known && canAccess(page, can)
   const isCashPage = allowed && page === 'caixa'
   const cashFullscreen = useCashFullscreen(isCashPage)
 
@@ -192,7 +192,7 @@ function Shell({ exit }) {
         )}
         {allowed && (
           <>
-            <PageHeader onActionsMount={setHeaderActionsElement} page={page} reportTab={page === 'relatorios' ? params.aba : undefined} navigate={navigate} extra={editName || titles[routeKey]} onBack={handleBack} help={headerHelp?.page === page ? headerHelp.text : null} action={cashViewAction} />
+            <PageHeader onActionsMount={setHeaderActionsElement} page={page} activeTab={params.aba} navigate={navigate} extra={editName || titles[routeKey]} onBack={handleBack} help={headerHelp?.page === page ? headerHelp.text : null} action={cashViewAction} />
             {(page==='caixa'||page==='pedidos') && <FiscalReceipts />}
             <Outlet context={{ setTitle, setBackAction, setHeaderHelp, headerActionsElement }} />
           </>

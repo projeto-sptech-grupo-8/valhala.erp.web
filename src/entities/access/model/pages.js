@@ -8,31 +8,31 @@ import {
  * Registro único de páginas do painel.
  * section → grupo do menu e 1º nível do breadcrumb
  * parent  → página "mãe" no breadcrumb (ex.: Editar produto › Produtos)
- * perm    → código de funcionalidade exigido (sobrepõe o acesso por perfil)
+ * perm    → funcionalidade exigida para abrir a página
  */
 export const pages = {
   pedidos: { section:'Vendas', title:'Pedidos', desc:'Consulte e retome os pedidos do servidor.', icon:Receipt, perm:'CAIXA_VISUALIZAR' },
   sessoescaixa: { section:'Vendas', title:'Sessões de caixa', desc:'Confira turnos e divergências.', icon:CreditCard, perm:'CAIXA_VISUALIZAR' },
   ajustescaixa: { section:'Vendas', title:'Ajustes do caixa', desc:'Políticas, maquininhas e taxas de Vendas.', icon:Settings, perm:'CAIXA_VISUALIZAR' },
-  novamovimentacao: { section: 'Estoque', title: 'Nova movimentação', desc: 'Registre uma entrada, saída, perda ou ajuste e confira o efeito previsto no estoque antes de salvar.', parent: 'movimentacoes', perm: 'MOVIMENTAR_ESTOQUE' },
+  novamovimentacao: { section: 'Estoque', title: 'Nova movimentação', desc: 'Registre uma entrada, saída, perda ou ajuste e confira o efeito previsto no estoque antes de salvar.', parent: 'movimentacoes', perm: ['VISUALIZAR_ESTOQUE', 'MOVIMENTAR_ESTOQUE'] },
   dashboard:     { section: 'Início',        title: 'Visão geral',            desc: 'Consulte o estoque do estabelecimento ou os recebimentos do seu turno.', icon: LayoutDashboard },
   produtos:      { section: 'Catálogo',       title: 'Produtos e drinks',             desc: 'Bebidas, drinks, doses e combos vendidos pela adega.', icon: Package, perm: 'VISUALIZAR_ESTOQUE' },
   categorias:    { section: 'Catálogo',       title: 'Categorias',           desc: 'Organização do catálogo por família de produto.', icon: Tag, perm: 'VISUALIZAR_ESTOQUE' },
   movimentacoes: { section: 'Estoque',       title: 'Movimentações',        desc: 'Histórico completo de entradas, saídas e ajustes.', icon: ArrowLeftRight, perm: 'VISUALIZAR_ESTOQUE' },
-  reposicao:     { section: 'Estoque',       title: 'Reposição',            desc: 'Produtos que precisam ser reabastecidos.', icon: ShoppingCart },
+  reposicao:     { section: 'Estoque',       title: 'Reposição',            desc: 'Produtos que precisam ser reabastecidos.', icon: ShoppingCart, perm: 'VISUALIZAR_ESTOQUE' },
   caixa:         { section: 'Vendas',        perm: 'CAIXA_VISUALIZAR', title: 'Caixa',                desc: 'Vendas de balcão e mesas simultâneas.', icon: CreditCard },
   notafiscal:    { perm: 'CAIXA_VISUALIZAR', section: 'Vendas',        title: 'Notas fiscais',        desc: 'Consulte as NFC-e emitidas e baixe seus arquivos XML.', icon: Receipt },
-  entradanf:     { section: 'Estoque',       title: 'Entrada por XML',      desc: 'Importe a NF-e do emitente: itens, custo, lote e validade conferidos antes de entrar.', icon: FileUp, perm: 'MOVIMENTAR_ESTOQUE' },
+  entradanf:     { section: 'Estoque',       title: 'Entrada por XML',      desc: 'Importe a NF-e do emitente: itens, custo, lote e validade conferidos antes de entrar.', icon: FileUp, perm: ['VISUALIZAR_ESTOQUE', 'MOVIMENTAR_ESTOQUE'] },
   validades:     { section: 'Estoque',       title: 'Validades e lotes',    desc: 'Consulte saldos por lote, acompanhe vencimentos e registre perdas no estoque.', icon: CalendarClock, perm: 'VISUALIZAR_ESTOQUE' },
   auditoria:     { section: 'Vendas',        perm: 'CAIXA_VISUALIZAR', title: 'Auditoria do caixa',   desc: 'Descontos, cancelamentos e itens removidos — quem fez, quem autorizou e quanto.', icon: ShieldCheck },
   relatorios:    { section: 'Financeiro',    title: 'Relatórios',           desc: 'Curva ABC, margem, ruptura, horários de pico, canais e perdas.', icon: BarChart3, perm: 'VISUALIZAR_RELATORIOS' },
   financeiro:    { section: 'Financeiro',    title: 'Financeiro',           desc: 'Fluxo de caixa, resultado e contas a pagar.', icon: TrendingUp, perm: 'VISUALIZAR_FINANCEIRO' },
-  novo:          { section: 'Catálogo',       title: 'Novo produto',         desc: 'Cadastre um item no catálogo da adega.', parent: 'produtos', perm: 'GERENCIAR_ESTOQUE' },
-  editar:        { section: 'Catálogo',       title: 'Editar produto',       desc: 'Atualize os dados de um item do catálogo.', parent: 'produtos', perm: 'GERENCIAR_ESTOQUE' },
+  novo:          { section: 'Catálogo',       title: 'Novo produto',         desc: 'Cadastre um item no catálogo da adega.', parent: 'produtos', perm: ['VISUALIZAR_ESTOQUE', 'GERENCIAR_ESTOQUE'] },
+  editar:        { section: 'Catálogo',       title: 'Editar produto',       desc: 'Atualize os dados de um item do catálogo.', parent: 'produtos', perm: ['VISUALIZAR_ESTOQUE', 'GERENCIAR_ESTOQUE'] },
   usuarios:      { section: 'Controle de acesso', title: 'Usuários',             desc: 'Contas do estabelecimento, perfis vinculados e status de acesso.', icon: Users, perm: 'USUARIOS_VISUALIZAR' },
-  novousuario:   { section: 'Controle de acesso', title: 'Novo usuário',         desc: 'Crie uma conta e vincule um perfil de acesso.', parent: 'usuarios', perm: 'USUARIOS_CRIAR' },
+  novousuario:   { section: 'Controle de acesso', title: 'Novo usuário',         desc: 'Crie uma conta e vincule um perfil de acesso.', parent: 'usuarios', icon: Users, perm: 'USUARIOS_CRIAR' },
   usuario:       { section: 'Controle de acesso', title: 'Detalhe do usuário',   desc: 'Dados da conta, perfil e permissões efetivas.', parent: 'usuarios', perm: 'USUARIOS_VISUALIZAR' },
-  editarusuario: { section: 'Controle de acesso', title: 'Editar usuário',       desc: 'Atualize os dados da conta.', parent: 'usuarios', perm: 'USUARIOS_EDITAR' },
+  editarusuario: { section: 'Controle de acesso', title: 'Editar usuário',       desc: 'Atualize os dados da conta.', parent: 'usuarios', perm: ['USUARIOS_VISUALIZAR', 'USUARIOS_EDITAR'] },
   perfis:        { section: 'Controle de acesso', title: 'Perfis de acesso',     desc: 'Conjuntos de funcionalidades atribuídos aos usuários.', icon: KeyRound, perm: 'PERFIS_GERENCIAR' },
   novoperfil:    { section: 'Controle de acesso', title: 'Novo perfil',          desc: 'Defina um nome e as funcionalidades do perfil.', parent: 'perfis', perm: 'PERFIS_GERENCIAR' },
   perfil:        { section: 'Controle de acesso', title: 'Detalhe do perfil',    desc: 'Funcionalidades e usuários vinculados.', parent: 'perfis', perm: 'PERFIS_GERENCIAR' },
@@ -63,58 +63,36 @@ export const domains = [
   // RF09 — resultado, fluxo de caixa e contas
   { id: 'financeiro', label: 'Financeiro',         icon: TrendingUp, groups: [{ items: ['financeiro', 'relatorios'] }] },
   // RF10 — quem pode fazer o quê
-  { id: 'acesso',     label: 'Controle de acesso', icon: KeyRound, groups: [{ items: ['usuarios'] }] },
+  { id: 'acesso',     label: 'Controle de acesso', icon: KeyRound, groups: [{ items: ['usuarios', 'perfis', 'novousuario'] }] },
   { id: 'configuracoes', label: 'Configurações gerais', icon: Settings, groups: [{ items: ['geral'] }] },
 ]
 
 /* Fora das regras de negócio: preferências da conta e do sistema (abre pelo rodapé do menu) */
 export const accountDomain = { id: 'conta', label: 'Aparência', icon: Settings, groups: [] }
 
-const NAV_ORDER = [...domains, accountDomain].flatMap(d => d.groups.flatMap(g => g.items))
-
-/* domínios visíveis para o usuário (grupos/itens sem permissão são removidos) */
-export function visibleDomains(role, can, list = domains) {
+export function visibleDomains(can, list = domains) {
+  const visibleItem = id => canAccess(id, can) && (id !== 'novousuario' || !can('USUARIOS_VISUALIZAR'))
   return list
-    .map(d => ({ ...d, groups: d.groups.map(g => ({ ...g, items: g.items.filter(id => pages[id] && canAccess(role, id, can)) })).filter(g => g.items.length) }))
+    .map(d => ({ ...d, groups: d.groups.map(g => ({ ...g, items: g.items.filter(visibleItem) })).filter(g => g.items.length) }))
     .filter(d => d.groups.length)
 }
 
-/* ─── RBAC (RF10 / RNF04) ───
- * Espelha os perfis do backend (profileName). Páginas filhas herdam a permissão da mãe.
- */
-const ALL = Object.keys(pages)
-const ESTOQUE = ['dashboard', 'produtos', 'categorias', 'movimentacoes', 'reposicao', 'novo', 'editar', 'entradanf', 'validades']
-
-const roleAccess = {
-  Administrador:     ALL,
-  Gerente:           ALL, // a doc da API: o gerente sempre possui todas as permissões
-  Caixa:             ['dashboard', 'caixa', 'produtos', 'notificacoes', 'seguranca'],
-  Estoquista:        [...ESTOQUE, 'notificacoes', 'seguranca'],
-  Financeiro:        ['dashboard', 'financeiro', 'relatorios', 'notafiscal', 'notificacoes', 'seguranca'],
-  'Somente leitura': ['dashboard', 'produtos', 'categorias', 'movimentacoes', 'reposicao', 'validades', 'relatorios', 'seguranca'],
+// Mesma normalização usada pelo backend para identificar o perfil reservado.
+export function isManagerProfile(name) {
+  const role = String(name ?? '').normalize('NFD').replace(/\p{M}/gu, '')
+    .toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+  return role === 'GERENTE'
 }
 
-/* Ações de escrita bloqueadas para perfis de consulta */
-
-/*
- * can(codigo) — permissão por funcionalidade.
- * Gerente/Administrador têm tudo; os demais usam a lista de permissões vinda de /usuario/me
- * (quando o backend a enviar). Sem a lista, nega por segurança — a API valida de qualquer forma.
- */
-const FULL_ACCESS = ['Gerente', 'Administrador']
 export function makeCan(user) {
   const perms = new Set(user?.permissoes || [])
-  return (codigo) => FULL_ACCESS.includes(user?.profileName) || perms.has(codigo)
+  const manager = isManagerProfile(user?.profileName)
+  return codigo => manager || perms.has(codigo)
 }
 
-export function canAccess(role, page, can) {
-  const meta = pages[page]
-  if (page === 'geral') return true
-  if (meta?.perm && can) return can(meta.perm)
-  const allowed = roleAccess[role] || roleAccess['Somente leitura']
-  return allowed.includes(page)
-}
-
-export function firstAllowed(role) {
-  return NAV_ORDER.find(p => !pages[p].perm && canAccess(role, p)) || 'dashboard'
+export function canAccess(page, can) {
+  if (!Object.hasOwn(pages, page)) return false
+  const required = pages[page].perm
+  if (!required) return true
+  return Array.isArray(required) ? required.every(can) : can(required)
 }

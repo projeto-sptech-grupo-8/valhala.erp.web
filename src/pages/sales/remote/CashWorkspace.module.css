@@ -43,6 +43,7 @@
 .stockAlert svg { flex: none; }
 .hint { font-size:11px; color:var(--dim); line-height:1.7; margin:18px 0 0; }
 .pager { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; font-size:12px; color:var(--dim); margin-top:20px; }
+.pagerNavigation { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
 .pager button { min-height:36px; font-size:12px; }
 .cartBody { padding:0; margin:0; border:0; min-width:0; }
 .queue { border-top:1px solid var(--line); border-bottom:1px solid var(--line); padding:12px 0; margin:16px 0; }
@@ -78,11 +79,6 @@
 .orderTabs strong { font-size:16px; font-variant-numeric:tabular-nums; }
 .orderTabs small { min-width:0; max-width:100%; white-space:normal; overflow-wrap:anywhere; line-height:1.25; font-size:10px; font-weight:400; }
 .orderTabs button:disabled { opacity:.45; }
-.catalogHeading { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; }
-.catalogHeading > div { min-width:0; }
-.pageSize { display:grid; gap:8px; color:var(--dim); font-size:11px; flex-shrink:0; }
-.pageSize select { min-height:40px; width:90px; box-sizing:border-box; }
-@media(max-width:500px) { .catalogHeading { flex-wrap:wrap; } .pageSize { width:100%; display:flex; align-items:center; justify-content:space-between; } }
 .orderHeading { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:10px 12px; margin-bottom:9px; }
 .orderHeading h2 { margin-bottom:0 !important; min-width:0; }
 .orderHeading > span { flex-shrink:0; }

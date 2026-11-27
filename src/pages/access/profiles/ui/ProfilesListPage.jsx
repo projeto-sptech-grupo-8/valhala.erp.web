@@ -1,14 +1,15 @@
 import { FilterActions, FilterHeader } from '@/shared/ui/filters/FilterActions.jsx'
 import { useId, useState } from 'react'
-import { Plus, Eye, Pencil, Copy, Trash2, KeyRound, SlidersHorizontal, ChevronDown, Users, ListChecks, CircleHelp } from 'lucide-react'
+import { Plus, Eye, Pencil, Copy, Trash2, KeyRound, SlidersHorizontal, ChevronDown, Users, ListChecks, CircleHelp, ShieldCheck } from 'lucide-react'
 import { api } from '@/shared/api/api.js'
 import { useResource } from '@/shared/lib/hooks/useResource.js'
 import { agruparPorModulo } from '@/shared/config/funcionalidades.js'
+import { isManagerProfile } from '@/entities/access'
 import { useStore } from '@/entities/store'
 import { DataTable } from '@/shared/ui/data-table/DataTable.jsx'
 import { AccessTabs, ActionMenu } from '@/entities/access/ui'
 import { ErrorBlock, LoadingBlock } from '@/shared/ui/feedback/ManagementFeedback.jsx'
-import { EditProfileModal, DeleteProfileModal } from '@/features/access-management'
+import { EditProfileModal, EditProfilePermissionsModal, DeleteProfileModal } from '@/features/access-management'
 import a from '@/entities/access/ui/access.module.css'
 import ui from '@/pages/catalog/products/ui/ProductsPage.module.css'
 import filters from './ProfilesListPage.module.css'
@@ -16,7 +17,7 @@ import { ProfileDetailsDrawer } from './ProfileDetailsDrawer.jsx'
 
 /* ─── Lista de perfis de acesso ─── */
 export function ProfilesList({ navigate, pageParams }) {
-  const { can } = useStore()
+  const { can, user, session } = useStore()
   const perfis = useResource(() => api.perfis.listar(), [])
   const users = useResource(() => (can('USUARIOS_VISUALIZAR') ? api.usuarios.listar() : []), [])
   const funcs = useResource(() => api.funcionalidades.listar(), [])
@@ -24,7 +25,7 @@ export function ProfilesList({ navigate, pageParams }) {
   const [detailId, setDetailId] = useState(pageParams?.detalhe || null)
   const [filtersOpen, setFiltersOpen] = useState(true)
   const [range, setRange] = useState({ funcMin: '', funcMax: '', userMin: '', userMax: '' })
-  const [modal, setModal] = useState(null) // { type: 'edit' | 'delete', perfil }
+  const [modal, setModal] = useState(null) // { type, perfil }
 
   if (perfis.error && !perfis.data) {
     return (
@@ -41,11 +42,12 @@ export function ProfilesList({ navigate, pageParams }) {
   for (const u of users.data || []) { const group = usersByProfile.get(u.profileId) || []; group.push(u); usersByProfile.set(u.profileId, group) }
   const usuariosDo = id => usersByProfile.get(id) || []
   const query = q.trim().toLowerCase()
+  const total = funcs.data?.length || 0
+  const permissionCount = p => isManagerProfile(p.nome) && total ? total : p.codigos.length
   const invalidRange = ['func', 'user'].some(key => range[key + 'Min'] !== '' && range[key + 'Max'] !== '' && Number(range[key + 'Min']) > Number(range[key + 'Max']))
   const within = (value, min, max) => (min === '' || value >= Number(min)) && (max === '' || value <= Number(max))
   const hasFilters = !!query || Object.values(range).some(value => value !== '')
-  const rows = invalidRange ? [] : all.filter(p => (!query || p.nome.toLowerCase().includes(query) || p.descricao.toLowerCase().includes(query)) && within(p.codigos.length, range.funcMin, range.funcMax) && (!usersKnown || within(usuariosDo(p.id).length, range.userMin, range.userMax)))
-  const total = funcs.data?.length || 0
+  const rows = invalidRange ? [] : all.filter(p => (!query || p.nome.toLowerCase().includes(query) || p.descricao.toLowerCase().includes(query)) && within(permissionCount(p), range.funcMin, range.funcMax) && (!usersKnown || within(usuariosDo(p.id).length, range.userMin, range.userMax)))
 
   const columns = [
     {
@@ -61,12 +63,12 @@ export function ProfilesList({ navigate, pageParams }) {
       ),
     },
     {
-      key: 'func', header: 'Funcionalidades', sort: p => p.codigos.length,
+      key: 'func', header: 'Funcionalidades', sort: permissionCount,
       render: p => {
-        const mods = funcs.data ? agruparPorModulo(funcs.data.filter(f => p.codigos.includes(f.codigo))) : []
+        const mods = funcs.data ? agruparPorModulo(isManagerProfile(p.nome) ? funcs.data : funcs.data.filter(f => p.codigos.includes(f.codigo))) : []
         return (
           <span className={a.funcCell}>
-            <b>{p.codigos.length}{total ? <small> de {total}</small> : null}</b>
+            <b>{permissionCount(p)}{total ? <small> de {total}</small> : null}</b>
             <span>{mods.map(m => <em key={m.id} className={a.modChip}>{m.nome}</em>)}</span>
           </span>
         )
@@ -86,14 +88,16 @@ export function ProfilesList({ navigate, pageParams }) {
       key: 'acoes', header: 'Ações', sort: false, align: 'center',
       render: p => {
         const n = usuariosDo(p.id).length
+        const reserved = isManagerProfile(p.nome)
         return (
           <ActionMenu label={`Ações do perfil ${p.nome}`} items={[
             { label: 'Ver detalhes', icon: Eye, onClick: () => setDetailId(p.id) },
-            { label: 'Editar nome e descrição', icon: Pencil, onClick: () => setModal({ type: 'edit', perfil: p }) },
+            (!reserved || isManagerProfile(user?.profileName)) && { label: 'Editar nome e descrição', icon: Pencil, onClick: () => setModal({ type: 'edit', perfil: p }) },
+            !reserved && funcs.data && p.codigos.every(can) && { label: 'Editar funcionalidades', icon: ShieldCheck, onClick: () => setModal({ type: 'permissions', perfil: p }) },
             { label: 'Duplicar perfil', icon: Copy, onClick: () => navigate('novoperfil', { copiar: p.id }) },
-            { divider: true },
-            { label: 'Excluir perfil', icon: Trash2, danger: true, onClick: () => setModal({ type: 'delete', perfil: p }),
-              disabled: !usersKnown || n > 0, hint: !usersKnown ? 'Consulte os usuários vinculados antes de excluir' : `${n} usuário(s) vinculado(s)` },
+            !reserved && { divider: true },
+            !reserved && { label: 'Excluir perfil', icon: Trash2, danger: true, onClick: () => setModal({ type: 'delete', perfil: p }),
+              disabled: usersKnown && n > 0, hint: `${n} usuário(s) vinculado(s)` },
           ]} />
         )
       },
@@ -134,6 +138,15 @@ export function ProfilesList({ navigate, pageParams }) {
       {modal?.type === 'edit' && (
         <EditProfileModal perfil={modal.perfil} perfis={all} onClose={() => setModal(null)}
           onSaved={(p) => { perfis.setData(list => list.map(x => (x.id === p.id ? p : x))); setModal(null) }} />
+      )}
+      {modal?.type === 'permissions' && (
+        <EditProfilePermissionsModal perfil={modal.perfil} funcionalidades={funcs.data.filter(f => can(f.codigo))}
+          onClose={() => setModal(null)}
+          onSaved={p => {
+            perfis.setData(list => list.map(x => x.id === p.id ? p : x))
+            setModal(null)
+            if (user?.profileId === p.id) session.logout()
+          }} />
       )}
       {modal?.type === 'delete' && (
         <DeleteProfileModal perfil={modal.perfil} usuarios={usuariosDo(modal.perfil.id)} onClose={() => setModal(null)}

@@ -77,7 +77,7 @@
 
 .table tbody tr:last-child td { border-bottom: 0; }
 .table tbody tr:hover td { background: rgb(var(--accent) / .035); }
-.selected td { background: rgb(var(--accent) / .07) !important; }
+.selected td { background: var(--selected-row-bg, rgb(var(--accent) / .07)) !important; }
 .clickable { cursor: pointer; }
 
 .check {
@@ -108,7 +108,10 @@
   font-size: 12px;
   color: var(--dim);
 }
-.pager > div { display: flex; align-items: center; gap: 10px; }
+.pageControls, .pageNavigation { display: flex; align-items: center; gap: 10px; }
+.pageControls { flex-wrap: wrap; justify-content: flex-end; margin-inline-start: auto; }
+.pageSize { display: inline-flex; flex: none; align-items: center; gap: 8px; white-space: nowrap; }
+.pageSize select { flex: none; width: 68px; min-height: 34px; }
 .pager button { padding: 6px 8px; }
 .pager button:disabled { opacity: .35; cursor: not-allowed; }
 

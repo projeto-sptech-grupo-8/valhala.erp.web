@@ -8,10 +8,11 @@ import { api } from '@/shared/api/api.js'
 import { useStore } from '@/entities/store'
 import { useListParams, useQueryResource } from '@/shared/lib/hooks/usePagedQuery.js'
 import { DataTable } from '@/shared/ui/data-table/DataTable.jsx'
+import { PageSizeControl } from '@/shared/ui/data-table/PageSizeControl.jsx'
 import { Drawer } from '@/shared/ui/drawer/Drawer.jsx'
 import { fmtNum, fmtDateTime } from '@/shared/lib/format.js'
 import { stamp } from '@/shared/lib/csv.js'
-import { QueryFeedback, PageSize } from '@/features/catalog/remote/RemoteControls.jsx'
+import { QueryFeedback } from '@/features/catalog/remote/RemoteControls.jsx'
 import { RecordAutocomplete } from '@/features/catalog/product-editor/ui/CategoryAutocomplete.jsx'
 import { lotDate } from '@/entities/inventory/model/remoteLots.js'
 import ui from './MovementsPage.module.css'
@@ -71,14 +72,13 @@ function MovementHistory({ navigate }) {
       <DateRangeFilter label="Período" className={ui.periodFilter} selected={selectedPeriod}
         onChange={({ id, dataInicio, dataFim }) => update({ periodo: id === 'todos' ? '' : id, dataInicial: dataInicio, dataFinal: dataFim })} />
       {canListUsers && <label>Operador<select aria-label="Filtrar por operador" disabled={operators.loading || !!operators.error} value={params.usuarioId || ''} onChange={e => update({ usuarioId: e.target.value })}><option value="">{operators.loading ? 'Carregando operadores…' : operators.error ? 'Operadores indisponíveis' : 'Todos os operadores'}</option>{params.usuarioId && !operators.data?.some(user => user.id === params.usuarioId) && <option value={params.usuarioId}>Operador selecionado</option>}{operators.data?.map(user => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}</select>{operators.error && <button type="button" onClick={operators.reload}>Tentar carregar operadores</button>}</label>}
-      <PageSize value={params.tamanho} onChange={tamanho => update({ tamanho })} />
       </div>
       </div>
       <div className={ui.searchRow}><div className={ui.search}><RecordAutocomplete kind="produtos" active={false} productType={null} label="Buscar produto" placeholder="Digite o nome ou código do produto" value={params.produtoId} onChange={produtoId => update({ produtoId })} /></div><div className={ui.export}><span>Ações</span><div className={ui.actions}><button title="Exportar em Excel todas as movimentações que correspondem aos filtros" disabled={exporting || !rows.length || query.loading || !!query.error} onClick={exportPage}><Download size={15} aria-hidden="true" />{exporting ? 'Exportando…' : 'Exportar'}</button></div></div></div>
     </section>
     {exportError && <Notice title="Não foi possível exportar" focus>{exportError}</Notice>}
     <QueryFeedback query={query} />
-    <DataTable caption="Histórico de movimentações" columns={columns} rows={rows} pageSize={params.tamanho} compactColumns={['produtoNome', 'tipo', 'quantidade', 'acao']}
+    <DataTable caption="Histórico de movimentações" columns={columns} rows={rows} pageSize={params.tamanho} paginationControls={<PageSizeControl value={params.tamanho} onChange={tamanho => update({ tamanho })} />} compactColumns={['produtoNome', 'tipo', 'quantidade', 'acao']}
       emptyText={query.loading ? 'Carregando histórico…' : query.error ? 'Consulta indisponível.' : 'Nenhuma movimentação encontrada neste período e filtros.'}
       remote={{ page: params.pagina, total: query.data?.totalItens || 0, loading: query.loading,
         sort: { key: request.ordenarPor, dir: params.direcao.toLowerCase() },

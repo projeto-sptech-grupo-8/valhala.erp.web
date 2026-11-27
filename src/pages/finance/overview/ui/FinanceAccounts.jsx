@@ -7,6 +7,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Eye, Pencil, CircleCheck, Ban, SlidersHorizontal, ChevronDown, ReceiptText, CalendarClock } from 'lucide-react'
 import { DataTable } from '@/shared/ui/data-table/DataTable.jsx'
+import { PageSizeControl } from '@/shared/ui/data-table/PageSizeControl.jsx'
 import { ErrorBlock, LoadingBlock, Modal, Notice } from '@/shared/ui/feedback/ManagementFeedback.jsx'
 import { useQueryResource } from '@/shared/lib/hooks/usePagedQuery.js'
 import { useToast } from '@/shared/ui/notifications/useToast.js'
@@ -99,15 +100,13 @@ export function AccountList({ onSelect, revision, referencia, canManage = false 
               })}
             </div>
           </div>}
-          <label>Itens por página<select value={tamanho} onChange={e => { setTamanho(Number(e.target.value)); setPagina(0) }}>
-            {[10, 20, 50].map(n => <option key={n}>{n}</option>)}
-          </select></label>
         </div>
       </div>
     </section>
     {consulta.loading && <LoadingBlock label="Consultando contas…" />}
     {consulta.error && <ErrorBlock error={consulta.error} onRetry={consulta.reload} />}
     {data && pagina <= ultimaPagina && <DataTable compactColumns={['descricao', 'valor', 'status', 'acoes']} columns={columns} rows={data.itens} pageSize={tamanho} caption="Contas a pagar"
+      paginationControls={<PageSizeControl value={tamanho} onChange={size => { setTamanho(size); setPagina(0) }} />}
       remote={{ page: pagina, total: data.totalItens, onPage: setPagina }}
       emptyText="Nenhuma conta encontrada para os filtros selecionados." />}
   </div>

@@ -98,7 +98,7 @@ function Flyout({ domain, anchor, current, onPick, onClose, footer }) {
  */
 export function Sidebar({ page, navigate, exit, user, role, can, collapsed, onToggle, mobile, open, onClose }) {
   const current = pages[page]?.parent || page
-  const mainDomains = visibleDomains(role, can)
+  const mainDomains = visibleDomains(can)
   const account = accountDomain
   // no mobile a conta vira o último item do acordeão; no desktop abre pelo rodapé
   const domains = mobile && account ? [...mainDomains, account] : mainDomains

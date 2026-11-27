@@ -501,11 +501,7 @@
 
 @container (width > 660px) {
   .tableFilterFields:not([hidden]) {
-    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(115px, .5fr);
-  }
-
-  .tableFilterFields[data-field-count='4']:not([hidden]) {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto minmax(115px, .5fr);
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   }
 }
 

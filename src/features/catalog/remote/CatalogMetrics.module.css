@@ -1,6 +1,6 @@
 .controls { display: grid; align-content: start; gap: 8px; min-width: 0; margin: 0; }
 .controls > span { font-size: 12px; font-weight: 600; color: var(--dim); }
-.buttons { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; }
+.buttons { display: inline-flex; justify-self: start; border: 1px solid var(--line); border-radius: 8px; }
 .toggleGroup { display: flex; align-items: center; border-radius: 7px; }
 .toggleGroup + .toggleGroup { border-left: 1px solid var(--line); border-top-left-radius: 0; border-bottom-left-radius: 0; }
 .toggleGroup > button { display: inline-flex; align-items: center; justify-content: center; height: 40px; padding: 0 14px; border: 0; border-radius: 0; background: transparent; color: var(--dim); font-size: 13px; gap: 7px; }

@@ -22,14 +22,21 @@ const margensECustos = [
   ['Margem bruta', metaMinima(METAS.margemBruta)],
   ['Custo das mercadorias vendidas (CMV)', metaMaxima(METAS.cmv, 'da receita')],
 ]
-const faixasFinanceiro = [
-  ['Saldo em caixa em relação às contas a pagar em 30 dias', metaMinima(METAS.coberturaPagar, '×')],
-  ['Contas a pagar', 'Bom quando tudo está em dia e nada vence nos próximos 7 dias. Médio quando há contas a vencer em até 7 dias. Ruim quando há conta vencida.'],
-  ['Crescimento do faturamento em relação ao mês anterior', metaMinima(METAS.crescimento)],
-  ['Participação nas vendas por categoria', metaMinima(METAS.participacaoCategoria)],
-  ['Margem líquida', metaMinima(METAS.margemLiquida)],
-  ...margensECustos,
-]
+const financeHelp = {
+  visao: {
+    title: 'Saldos e contas a pagar',
+    intro: 'O saldo financeiro acumulado reúne os recebimentos das vendas e as baixas das contas financeiras. O dinheiro da gaveta fica na tela Caixa.',
+    rules: [
+      ['Cobertura das contas a pagar em 30 dias', metaMinima(METAS.coberturaPagar, '×')],
+      ['A pagar em 30 dias', 'Vermelho quando há contas vencidas. Amarelo quando há vencimentos em até 7 dias. Azul quando não há urgências.'],
+    ],
+  },
+  dre: {
+    title: 'Resultado e vendas',
+    intro: 'O lucro bruto desconta o CMV da receita líquida. O lucro líquido também desconta as despesas do período. Use o seletor para alternar entre reais e percentuais da receita líquida.',
+    rules: [['Margem líquida', metaMinima(METAS.margemLiquida)], ...margensECustos],
+  },
+}
 const faixasRelatorios = {
   margem: margensECustos,
   ruptura: [['Falta de estoque', `Verde para 0 dias registrados. Amarelo quando faltou em até ${LIMITE_FALTA_RECORRENTE}% dos dias. Vermelho quando faltou em mais de ${LIMITE_FALTA_RECORRENTE}% dos dias.`]],
@@ -39,7 +46,7 @@ const faixasRelatorios = {
 const reportHelp = {
   margem: ['Margem por categoria', 'A margem bruta é a receita menos o custo das mercadorias vendidas. A margem percentual compara esse resultado à receita da categoria.'],
   ruptura: ['Falta de estoque', 'A venda perdida é uma estimativa baseada no histórico de vendas dos produtos.'],
-  horarios: ['Horários de venda', 'Selecione uma célula do mapa com vendas para ver os produtos vendidos naquele dia da semana e horário.'],
+  horarios: ['Horários de venda', 'O mapa agrupa vendas por dia da semana e hora no período selecionado. Em uma célula com vendas, quem pode consultar os pedidos do Caixa também vê os produtos vendidos naquele horário.'],
   perdas: ['Perdas por motivo', 'O valor mostra o custo registrado nas movimentações de perda do período, agrupado por motivo.'],
 }
 
@@ -73,13 +80,13 @@ function ChannelHelpContent() {
   </>
 }
 
-export function FinanceMetricsHelp({ reports, reportTab }) {
+export function FinanceMetricsHelp({ reports, activeTab }) {
   const id = useId()
-  const channelReport = reports && reportTab === 'canais'
-  const section = reports ? reportHelp[reportTab] : null
-  const rules = faixasRelatorios[reportTab] ?? []
+  const channelReport = reports && activeTab === 'canais'
+  const section = reports ? reportHelp[activeTab] : null
+  const finance = financeHelp[activeTab === 'dre' ? 'dre' : 'visao']
   const label = section ? `Sobre ${section[0]}` : channelReport ? 'Sobre os indicadores de canais de venda'
-    : reports ? 'Sobre as classes ABC e os indicadores dos relatórios' : 'Sobre os indicadores financeiros'
+    : reports ? 'Sobre as classes ABC' : 'Sobre os indicadores financeiros'
   return (
     <span className={ui.help + ' ' + ui.metricsHelpAnchor}>
       <button type="button" className={ui.helpButton} aria-describedby={id} aria-label={label}>
@@ -89,28 +96,20 @@ export function FinanceMetricsHelp({ reports, reportTab }) {
         {channelReport ? <ChannelHelpContent /> : section ? <>
           <strong className={ui.legendTitle}>{section[0]}</strong>
           <span className={ui.metricsHelpRule}>{section[1]}</span>
-          {rules.map(([name, description]) => <span className={ui.metricsHelpRule} key={name}><strong>{name}</strong><span>{description}</span></span>)}
+          {(faixasRelatorios[activeTab] ?? []).map(([name, description]) => <span className={ui.metricsHelpRule} key={name}><strong>{name}</strong><span>{description}</span></span>)}
+        </> : reports ? <>
+          <strong className={ui.legendTitle}>Prioridade na Curva ABC</strong>
+          <span className={ui.legendIntro}>Os produtos são ordenados por faturamento, com faixas de 80% e 95% do total acumulado. Use o filtro de classe para localizar os produtos na tabela.</span>
+          {Object.entries(PRIORIDADES_ABC).map(([classe, { tone, label }]) => (
+            <Legenda key={classe} tone={tone} label={`Classe ${classe} · ${label}`} />
+          ))}
         </> : <>
-          {reports && (
-            <>
-              <strong className={ui.legendTitle}>Prioridade na Curva ABC</strong>
-              <span className={ui.legendIntro}>Os produtos são ordenados por faturamento, com faixas de 80% e 95% do total acumulado.</span>
-              {Object.entries(PRIORIDADES_ABC).map(([classe, { tone, label }]) => (
-                <Legenda key={classe} tone={tone} label={`Classe ${classe} · ${label}`} />
-              ))}
-            </>
-          )}
-          <strong className={ui.legendTitle + (reports ? ' ' + ui.metricsHelpSection : '')}>Desempenho dos indicadores</strong>
+          <strong className={ui.legendTitle}>{finance.title}</strong>
+          <span className={ui.metricsHelpRule}>{finance.intro}</span>
           {desempenho.map(item => <Legenda key={item.tone} {...item} />)}
-          <span className={ui.metricsHelpSection}>
-            <strong className={ui.legendTitle}>Faixas de referência</strong>
-            {faixasFinanceiro.map(([label, description]) => (
-              <span className={ui.metricsHelpRule} key={label}>
-                <strong>{label}</strong>
-                <span>{description}</span>
-              </span>
-            ))}
-          </span>
+          {finance.rules.map(([name, description]) => (
+            <span className={ui.metricsHelpRule} key={name}><strong>{name}</strong><span>{description}</span></span>
+          ))}
         </>}
       </span>
     </span>

@@ -213,7 +213,7 @@
 .dateFilters { container-type:inline-size; }
 .dateFilterPeriod { grid-column:1 / -1; display:grid; gap:9px; min-width:0; color:var(--filter-label); font-size:12px; font-weight:500; }
 @container (min-width: 625px) {
-  .dateFilterGrid.dateFilterGrid:not([data-extra-field]) { grid-template-columns:minmax(120px,1fr) minmax(300px,2fr) minmax(110px,1fr); }
+  .dateFilterGrid.dateFilterGrid:not([data-extra-field]) { grid-template-columns:minmax(120px,1fr) minmax(300px,2fr); }
   .dateFilterGrid:not([data-extra-field]) > .dateFilterPeriod { grid-column:auto; }
   .dateFilterPeriod > [role='group'] { height:44px; }
   .dateFilterPeriod > [role='group'] button { flex:1 1 auto; padding-inline:5px; white-space:normal; }
@@ -221,7 +221,7 @@
 
 
 @container (min-width: 750px) {
-  .dateFilterGrid.dateFilterGrid[data-extra-field] { grid-template-columns:minmax(100px,1fr) minmax(120px,1fr) minmax(310px,2fr) minmax(110px,1fr); }
+  .dateFilterGrid.dateFilterGrid[data-extra-field] { grid-template-columns:minmax(100px,1fr) minmax(120px,1fr) minmax(310px,2fr); }
   .dateFilterGrid[data-extra-field] > .dateFilterPeriod { grid-column:auto; }
 }
 

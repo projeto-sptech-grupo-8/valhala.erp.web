@@ -14,6 +14,7 @@ export function DataTable({
   rows,
   rowKey = (r) => r.id,
   pageSize = 10,
+  paginationControls,
   initialSort,
   selectable = false,
   bulkActions,
@@ -159,14 +160,19 @@ export function DataTable({
         </table>
       </div>
 
-      {(total > 0 || remote?.page > 0) && (
+      {(total > 0 || remote?.page > 0 || paginationControls) && (
         <div className={s.pager}>
-          <span>{from}–{to} de {total}</span>
-          {(pages > 1 || page > 0) && (
-            <div>
-              <button onClick={() => remote ? remote.onPage(page - 1) : setPage(page - 1)} disabled={page === 0 || remote?.loading} aria-label="Página anterior"><ChevronLeft size={14} /></button>
-              <span>Página {page + 1} de {pages}</span>
-              <button onClick={() => remote ? remote.onPage(page + 1) : setPage(page + 1)} disabled={page >= pages - 1 || remote?.loading} aria-label="Próxima página"><ChevronRight size={14} /></button>
+          {(total > 0 || remote?.page > 0) && <span>{from}–{to} de {total}</span>}
+          {(paginationControls || pages > 1 || page > 0) && (
+            <div className={s.pageControls}>
+              {paginationControls}
+              {(pages > 1 || page > 0) && (
+                <div className={s.pageNavigation}>
+                  <button onClick={() => remote ? remote.onPage(page - 1) : setPage(page - 1)} disabled={page === 0 || remote?.loading} aria-label="Página anterior"><ChevronLeft size={14} /></button>
+                  <span>Página {page + 1} de {pages}</span>
+                  <button onClick={() => remote ? remote.onPage(page + 1) : setPage(page + 1)} disabled={page >= pages - 1 || remote?.loading} aria-label="Próxima página"><ChevronRight size={14} /></button>
+                </div>
+              )}
             </div>
           )}
         </div>

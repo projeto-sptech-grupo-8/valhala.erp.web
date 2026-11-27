@@ -42,7 +42,7 @@ function prazoTone(dias) {
   return 'ok'
 }
 
-function FluxoDeCaixa({ fluxo }) {
+export function FluxoDeCaixa({ fluxo }) {
   const cashFlowData = fluxo.map(item => ({ ...item, m: rotuloMes(item.mes) }))
   return (
     <section className={s.overviewSection} aria-labelledby="finance-fluxo">
@@ -158,6 +158,7 @@ function IndicadoresResultado({ resultado, percentual }) {
       label: 'Custo das mercadorias vendidas',
       labelPercentual: 'Custo sobre a receita',
       Icon: Package,
+      ajuda: 'Custo dos produtos e ingredientes das vendas do período. Em porcentagem, mostra quanto esse custo representa da receita líquida.',
       valor: cmv,
       margem: cmvPct,
       base: 'da receita líquida',

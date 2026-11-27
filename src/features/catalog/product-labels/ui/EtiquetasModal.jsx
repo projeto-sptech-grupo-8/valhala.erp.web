@@ -1,6 +1,7 @@
 import { Fragment, useRef, useState } from 'react'
 import { Printer, Settings2, CheckCheck, Search, Eye, Palette, CalendarClock, Check, ChevronLeft, ChevronRight } from 'lucide-react'
 import { api } from '@/shared/api/api.js'
+import { PageSizeControl } from '@/shared/ui/data-table/PageSizeControl.jsx'
 import { useQueryResource } from '@/shared/lib/hooks/usePagedQuery.js'
 import { fmtBRL } from '@/shared/lib/format.js'
 import { useStore } from '@/entities/store'
@@ -132,7 +133,6 @@ export function EtiquetasModal({ products, onClose }) {
         <div className={s.filters} aria-label="Filtros da lista de etiquetas">
           <label><span><Search size={13} aria-hidden="true" />Buscar produto</span><input type="search" placeholder="Nome ou código" value={search} onChange={e => { setSearch(e.target.value); setPage(0) }} /></label>
           <label>Quantidade<select value={quantityFilter} onChange={e => { setQuantityFilter(e.target.value); setPage(0) }}><option value="">Todos</option><option value="com">Com quantidade definida</option><option value="sem">Sem quantidade definida</option></select></label>
-          <label>Itens por página<select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(0) }}>{[10, 20, 30].map(value => <option key={value}>{value}</option>)}</select></label>
         </div>
         <div className={s.selection}><button type="button" disabled={!visible.length} onClick={() => selectProducts(visible, true)}><CheckCheck size={15} aria-hidden="true" />Selecionar produtos exibidos</button><button type="button" disabled={!selected.size} onClick={() => selectProducts(products, false)}>Limpar seleção</button><span>{visible.length} de {filtered.length} resultado(s) · {products.length} produto(s) nesta lista</span></div>
         <div className={s.tableScroll}><table className={s.table}>
@@ -146,7 +146,10 @@ export function EtiquetasModal({ products, onClose }) {
             <td><button type="button" className={s.previewButton} aria-label={'Prévia de ' + p.name} aria-pressed={showPreview && previewId === p.id} aria-controls="label-preview-content" onClick={() => { setPreviewOpen(open => previewId !== p.id || !open); setPreviewId(p.id) }}><Eye size={16} aria-hidden="true" /></button></td>
           </tr>{expiryMode && selected.has(p.id) && expanded.has(p.id) && <tr><td colSpan={5}><ProductLots product={p} selections={lotSelections[p.id] || {}} reference={reference.data?.referencia} previewLot={showPreview && previewId === p.id ? chosenLots[p.id]?.id : null} onPreview={lot => previewLot(p, lot)} onChange={value => setLotSelections(previous => ({ ...previous, [p.id]: value }))} /></td></tr>}</Fragment>)}{!visible.length && <tr><td colSpan={currentSettings.mode === 'validade' ? 5 : 4}>Nenhum produto corresponde aos filtros desta lista.</td></tr>}</tbody>
         </table></div>
-        <nav className={s.pager} aria-label="Paginação dos produtos para etiquetas"><span>{filtered.length ? page * pageSize + 1 : 0}–{Math.min((page + 1) * pageSize, filtered.length)} de {filtered.length}</span><div><button type="button" aria-label="Página anterior de etiquetas" disabled={page === 0} onClick={() => setPage(page - 1)}><ChevronLeft size={16} aria-hidden="true" /></button><span>Página {page + 1} de {pages}</span><button type="button" aria-label="Próxima página de etiquetas" disabled={page >= pages - 1} onClick={() => setPage(page + 1)}><ChevronRight size={16} aria-hidden="true" /></button></div></nav>
+        <nav className={s.pager} aria-label="Paginação dos produtos para etiquetas"><span>{filtered.length ? page * pageSize + 1 : 0}–{Math.min((page + 1) * pageSize, filtered.length)} de {filtered.length}</span><div className={s.pagerControls}>
+          <PageSizeControl value={pageSize} options={[10, 20, 30]} onChange={size => { setPageSize(size); setPage(0) }} />
+          <div className={s.pagerNavigation}><button type="button" aria-label="Página anterior de etiquetas" disabled={page === 0} onClick={() => setPage(page - 1)}><ChevronLeft size={16} aria-hidden="true" /></button><span>Página {page + 1} de {pages}</span><button type="button" aria-label="Próxima página de etiquetas" disabled={page >= pages - 1} onClick={() => setPage(page + 1)}><ChevronRight size={16} aria-hidden="true" /></button></div>
+        </div></nav>
         {incomplete.length > 0 && <p className={s.note}>Complete as quantidades dos produtos selecionados antes de imprimir.</p>}
         {entries.some(item => !visible.some(v => v.id === item.product.id)) && <p className={s.note}>Há produtos selecionados fora da página ou dos filtros atuais. Eles também serão impressos.</p>}
       </div>

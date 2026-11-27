@@ -1,7 +1,9 @@
 import { reconcileComandaSlots } from '@/entities/sales/model/comandaSlots.js'
 import { useEffect, useRef, useState } from 'react'
 import { Package, Wine, Search, Plus, ChevronLeft, ChevronRight, Receipt, ShoppingBasket, TriangleAlert } from 'lucide-react'
+import { useStore } from '@/entities/store'
 import { api } from '@/shared/api/api.js'
+import { PageSizeControl } from '@/shared/ui/data-table/PageSizeControl.jsx'
 import { readCash, writeCash, createCashOrder, MAX_OPEN_CASH_ORDERS, OPEN_CASH_ORDER_STATES } from '@/entities/sales/api/cashApi.js'
 import { useQueryResource } from '@/shared/lib/hooks/usePagedQuery.js'
 import { RecordAutocomplete } from '@/features/catalog/product-editor/ui/CategoryAutocomplete.jsx'
@@ -11,16 +13,20 @@ import s from './CashWorkspace.module.css'
 const statuses={EM_ATENDIMENTO:'Em atendimento',AGUARDANDO_MAQUINA:'Aguardando maquininha',AGUARDANDO_PAGAMENTO:'Aguardando pagamento',PAGAMENTO_PARCIAL:'Pagamento parcial',CONCLUIDO:'Concluído',CANCELADO:'Cancelado',ESTORNADO:'Estornado'}
 
 function isOutOfStock(product) {
+ if (product?.estoqueEsgotado != null) return product.estoqueEsgotado
  return product?.tipo === 'padrao' && Number.isFinite(product.quantidadeEstoqueBase) && product.quantidadeEstoqueBase <= 0
 }
 
 export function CashWorkspace({sessionId,selectedId,onSelect,creationRevision,canOperate,onChanged,openOrders,OrderView,StatusView}) {
+ const { can } = useStore()
+ const stockAccess = can('VISUALIZAR_ESTOQUE')
+ const products = stockAccess ? api.produtos : api.produtosVenda
  const [search,setSearch]=useState(''),[debounced,setDebounced]=useState(''),[category,setCategory]=useState(''),[type,setType]=useState(''),[page,setPage]=useState(0),[pageSize,setPageSize]=useState(9)
  const [snapshot,setSnapshot]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState(null),[uncertain,setUncertain]=useState(false),[mobile,setMobile]=useState('products')
  const [draft,setDraft]=useState(null)
  const lock=useRef(false),searchRef=useRef(null)
  useEffect(()=>{const timer=setTimeout(()=>{setDebounced(search);setPage(0)},300);return()=>clearTimeout(timer)},[search])
- const catalog=useQueryResource(signal=>api.produtos.pagina({busca:debounced,categoriaId:category,tipo:type||undefined,ativo:true,pagina:page,tamanho:pageSize,ordenarPor:'nome',direcao:'ASC'},signal),[debounced,category,type,page,pageSize],{refreshKey:creationRevision})
+ const catalog=useQueryResource(signal=>products.pagina({busca:debounced,categoriaId:category,tipo:type||undefined,ativo:true,pagina:page,tamanho:pageSize,ordenarPor:'nome',direcao:'ASC'},signal),[stockAccess,debounced,category,type,page,pageSize],{refreshKey:creationRevision})
  const { loading: catalogLoading, reload: reloadCatalog } = catalog
  useEffect(() => {
   if (catalogLoading) return
@@ -114,8 +120,8 @@ export function CashWorkspace({sessionId,selectedId,onSelect,creationRevision,ca
    </button>
   </div>
   <article className={s.catalog} data-mobile-hidden={mobile!=='products'}>
-   <header className={s.catalogHeading}><div><h2><ShoppingBasket size={21} aria-hidden="true"/>Selecione os itens</h2><p>Clique em um produto ou drink para adicionar ao pedido.</p></div><label className={s.pageSize}>Itens por página<select aria-label="Itens por página do catálogo do caixa" value={pageSize} onChange={e=>{setPageSize(Number(e.target.value));setPage(0)}}>{[9,12,18].map(size=><option key={size} value={size}>{size}</option>)}</select></label></header>
-   <div className={s.filters}><label className={s.search}><span>Buscar nome ou SKU</span><div><Search size={17} aria-hidden="true"/><input ref={searchRef} type="search" aria-label="Buscar produto ou SKU" value={search} placeholder="Ex.: Cerveja, caipirinha ou SKU" onChange={e=>setSearch(e.target.value)} onKeyDown={searchKey}/></div></label><RecordAutocomplete label="Categoria" required={false} value={category} onChange={id=>{setCategory(id);setPage(0)}} placeholder="Todas as categorias"/></div>
+   <header><h2><ShoppingBasket size={21} aria-hidden="true"/>Selecione os itens</h2><p>Clique em um produto ou drink para adicionar ao pedido.</p></header>
+   <div className={s.filters}><label className={s.search}><span>Buscar nome ou SKU</span><div><Search size={17} aria-hidden="true"/><input ref={searchRef} type="search" aria-label="Buscar produto ou SKU" value={search} placeholder="Ex.: Cerveja, caipirinha ou SKU" onChange={e=>setSearch(e.target.value)} onKeyDown={searchKey}/></div></label><RecordAutocomplete kind={stockAccess ? 'categorias' : 'categoriasVenda'} label="Categoria" required={false} value={category} onChange={id=>{setCategory(id);setPage(0)}} placeholder="Todas as categorias"/></div>
    <div className={s.types} aria-label="Tipos de produto">{[['','Todos'],['PADRAO','Produtos'],['DRINK','Drinks']].map(([value,label])=><button key={value} aria-pressed={type===value} onClick={()=>{setType(value);setPage(0)}}>{value==='DRINK'?<Wine size={15} aria-hidden="true"/>:<Package size={15} aria-hidden="true"/>}{label}</button>)}{category&&<button onClick={()=>{setCategory('');setPage(0)}}>Limpar categoria</button>}</div>
    {catalogInitialLoading ? <LoadingBlock label="Carregando produtos…" /> : catalog.error ? <ErrorBlock error={catalog.error} onRetry={reloadCatalog} /> : !rows.length ? <p className={s.empty}>Nenhum item encontrado. Tente outro nome ou categoria.</p> : (
     <div className={s.products}>
@@ -135,7 +141,10 @@ export function CashWorkspace({sessionId,selectedId,onSelect,creationRevision,ca
      })}
     </div>
    )}
-   <footer className={s.pager}><button disabled={!page||catalog.loading} onClick={()=>setPage(p=>p-1)}><ChevronLeft size={15}/>Anterior</button><span>Página {page+1}</span><button disabled={catalog.loading||catalog.error||catalog.data?.ultima!==false} onClick={()=>setPage(p=>p+1)}>Próxima<ChevronRight size={15}/></button></footer><p className={s.hint}>A disponibilidade dos itens é confirmada ao adicionar ao pedido.</p>
+   <footer className={s.pager}>
+    <PageSizeControl ariaLabel="Itens por página do catálogo do caixa" value={pageSize} options={[9, 12, 18]} onChange={size=>{setPageSize(size);setPage(0)}} />
+    <div className={s.pagerNavigation}><button disabled={!page||catalog.loading} onClick={()=>setPage(p=>p-1)}><ChevronLeft size={15}/>Anterior</button><span>Página {page+1}</span><button disabled={catalog.loading||catalog.error||catalog.data?.ultima!==false} onClick={()=>setPage(p=>p+1)}>Próxima<ChevronRight size={15}/></button></div>
+   </footer><p className={s.hint}>A disponibilidade dos itens é confirmada ao adicionar ao pedido.</p>
   </article>
   <article className={s.cart} data-mobile-hidden={mobile!=='order'}>
    <header><div className={s.orderHeading}><h2><Receipt size={21} aria-hidden="true"/>{displayTitle}</h2>{order&&StatusView&&<StatusView value={order.status}/>}</div><p>{order?.identificadorAtendimento||'Atendimento de balcão'}</p></header>

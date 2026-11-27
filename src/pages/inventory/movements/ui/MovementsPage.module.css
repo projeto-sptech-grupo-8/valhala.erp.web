@@ -19,11 +19,11 @@
 .periodFilter { grid-column: 1 / -1; display: grid; gap: 8px; min-width: 0; color: var(--filter-label); font-size: 12px; font-weight: 500; }
 .periodFilter > [role='group'] button { flex: 1 1 auto; padding-inline: 5px; white-space: normal; }
 @container (min-width: 600px) {
-  .filters.filters:not([data-operator]) { grid-template-columns: minmax(120px,1fr) minmax(300px,2fr) minmax(110px,1fr); }
+  .filters.filters:not([data-operator]) { grid-template-columns: minmax(120px,1fr) minmax(300px,2fr); }
   .filters:not([data-operator]) > .periodFilter { grid-column: auto; }
 }
 @container (min-width: 700px) {
-  .filters.filters[data-operator] { grid-template-columns: minmax(100px,1fr) minmax(310px,2fr) minmax(120px,1fr) minmax(110px,1fr); }
+  .filters.filters[data-operator] { grid-template-columns: minmax(100px,1fr) minmax(310px,2fr) minmax(120px,1fr); }
   .filters[data-operator] > .periodFilter { grid-column: auto; }
 }
 .searchRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 20px; border-top: 1px solid var(--line); padding-top: 20px; margin-top: 20px; }

@@ -129,7 +129,7 @@ export const toFuncionalidade = (f) => {
 }
 
 export const toPerfil = (p) => ({
-  id: p.id ?? p.profileId ?? p.perfilId,
+  id: String(p.id ?? p.profileId ?? p.perfilId),
   nome: p.nome ?? p.name ?? '',
   descricao: p.descricao ?? p.description ?? '',
   codigos: p.codigosFuncionalidades
@@ -142,7 +142,7 @@ export const toUsuario = (u) => ({
   name: u.name ?? u.nome ?? '',
   email: u.email ?? '',
   phone: u.phone ?? u.telefone ?? '',
-  profileId: u.profileId ?? u.idPerfil ?? u.perfilId ?? null,
+  profileId: (u.profileId ?? u.idPerfil ?? u.perfilId)?.toString() ?? null,
   profileName: u.profileName ?? u.nomePerfil ?? u.perfilNome ?? null,
   active: u.active ?? u.ativo ?? true,
   createdAt: u.createdAt ?? u.criadoEm ?? null,
@@ -187,7 +187,7 @@ const camposDoUsuario = (err) => {
 // o back vincula o perfil pelo nome (nomePerfil); a interface trabalha com o id
 async function comNomePerfil({ profileId, ...data }) {
   if (profileId == null || data.profileName || data.nomePerfil) return data
-  const perfil = (await realApi.perfis.listar()).find(p => String(p.id) === String(profileId))
+  const perfil = (await realApi.perfis.atribuiveis()).find(p => String(p.id) === String(profileId))
   if (!perfil) throw Object.assign(new Error('Perfil não encontrado.'), { status: 404, fieldErrors: {} })
   return { ...data, nomePerfil: perfil.nome }
 }
@@ -402,6 +402,7 @@ const realApi = {
   },
 
   perfis: {
+    atribuiveis: () => request('/autorizacoes/perfis/atribuiveis').then(r => list(r).map(toPerfil)),
     listar:    () => request('/autorizacoes/perfis').then(r => list(r).map(toPerfil)),
     obter:     (id) => request(`/autorizacoes/perfis/${id}`).then(toPerfil),
     criar:     ({ nome, descricao, codigos }) =>
@@ -411,6 +412,17 @@ const realApi = {
     excluir:   (id) => request(`/autorizacoes/perfis/${id}`, { method: 'DELETE' }),
     substituirFuncionalidades: (id, codigos) =>
       request(`/autorizacoes/perfis/${id}/funcionalidades/codigos`, send('PUT', codigos)),
+  },
+
+  categoriasVenda: {
+    pagina: (params, signal) => paginaDe('/categorias/venda', params, signal, toCategoria),
+    obter: (id, signal) => catalogRead(`/categorias/venda/${id}`, signal).then(toCategoria),
+  },
+
+  produtosVenda: {
+    pagina: (params, signal) => paginaDe('/produtos/venda', params, signal, item => ({
+      ...toProduto(item), estoqueEsgotado: item.estoqueEsgotado,
+    })),
   },
 
   categorias: {

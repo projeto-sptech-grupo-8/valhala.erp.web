@@ -8,6 +8,7 @@ import { useStore } from '@/entities/store'
 import { ConfirmModal } from '@/shared/ui/feedback/ManagementFeedback.jsx'
 import { useListParams, useQueryResource } from '@/shared/lib/hooks/usePagedQuery.js'
 import { DataTable } from '@/shared/ui/data-table/DataTable.jsx'
+import { PageSizeControl } from '@/shared/ui/data-table/PageSizeControl.jsx'
 import { SearchInput, QueryFeedback } from '@/features/catalog/remote/RemoteControls.jsx'
 import ui from '@/pages/catalog/products/ui/ProductsPage.module.css'
 import { CategoryRowActions } from './CategoryRowActions.jsx'
@@ -33,22 +34,18 @@ export function Cards({ navigate }) {
   return <>
     <section className={ui.panel} aria-labelledby="category-filter-title">
       <FilterHeader className={ui.heading}>
-        <div><h2 id="category-filter-title" className={a.filterTitle}><button type="button" className={ui.collapse} aria-expanded={filtersOpen} aria-controls="category-filter-fields" onClick={() => setFiltersOpen(open => !open)}><SlidersHorizontal size={16} aria-hidden="true" />Filtros de categorias<ChevronDown size={17} aria-hidden="true" className={filtersOpen ? ui.expanded : undefined} /></button><span className={a.help}><button type="button" className={a.helpButton} aria-label="Orientações sobre filtros de categorias" aria-describedby={helpId}><CircleAlert size={18} aria-hidden="true" /></button><span id={helpId} role="tooltip" className={a.helpText}>Use a situação para consultar categorias ativas ou inativas. No menu de cada linha, veja os produtos vinculados ou edite a categoria.</span></span></h2></div>
+        <div><h2 id="category-filter-title" className={a.filterTitle}><button type="button" className={ui.collapse} aria-expanded={filtersOpen} aria-controls="category-filter-fields" onClick={() => setFiltersOpen(open => !open)}><SlidersHorizontal size={16} aria-hidden="true" />Filtros de categorias<ChevronDown size={17} aria-hidden="true" className={filtersOpen ? ui.expanded : undefined} /></button><span className={a.help}><button type="button" className={a.helpButton} aria-label="Orientações sobre filtros de categorias" aria-describedby={helpId}><CircleAlert size={18} aria-hidden="true" /></button><span id={helpId} role="tooltip" className={a.helpText}>Busque pelo nome e use Status para consultar categorias ativas ou inativas. Em Ver Produto, abra o catálogo já filtrado pela categoria.</span></span></h2></div>
         <FilterActions onClear={clear} onRefresh={query.reload} refreshing={query.loading} compact={can('GERENCIAR_ESTOQUE')}>
           {can('GERENCIAR_ESTOQUE') && <button className="gold" onClick={() => setModal({})}><Plus size={15} aria-hidden="true" />Nova categoria</button>}
         </FilterActions>
       </FilterHeader>
       <div id="category-filter-fields" className={a.filterRow} hidden={!filtersOpen}>
         <label className={ui.field}>Buscar nome<SearchInput label="Buscar categoria" placeholder="Ex.: Cervejas, destilados ou frutas" value={params.busca} onChange={busca => update({ busca })} /></label>
-      <div className={a.filterFields}><div className={a.filters}>
         <label className={ui.field}>Status<select aria-label="Status" value={params.ativo || ''} onChange={e => update({ ativo: e.target.value })}><option value="">Todas as categorias</option><option value="true">Ativas</option><option value="false">Inativas</option></select></label>
-        <label className={ui.field}>Itens por página<select aria-label="Itens por página" value={params.tamanho} onChange={e => update({ tamanho: Number(e.target.value) })}>{[10,20,50].map(n => <option key={n}>{n}</option>)}</select></label>
-      </div>
-      </div>
       </div>
     </section>
     <QueryFeedback query={query} />
-    <div className={a.table}><DataTable caption="Categorias" columns={columns} rows={query.loading || query.error ? [] : query.data?.itens || []} pageSize={params.tamanho}
+    <div className={a.table}><DataTable caption="Categorias" columns={columns} rows={query.loading || query.error ? [] : query.data?.itens || []} pageSize={params.tamanho} paginationControls={<PageSizeControl value={params.tamanho} onChange={tamanho => update({ tamanho })} />}
       emptyText={query.loading ? 'Carregando categorias…' : query.error ? 'Consulta indisponível.' : params.busca || params.ativo || params.pagina > 0 ? <div className={a.empty}><strong>Nenhuma categoria encontrada nesta busca.</strong><span>Altere o nome ou o status para tentar novamente.</span><button type="button" onClick={clear}>Limpar filtros</button></div> : <div className={a.empty}><Tag size={24} aria-hidden="true" /><strong>Nenhuma categoria cadastrada.</strong><span>Organize seus produtos e drinks criando a primeira categoria.</span>{can('GERENCIAR_ESTOQUE') && <button type="button" onClick={() => setModal({})}><Plus size={15} aria-hidden="true" />Criar primeira categoria</button>}</div>}
       remote={{ page: params.pagina, total: query.data?.totalItens || 0, loading: query.loading,
         sort: { key: request.ordenarPor, dir: params.direcao.toLowerCase() },

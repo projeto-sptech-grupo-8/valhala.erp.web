@@ -19,7 +19,3 @@ export function QueryFeedback({ query }) {
   if (query.error) return <ErrorBlock error={query.error} onRetry={query.reload} />
   return null
 }
-
-export function PageSize({ value, onChange }) {
-  return <label>Por página <select aria-label="Itens por página" value={value} onChange={e => onChange(Number(e.target.value))}>{[10, 20, 50].map(n => <option key={n}>{n}</option>)}</select></label>
-}

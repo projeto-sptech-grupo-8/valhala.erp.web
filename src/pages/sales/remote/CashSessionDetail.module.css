@@ -16,7 +16,7 @@
 .shift .person { color: var(--dim); font-weight: 400; }
 .totals > div { border: 1px solid var(--line); }
 .totals > div:first-child { background: var(--active-bg); }
-.totals dd { font-size: clamp(16px, 4vw, 21px); font-variant-numeric: tabular-nums; }
+.totals dd { font-size: 16px; font-variant-numeric: tabular-nums; line-height: 1.25; white-space: nowrap; }
 .breakdown > div { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .breakdown > div:last-child { border-bottom: 0; padding-bottom: 0; }
 .breakdown dd, .movementAmount { font-variant-numeric: tabular-nums; }

@@ -18,3 +18,7 @@
 .helpText { display: none; position: absolute; top: 100%; right: 0; z-index: 10; width: min(300px, 65vw); padding: 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); box-shadow: 0 8px 24px #0004; color: var(--text); font-size: 12px; font-weight: 400; line-height: 1.7; }
 .help:hover .helpText, .help:focus-within .helpText { display: block; }
 @media (max-width: 640px) { .ranges, .bottom { grid-template-columns: 1fr; } }
+
+@media (761px <= width <= 900px) {
+  .profileTable thead th:nth-child(2) { width: 155px; }
+}

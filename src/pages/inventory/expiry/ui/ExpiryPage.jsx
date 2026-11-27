@@ -9,6 +9,7 @@ import { useToast } from '@/shared/ui/notifications/useToast.js'
 import { useListParams, useQueryResource } from '@/shared/lib/hooks/usePagedQuery.js'
 import { MetricCard, MetricGrid } from '@/shared/ui/primitives/MetricCard.jsx'
 import { DataTable } from '@/shared/ui/data-table/DataTable.jsx'
+import { PageSizeControl } from '@/shared/ui/data-table/PageSizeControl.jsx'
 import { ToneBadge } from '@/shared/ui/primitives/ui.jsx'
 import { ConfirmModal } from '@/shared/ui/feedback/ManagementFeedback.jsx'
 import { QueryFeedback } from '@/features/catalog/remote/RemoteControls.jsx'
@@ -39,7 +40,7 @@ export function Validades({ setHeaderHelp }) {
   const expired = rows.filter(l => l.situacao === 'VENCIDO' && Number(l.quantidadeAtual) > 0)
   const available = !summary.loading && !summary.error && summary.data
   const data = available ? summary.data : null
-  const headerHelp = 'Indicadores globais de produtos ativos e lotes com saldo' + (data ? ' · referência ' + lotDate(data.referencia) + ' · ' + data.semValidade + ' lote(s) sem validade' : '') + '. A tabela pode incluir produtos inativos e lotes zerados conforme a consulta. As saídas usam FEFO no servidor; lotes vencidos não podem sair como venda/consumo.'
+  const headerHelp = 'Indicadores globais de produtos ativos e lotes com saldo' + (data ? ' · referência ' + lotDate(data.referencia) + ' · ' + data.semValidade + ' lote(s) sem validade' : '') + '. A linha vermelha indica lote vencido. O filtro de saldo permite incluir lotes zerados. Nas saídas, o sistema usa primeiro os lotes de validade mais próxima. Lotes vencidos ficam bloqueados para venda e consumo.'
   useEffect(() => {
     setHeaderHelp?.(headerHelp)
     return () => setHeaderHelp?.(null)
@@ -101,13 +102,12 @@ export function Validades({ setHeaderHelp }) {
       <div id="expiry-filter-fields" hidden={!filtersOpen}><div className={ui.filters + ' ' + css.filterRow}>
         <div className={ui.field + ' ' + css.statusField}><span>Situação de validade</span><div className={segmented.options} role="radiogroup" aria-label="Situação de validade">{OPTIONS.map(([value, label]) => <button type="button" key={value} role="radio" aria-checked={state === value} title={label} onClick={() => update({ situacao: value })}>{{ atencao: 'Em atenção', VENCE_EM_7_DIAS: 'Até 7 dias', VENCE_EM_30_DIAS: 'De 8 a 30 dias', VALIDO: 'Mais de 30 dias', todos: 'Todos os lotes' }[value] || label}</button>)}</div></div>
         <label className={ui.field}>Saldo dos lotes<select aria-label="Saldo dos lotes" value={params.incluirZerados === 'true' ? 'true' : 'false'} onChange={e => update({ incluirZerados: e.target.value })}><option value="false">Somente com saldo</option><option value="true">Incluir zerados</option></select></label>
-        <label className={ui.field}>Itens por página<select aria-label="Itens por página" value={params.tamanho} onChange={e => update({ tamanho: Number(e.target.value) })}>{[10,20,50].map(n => <option key={n}>{n}</option>)}</select></label>
       </div></div>
       <div className={ui.bottom + ' ' + css.bottom}><RecordAutocomplete kind="produtos" active={false} productType="PADRAO" label="Buscar produto" placeholder="Digite o nome ou código do produto" value={params.produtoId} onChange={produtoId => update({ produtoId })} /><div className={ui.field}><span>Ação</span><div className={ui.actions}><button type="button" title="Exportar os lotes desta página" disabled={!rows.length || busy} onClick={exportPage}><Download size={15} aria-hidden="true" />Exportar</button></div></div></div>
     </section>
     <QueryFeedback query={list} />
     <DataTable compactColumns={['produtoNome', 'validade', 'situacao', 'acoes']} caption="Lotes por validade" columns={columns} rows={rows}
-      rowClassName={row => row.situacao === 'VENCIDO' ? css.expiredRow : undefined} pageSize={params.tamanho} emptyText={list.loading ? 'Consultando lotes…' : list.error ? 'Consulta de lotes indisponível.' : 'Nenhum lote encontrado com estes filtros.'} remote={{ page: params.pagina, total: list.data?.totalItens || 0, loading: list.loading, sort: { key: sort, dir: params.direcao.toLowerCase() }, onPage: pagina => update({ pagina }, false), onSort: value => update({ ordenarPor: value.key, direcao: value.dir.toUpperCase() }) }} />
+      rowClassName={row => row.situacao === 'VENCIDO' ? css.expiredRow : undefined} pageSize={params.tamanho} paginationControls={<PageSizeControl value={params.tamanho} onChange={tamanho => update({ tamanho })} />} emptyText={list.loading ? 'Consultando lotes…' : list.error ? 'Consulta de lotes indisponível.' : 'Nenhum lote encontrado com estes filtros.'} remote={{ page: params.pagina, total: list.data?.totalItens || 0, loading: list.loading, sort: { key: sort, dir: params.direcao.toLowerCase() }, onPage: pagina => update({ pagina }, false), onSort: value => update({ ordenarPor: value.key, direcao: value.dir.toUpperCase() }) }} />
     {losses && <ConfirmModal title={losses.length === 1 ? 'Registrar perda do lote vencido?' : 'Registrar perda dos lotes vencidos desta página?'} confirmLabel="Registrar perda" danger busy={busy} disabled={uncertain || !losses.length} onClose={() => setLosses(null)} onConfirm={confirmLoss}>
       <p>A baixa será feita nos lotes específicos abaixo, nas unidades-base informadas. Esta operação altera o saldo e registra movimentações no servidor.</p><ul className={css.lossList}>{losses.map(l => <li key={l.id}><b>{l.produtoNome} · {l.codigo}</b><span>{fmtNum(l.quantidadeAtual)} {l.unidadeEstoque} · validade {lotDate(l.validade)}</span></li>)}</ul>
       {lossError && <Notice title="Não foi possível concluir a baixa" focus>{lossError}</Notice>}{uncertain && <p role="alert">A resposta não foi confirmada. Feche, atualize os lotes e confira o histórico antes de iniciar outra baixa. Não repita esta operação automaticamente.</p>}
