@@ -20,10 +20,10 @@ export function OverviewToolbar({ target, title, titleAction, detail, busy, refr
     </section>, target)
 }
 
-export function OverviewStat({ icon: Icon, label, value, description, help, accent = 'neutral', progress }) {
+export function OverviewStat({ icon: Icon, label, value, description, help, accent = 'neutral', progress, action }) {
   return <div className={s.kpiCard} data-accent={accent}>
     <Stat a={<><span className={s.kpiIconWrap}><Icon className={s.kpiIcon} size={18} aria-hidden="true" /></span><span>{label}</span>
       {help && <DashboardHelp title={label}>{help}</DashboardHelp>}</>}
-      b={value} c={description} progress={progress} progressLabel={label} />
+      b={value} c={action ? <>{description}{action}</> : description} progress={progress} progressLabel={label} />
   </div>
 }

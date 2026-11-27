@@ -1,5 +1,5 @@
 import { TaxDocumentInput } from './TaxDocumentInput.jsx'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Download, ReceiptText } from 'lucide-react'
 import { readCash } from '@/entities/sales/api/cashApi.js'
 import { issueInvoice, downloadInvoice } from '../fiscalApi.js'
@@ -7,6 +7,8 @@ import { useToast } from '@/shared/ui/notifications/useToast.js'
 import s from './Invoices.module.css'
 
 import { FiscalContext, useFiscalCheckout } from '../fiscalContext.js'
+
+const RECEIPT_TIMEOUT_MS = 5000
 
 export function ConsumerFields({ value, onChange, disabled }) {
   return <details className={s.customer}><summary>Identificar consumidor na nota (opcional)</summary>
@@ -18,8 +20,13 @@ export function ConsumerFields({ value, onChange, disabled }) {
 export function FiscalProvider({ children }) {
   const jobs = useRef(new Map()), customers = useRef(new Map())
   const [receipts, setReceipts] = useState([])
+  const [invoiceRevision, setInvoiceRevision] = useState(0)
   const toast = useToast()
   const active = useRef(true)
+  const dismiss = useCallback(id => {
+    jobs.current.delete(id)
+    setReceipts(list => list.filter(row => row.id !== id))
+  }, [])
   useEffect(() => {
     const tracked = jobs.current, identities = customers.current
     active.current = true
@@ -43,7 +50,11 @@ export function FiscalProvider({ children }) {
       setReceipts(list => [...list, row])
       const customer = customers.current.get(id) || {}
       customers.current.delete(id)
-      const finish = patch => { if (jobs.current.get(id) === job) setReceipts(list => list.map(item => item.id === id ? {...row, pending:false, ...patch} : item)) }
+      const finish = patch => {
+        if (jobs.current.get(id) !== job) return
+        setReceipts(list => list.map(item => item.id === id ? {...row, pending:false, ...patch} : item))
+        if (patch.note) setInvoiceRevision(value => value + 1)
+      }
       issueInvoice(id, customer).then(note => finish({note}), error => finish({error:error.message}))
     } else if (order.pagamentos?.some(p => ['PENDENTE','PENDENTE_NA_POINT','EM_TERMINAL','PENDENTE_CONCILIACAO','ACAO_NECESSARIA','CANCELAMENTO_SOLICITADO'].includes(p.status))) {
       const check = async () => {
@@ -57,14 +68,25 @@ export function FiscalProvider({ children }) {
       job.timer=setTimeout(check,Date.now()-job.started < 60000 ? 5000 : 30000)
     } else { jobs.current.delete(id) }
   }
-  return <FiscalContext.Provider value={{ observe, confirmWatched:order=>{if(order?.status==='CONCLUIDO'&&jobs.current.has(order.id))observe(order)}, customers, receipts, dismiss:id=>{jobs.current.delete(id);setReceipts(list=>list.filter(row=>row.id!==id))}, download:note=>downloadInvoice(note).catch(e=>toast(e.message,{type:'error',title:'Falha ao baixar XML'})) }}>{children}</FiscalContext.Provider>
+  return <FiscalContext.Provider value={{ observe, confirmWatched:order=>{if(order?.status==='CONCLUIDO'&&jobs.current.has(order.id))observe(order)}, customers, receipts, invoiceRevision, dismiss, download:note=>downloadInvoice(note).catch(e=>toast(e.message,{type:'error',title:'Falha ao baixar XML'})) }}>{children}</FiscalContext.Provider>
 }
 
 export function FiscalReceipts() {
   const { receipts, dismiss, download } = useFiscalCheckout()
-  return receipts.map(({id,numero,pending,note,error}) => <section key={id} className={'card '+s.receipt} aria-live="polite">
+  return receipts.map(receipt => <FiscalReceipt key={receipt.id} receipt={receipt} dismiss={dismiss} download={download} />)
+}
+
+function FiscalReceipt({ receipt: { id, numero, pending, note, error }, dismiss, download }) {
+  const issued = !pending && !!note
+  useEffect(() => {
+    if (!issued) return
+    const timer = setTimeout(() => dismiss(id), RECEIPT_TIMEOUT_MS)
+    return () => clearTimeout(timer)
+  }, [dismiss, id, issued])
+
+  return <section className={'card '+s.receipt} aria-live="polite">
     <h3><ReceiptText size={18}/> Pedido {numero ? '#'+numero : ''} concluído</h3>
     <p>{pending ? 'Emitindo NFC-e…' : note ? 'NFC-e nº '+note.numero+' · '+(note.ambiente==='HOMOLOGACAO'?'Homologação':note.ambiente) : 'Emissão pendente. '+error}</p>
-    {!pending && <div className={s.actions}><button type="button" className="gold" onClick={()=>dismiss(id)}>Continuar no caixa</button>{note ? <button onClick={()=>download(note)}><Download size={15}/> Baixar</button> : <a href="#/notafiscal?aba=pendentes" onClick={()=>dismiss(id)}>Conferir emissão</a>}</div>}
-  </section>)
+    {!pending && <div className={s.actions}><button type="button" className="gold" onClick={()=>dismiss(id)}>Continuar no caixa</button>{note ? <button onClick={()=>download(note)}><Download size={15}/> Baixar</button> : <a href={'#/pedidos?pedidoId='+encodeURIComponent(id)} onClick={()=>dismiss(id)}>Conferir emissão</a>}</div>}
+  </section>
 }

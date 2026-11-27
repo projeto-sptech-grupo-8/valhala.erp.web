@@ -51,6 +51,7 @@ async function setup(page, { recipeFailure = false, readOnly = false } = {}) {
       ].filter(l => (!url.searchParams.get('produtoId') || l.produtoId === url.searchParams.get('produtoId')) && (!url.searchParams.get('situacao') || l.situacao === url.searchParams.get('situacao')) && (!url.searchParams.has('venceEmDias') || (l.diasParaVencer != null && l.diasParaVencer <= Number(url.searchParams.get('venceEmDias')))))
       return respond(envelope(lots, Number(url.searchParams.get('pagina') || 0), Number(url.searchParams.get('tamanho') || 20)))
     }
+    if (path === '/dashboard/reposicao') return respond({ itens: [{ produtoId: strawberry.id, nome: 'Morango', categoria: 'Insumos', status: 'CRITICO', quantidadeAtual: 2, estoqueMinimo: 10, unidadeMedida: 'un' }], totalItens: 1 })
     if (path === '/dashboard/resumo') return respond({ estoque: { criticos: 1, zerados: 0, produtosSemMinimoDefinido: 0, alertas: [{ produtoId: strawberry.id, nome: 'Morango', categoria: 'Insumos', status: 'CRITICO' }] } })
     return respond({ message: 'Não encontrado no teste' }, 404)
   })
@@ -140,7 +141,7 @@ test('movimentação envia unidade-base e tipo exato sem inferir perda pelo moti
 test('categorias navegam pelo ID e consulta preserva paginação', async ({ page }) => {
   const calls = await setup(page)
   await page.goto('/#/categorias')
-  await page.getByRole('button', { name: 'Ver produtos', exact: true }).click()
+  await page.getByRole('button', { name: 'Ver Produto', exact: true }).click()
   await expect(page).toHaveURL(/categoriaId=1/)
   await expect.poll(() => calls.filter(c => c.path === '/produtos').at(-1)?.query.categoriaId).toBe('1')
 })
@@ -164,7 +165,8 @@ test('categorias tratam exclusão vinculada e permitem inativar e reativar sem a
   await page.goto('/#/categorias')
   await expect(page.getByRole('table').getByRole('columnheader')).toHaveCount(3)
   await expect(page.getByRole('table')).toContainText('Ingredientes')
-  await page.getByRole('button', { name: 'Excluir categoria', exact: true }).click()
+  await page.getByRole('button', { name: 'Gerenciar categoria Insumos', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Excluir categoria', exact: true }).click()
   let dialog = page.getByRole('dialog')
   await dialog.getByRole('button', { name: 'Excluir categoria', exact: true }).click()
   await expect(dialog.getByRole('alert')).toContainText('possui produtos vinculados')
@@ -175,7 +177,8 @@ test('categorias tratam exclusão vinculada e permitem inativar e reativar sem a
   await expect(dialog).toContainText('Os produtos continuam vinculados e mantêm seu próprio status')
   await dialog.getByRole('button', { name: 'Inativar categoria', exact: true }).click()
   await expect(page.getByRole('table')).toContainText('Inativa')
-  await page.getByRole('button', { name: 'Reativar categoria', exact: true }).click()
+  await page.getByRole('button', { name: 'Gerenciar categoria Insumos', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Reativar categoria', exact: true }).click()
   await page.getByRole('dialog').getByRole('button', { name: 'Reativar categoria', exact: true }).click()
   await expect(page.getByRole('table')).toContainText('Ativa')
   expect(writes).toEqual([{ method: 'DELETE' }, { method: 'PATCH', body: { ativo: false } }, { method: 'PATCH', body: { ativo: true } }])
@@ -359,32 +362,43 @@ test('nova movimentação abre em página própria e cancelar retorna aos filtro
   await expect(page).toHaveURL(/movimentacoes.*tipo=PERDA/)
 })
 
-test('reposição filtra apenas alertas recebidos e mostra falta na unidade correta', async ({ page }) => {
+test('reposição aplica filtros no servidor e mostra falta na unidade correta', async ({ page }) => {
   const calls = await setup(page)
   let summaryCalls = 0
   const alerts = [
     { produtoId: strawberry.id, nome: 'Zerado', categoria: 'Insumos', status: 'ZERADO', quantidadeAtual: 0, estoqueMinimo: 10 },
-    { produtoId: vodka.id, nome: 'Vodka', categoria: 'Bebidas', status: 'CRITICO', quantidadeAtual: 300, estoqueMinimo: 1000 },
+    { produtoId: vodka.id, nome: 'Vodka', categoria: 'Bebidas', unidadeMedida: 'ml', status: 'CRITICO', quantidadeAtual: 300, estoqueMinimo: 1000 },
     { produtoId: 'extra', nome: 'Água', categoria: 'Bebidas', status: 'CRITICO', quantidadeAtual: 60, estoqueMinimo: 100 },
   ]
   await page.route('http://localhost:8080/dashboard/resumo?*', route => {
     summaryCalls++
     return route.fulfill({ headers: feedbackHeaders, json: { estoque: { totalProdutos: 200, criticos: 50, zerados: 20, produtosSemMinimoDefinido: 4, saudePercentual: 80, alertas: alerts } } })
   })
+  await page.route('http://localhost:8080/dashboard/reposicao?*', route => {
+    const query = new URL(route.request().url()).searchParams
+    const items = alerts.filter(item => {
+      const percentage = item.quantidadeAtual / item.estoqueMinimo * 100
+      return (!query.get('situacao') || item.status === query.get('situacao')) && (query.get('faixa') !== '50' || percentage > 25 && percentage <= 50)
+    })
+    if (query.get('ordem') === 'name') items.sort((left, right) => left.nome.localeCompare(right.nome, 'pt-BR'))
+    return route.fulfill({ headers: feedbackHeaders, json: { itens: items, totalItens: items.length } })
+  })
   await page.goto('/#/reposicao')
   const table = page.getByRole('table')
   await expect(table.getByRole('columnheader', { name: 'Falta para o mínimo', exact: true })).toBeVisible()
   await expect(table.getByRole('row').filter({ hasText: 'Vodka' })).toContainText('700 ml')
-  await expect(page.getByRole('status').filter({ hasText: 'Exibindo 3 de 3' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Zerados 1', exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'Zerados 1', exact: true }).click()
+  await expect(page.getByText('1–3 de 3', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Zerados', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Zerados', exact: true }).click()
   await expect(table.getByRole('row')).toHaveCount(2)
-  await expect(page.getByRole('status').filter({ hasText: 'Exibindo 1 de 3' })).toBeVisible()
-  await page.getByRole('button', { name: 'Todos 3', exact: true }).click()
+  await expect(page.getByText('1–1 de 1', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Todos', exact: true }).click()
+  await expect(page.getByText('1–3 de 3', { exact: true })).toBeVisible()
   await page.getByLabel('Mínimo disponível', { exact: true }).selectOption('50')
   await expect(table.getByRole('row')).toHaveCount(2)
   await expect(table).toContainText('Vodka')
   await page.getByLabel('Mínimo disponível', { exact: true }).selectOption('')
+  await expect(page.getByText('1–3 de 3', { exact: true })).toBeVisible()
   await page.getByLabel('Ordenar por', { exact: true }).selectOption('name')
   await expect(table.locator('tbody tr').first()).toContainText('Água')
   await page.getByLabel('Ordenar por', { exact: true }).selectOption('percentage')
@@ -418,19 +432,19 @@ test('cores dos KPIs respeitam limites e filtros podem recolher', async ({ page 
   await page.route('http://localhost:8080/dashboard/resumo?*', route => route.fulfill({ json: { estoque: { zerados: 0, criticos: 2, produtosSemMinimoDefinido: 0, saudePercentual: health, alertas: [] } } }))
   await page.goto('/#/reposicao')
   const kpi = label => page.getByRole('article').filter({ hasText: label })
-  await expect(kpi('Produtos zerados')).toHaveAttribute('data-tone', 'blue')
-  await expect(kpi('Estoque crítico')).toHaveAttribute('data-tone', 'danger')
-  await expect(kpi('Sem mínimo definido')).toHaveAttribute('data-tone', 'orange')
-  await expect(kpi('Saúde do estoque')).toHaveAttribute('data-tone', 'danger')
-  for (const [value, tone] of [[25, 'yellow'], [75, 'green']]) {
+  await expect(kpi('Produtos zerados')).toHaveAttribute('data-tone', 'info')
+  await expect(kpi('Estoque crítico')).toHaveAttribute('data-tone', 'bad')
+  await expect(kpi('Sem mínimo definido')).toHaveAttribute('data-tone', 'warn')
+  await expect(kpi('Saúde do estoque')).toHaveAttribute('data-tone', 'bad')
+  for (const [value, tone] of [[25, 'warn'], [75, 'ok']]) {
     health = value
     await page.getByRole('button', { name: 'Atualizar alertas' }).click()
     await expect(kpi('Saúde do estoque')).toHaveAttribute('data-tone', tone)
   }
-  const toggle = page.getByRole('button', { name: 'Filtros dos alertas exibidos' })
+  const toggle = page.getByRole('button', { name: 'Filtros de reposição' })
   await toggle.click()
   await expect(page.getByRole('searchbox', { name: 'Buscar nome' })).toBeVisible()
-  await expect(page.getByRole('combobox', { name: 'Categoria', exact: true })).toBeHidden()
+  await expect(page.getByRole('combobox', { name: 'Buscar categoria', exact: true })).toBeHidden()
   await toggle.click()
   await expect(page.getByRole('searchbox', { name: 'Buscar nome' })).toBeVisible()
 })
@@ -1005,6 +1019,10 @@ test('entrada envia validade e consumo por lote mantém o identificador escolhid
 test('reposição exibe saldo e mínimo usando unidade-base correta do fracionado', async ({ page }) => {
   await setup(page)
   await page.route('http://localhost:8080/dashboard/resumo?*', route => route.fulfill({ json: { estoque: { zerados: 0, criticos: 1, produtosSemMinimoDefinido: 0, saudePercentual: 80, alertas: [{ produtoId: vodka.id, nome: 'Vodka', categoria: 'Insumos', unidadeMedida: 'garrafa', quantidadeAtual: 200, estoqueMinimo: 500, status: 'CRITICO' }] } } }))
+  await page.route('http://localhost:8080/dashboard/reposicao?*', route => route.fulfill({
+    headers: feedbackHeaders,
+    json: envelope([{ produtoId: vodka.id, nome: 'Vodka', categoria: 'Insumos', unidadeMedida: 'ml', quantidadeAtual: 200, estoqueMinimo: 500, status: 'CRITICO' }]),
+  }))
   await page.goto('/#/reposicao')
   await expect(page.getByRole('table')).toContainText('200 ml')
   await expect(page.getByRole('table')).toContainText('500 ml')
@@ -1026,7 +1044,7 @@ test('baixa de vários lotes não reenvia os já concluídos após falha parcial
     return route.fulfill({ headers, status: 201, json: { id: sent.length, ...body } })
   })
   await page.goto('/#/validades')
-  await page.getByRole('button', { name: 'Registrar todas as perdas', exact: true }).click()
+  await page.getByRole('button', { name: 'Registrar perdas de 2 lotes desta página', exact: true }).click()
   const modal = page.getByRole('dialog')
   await modal.getByRole('button', { name: 'Registrar perda', exact: true }).click()
   await expect(modal.getByRole('alert')).toContainText('1 lote(s) já foram baixados')
@@ -2498,14 +2516,15 @@ test('início recupera resumo de validade isoladamente e abre lotes filtrados', 
  await page.goto('/#/dashboard')
  const expiry=page.getByRole('article',{name:'Resumo de validades',exact:true})
  await expect(expiry).toContainText('Falha somente em validades')
- await expect(page.getByRole('article',{name:'Alertas prioritários de estoque',exact:true})).toContainText('Falta para o mínimo: 300 ml')
+ const restock = page.getByRole('article',{name:'Alertas prioritários de estoque',exact:true})
+ await expect(restock.getByText('Falta para o mínimo',{exact:true}).locator('..')).toContainText('300 ml')
  fail=false
  await expiry.getByRole('button',{name:'Tentar novamente',exact:true}).click()
  await expect(expiry).toContainText('16/11/2026')
  await expect(expiry.locator('[data-tone="expired"]')).toContainText('5,25')
  await expect(expiry.locator('[data-tone="upcoming"]')).toContainText('10,25')
- await expect(expiry.getByRole('button', {name:'3 lotes vencidos'})).toBeVisible()
- await expect(expiry.getByRole('button', {name:'2 vencem em até 7 dias'})).toBeVisible()
+ await expect(expiry.getByRole('button', {name:'Lotes vencidos 3'})).toBeVisible()
+ await expect(expiry.getByRole('button', {name:'Vencem em até 7 dias 2'})).toBeVisible()
  await expect(expiry.getByRole('button',{name:'Validade acima de 30 dias 4',exact:true})).toBeVisible()
  await expect(expiry).toContainText('11 lotes com saldo de produtos ativos')
  const distribution = expiry.getByRole('term').filter({hasText:'Exigem atenção'}).locator('..')
@@ -2518,7 +2537,7 @@ test('início recupera resumo de validade isoladamente e abre lotes filtrados', 
  await page.getByLabel('Período do gráfico',{exact:true}).selectOption('3')
  await expect(page.getByRole('heading',{name:'Movimentação de estoque · 3 meses',exact:true})).toBeVisible()
  expect(reads).toBe(2)
- await expiry.getByRole('button',{name:/lotes? vencidos?$/i}).click()
+ await expiry.getByRole('button',{name:'Lotes vencidos 3'}).click()
  await expect(page).toHaveURL(/validades.*situacao=VENCIDO/)
 })
 
@@ -2541,7 +2560,9 @@ test('início usa indicadores globais, movimentos limitados e caixa real sem car
  await expect(page.getByText(/999.999/)).toHaveCount(0)
  const alerts=page.getByRole('article',{name:'Alertas prioritários de estoque',exact:true})
  await expect(alerts).toContainText('200 ml')
- await expect(alerts).toContainText('1 alerta(s) exibido(s) de 17')
+ await expect(alerts).toContainText('Mostrando o mais crítico de um total de 17 produtos abaixo do mínimo.')
+ await expect(alerts.getByRole('meter',{name:'Produtos com mínimo definido'})).toBeHidden()
+ await alerts.getByText('Cobertura do estoque mínimo',{exact:true}).click()
  await expect(alerts.getByRole('meter',{name:'Produtos com mínimo definido'})).toHaveAttribute('aria-valuenow','77')
  await expect(alerts.getByRole('region',{name:'Cobertura do estoque mínimo'})).toContainText('30 sem mínimo')
  await expect(alerts.locator('[data-tone="near"] dd:first-of-type')).toHaveText('20')
@@ -2980,7 +3001,7 @@ test('estorno integral exige confirmação e atualiza o pedido', async ({page}) 
   await expect.poll(()=>bodies).toEqual([{motivo:'Desistência do cliente'}])
   await expect(page.getByRole('button',{name:'Estornar pedido',exact:true})).toHaveCount(0)
 })
-test('notas fiscais emite pelo pedido elegível e recupera nota após resposta incerta', async ({page}) => {
+test('pedido permite emitir NFC-e pendente e recupera nota após resposta incerta', async ({page}) => {
  await setup(page)
  const order={id:'pedido-fiscal',numero:345,status:'CONCLUIDO',concluidoEm:'2026-11-19T10:00:00',total:25}
  const note={id:'nota-345',pedidoId:order.id,pedidoNumero:345,numero:'0004',serie:'1',status:'AUTORIZADA',ambiente:'HOMOLOGACAO',emitidaEm:order.concluidoEm,valorTotal:25,chaveAcesso:'1'.repeat(44),itens:[],pagamentos:[]}
@@ -2988,7 +3009,7 @@ test('notas fiscais emite pelo pedido elegível e recupera nota após resposta i
  await page.route('http://localhost:8080/caixa/**',route=>{
   const path=new URL(route.request().url()).pathname
   const ok=json=>route.fulfill({json,headers:feedbackHeaders})
-  if(path.endsWith('/pedidos-elegiveis'))return ok(envelope(posts?[]:[order]))
+  if(path==='/caixa/pedidos')return ok(envelope([{...order,notaFiscal:posts?note:null}]))
   if(path.endsWith('/emitir')){posts++;expect(route.request().postDataJSON().pedidoId).toBe(order.id);return route.fulfill({status:503,headers:feedbackHeaders,json:{message:'Sem confirmação'}})}
   if(path.endsWith('/pedidos/'+order.id))return ok({...order,notaFiscal:posts?note:null})
   if(path.endsWith('/cancelamento')){
@@ -3001,10 +3022,16 @@ test('notas fiscais emite pelo pedido elegível e recupera nota após resposta i
   return ok(envelope(posts?[note]:[]))
  })
  await page.goto('/#/notafiscal?aba=pendentes')
- await page.getByRole('button',{name:'Ações do pedido 345',exact:true}).click()
- await page.getByRole('menuitem',{name:'Emitir NFC-e',exact:true}).click()
+ await expect(page).toHaveURL(/pedidos.*status=CONCLUIDO/)
+ const orderRow=page.getByRole('row').filter({hasText:'#345'})
+ await expect(orderRow).toContainText('NFC-e pendente')
+ await orderRow.getByRole('button',{name:'Ver detalhes'}).click()
+ const orderDrawer=page.getByRole('dialog',{name:'Detalhes',exact:true})
+ await orderDrawer.getByRole('button',{name:'Emitir NFC-e',exact:true}).click()
  await page.getByRole('button',{name:'Confirmar emissão'}).click()
- const drawer=page.getByRole('dialog')
+ await expect(orderRow.getByText('NFC-e pendente')).toHaveCount(0)
+ await orderDrawer.getByRole('link',{name:'Ver NFC-e',exact:true}).click()
+ const drawer=page.getByRole('dialog',{name:'Detalhes da NFC-e'})
  await expect(drawer).toContainText('Homologação')
  await page.setViewportSize({width:320,height:568})
  await expect(drawer.getByRole('region',{name:'Resumo da nota'})).toContainText('25,00')
@@ -3013,7 +3040,7 @@ test('notas fiscais emite pelo pedido elegível e recupera nota após resposta i
  await expect(drawer.getByRole('button',{name:'Copiar chave'})).toBeVisible()
  expect(await drawer.evaluate(el=>el.scrollWidth<=el.clientWidth+1)).toBe(true)
  const download=page.waitForEvent('download')
- await drawer.getByRole('button',{name:'Baixar'}).click()
+ await drawer.getByRole('button',{name:'Baixar XML',exact:true}).click()
  expect((await download).suggestedFilename()).toMatch(/\.xml$/)
  await drawer.getByRole('button',{name:'Cancelar NFC-e'}).click()
  await drawer.getByLabel('Justificativa').fill('Documento do consumidor incorreto')
@@ -3067,4 +3094,50 @@ test('situação das notas emitidas atualiza ao selecionar e remove ao limpar', 
   await page.getByRole('button',{name:'Limpar filtros'}).click()
   await expect(cells).toHaveCount(3)
   expect(requests.at(-1)).toBeNull()
+})
+
+
+test('financeiro cancela conta pelo contrato da API e exibe o status correto', async ({ page }) => {
+  await setup(page)
+  let account = {
+    id: 'conta-teste', tipo: 'PAGAR', descricao: 'Compra de mercadoria', valor: 80,
+    vencimento: '2026-11-27', status: 'ABERTA', centroCusto: 'COMPRAS', categoria: 'MERCADORIA',
+  }
+  const requests = []
+  await page.route('http://localhost:8080/financeiro/**', route => {
+    const request = route.request()
+    const url = new URL(request.url())
+    const json = body => route.fulfill({ headers: feedbackHeaders, json: body })
+    if (request.method() === 'OPTIONS') return route.fallback()
+    requests.push({ method: request.method(), path: url.pathname, status: url.searchParams.get('status') })
+    if (url.pathname === '/financeiro/resumo') {
+      return json({ referencia: '2026-11-26', saldoRealizado: 0, fluxoCaixa: [], aPagar30Dias: { valor: 80, vencidas: 0, vencemEmAte7Dias: 1 } })
+    }
+    if (url.pathname === '/financeiro/contas/conta-teste/inativacao' && request.method() === 'PATCH') {
+      account = { ...account, status: 'INATIVA' }
+      return json(account)
+    }
+    if (url.pathname === '/financeiro/contas/conta-teste') return json(account)
+    if (url.pathname === '/financeiro/contas') {
+      const status = url.searchParams.get('status')
+      return json(envelope(!status || status === account.status ? [account] : []))
+    }
+    return route.fulfill({ status: 404, headers: feedbackHeaders, json: { message: 'Rota não encontrada' } })
+  })
+
+  await page.goto('/#/financeiro')
+  const actions = page.getByRole('button', { name: 'Ações da conta Compra de mercadoria', exact: true })
+  await actions.scrollIntoViewIfNeeded()
+  await actions.click()
+  await page.getByRole('menuitem', { name: 'Cancelar conta', exact: true }).click()
+  await page.getByRole('button', { name: 'Confirmar cancelamento', exact: true }).click()
+  const detail = page.getByRole('dialog', { name: 'Detalhes da conta', exact: true })
+  await expect(detail).toContainText('Cancelada')
+  expect(requests.find(request => request.method === 'PATCH')?.path).toBe('/financeiro/contas/conta-teste/inativacao')
+  await page.keyboard.press('Escape')
+  await page.getByLabel('Situação', { exact: true }).selectOption('INATIVA')
+  await expect(page.getByRole('table', { name: 'Contas a pagar', exact: true })).toContainText('Cancelada')
+  await expect.poll(() => requests.some(request => request.status === 'INATIVA')).toBe(true)
+  await actions.press('Enter')
+  await expect(page.getByRole('menuitem', { name: 'Cancelar conta', exact: true })).toHaveCount(0)
 })

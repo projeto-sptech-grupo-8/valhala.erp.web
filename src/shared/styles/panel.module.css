@@ -104,6 +104,7 @@ aside > footer button {
   margin: 0 auto;
 }
 
+.cashFullscreen { --cash-menu-offset: 0px; }
 .cashFullscreen > .content { max-width: none; }
 
 :global(.stats) {

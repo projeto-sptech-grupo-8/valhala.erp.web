@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { MoreHorizontal, KeyRound, Users } from 'lucide-react'
 import a from '@/entities/access/ui/access.module.css'
 
@@ -56,25 +56,31 @@ export function ProfileChip({ nome, onClick }) {
 /* ─── Menu de ações (⋯) — teclado: ↑ ↓ Enter Esc ─── */
 export function ActionMenu({ label = 'Mais ações', items, trigger, focusTriggerOnSelect = false }) {
   const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState(null)
   const btnRef = useRef(null)
   const menuRef = useRef(null)
   const list = items.filter(Boolean).filter((it, i, arr) =>
     !it.divider || (i > 0 && i < arr.length - 1 && !arr[i - 1].divider))
 
-  // posição fixa: não é cortado por containers com overflow (tabelas)
-  function toggle() {
-    if (open) { setOpen(false); return }
-    const r = btnRef.current.getBoundingClientRect()
-    const h = list.length * 40 + 12
-    const up = r.bottom + h > window.innerHeight - 8
-    setPos({ top: up ? r.top - h - 4 : r.bottom + 4, left: Math.max(8, r.right - 240) })
-    setOpen(true)
-  }
+  useLayoutEffect(() => {
+    if (!open) return
+    const triggerBounds = btnRef.current.getBoundingClientRect()
+    const menu = menuRef.current
+    const { offsetWidth: width, offsetHeight: height } = menu
+    const padding = 8
+    const maxTop = window.innerHeight - height - padding
+    const below = triggerBounds.bottom + 4
+    const above = triggerBounds.top - height - 4
+    const top = below <= maxTop ? below : above >= padding ? above : maxTop
+    const left = Math.min(triggerBounds.right - width, window.innerWidth - width - padding)
+    menu.style.top = `${Math.max(padding, top)}px`
+    menu.style.left = `${Math.max(padding, left)}px`
+    menu.querySelector('[role=menuitem]:not([disabled])')?.focus({ preventScroll: true })
+  }, [open])
 
   useEffect(() => {
     if (!open) return
     const close = () => setOpen(false)
+    const onScroll = event => { if (event.target !== menuRef.current) close() }
     const onDown = (e) => { if (!menuRef.current?.contains(e.target) && !btnRef.current?.contains(e.target)) close() }
     const onKey = (e) => {
       if (e.key === 'Escape') { e.stopPropagation(); close(); btnRef.current?.focus() }
@@ -87,27 +93,23 @@ export function ActionMenu({ label = 'Mais ações', items, trigger, focusTrigge
     }
     document.addEventListener('mousedown', onDown)
     document.addEventListener('keydown', onKey, true)
-    window.addEventListener('scroll', close, true)
+    window.addEventListener('scroll', onScroll, true)
     window.addEventListener('resize', close)
     return () => {
       document.removeEventListener('mousedown', onDown)
       document.removeEventListener('keydown', onKey, true)
-      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('scroll', onScroll, true)
       window.removeEventListener('resize', close)
     }
   }, [open])
 
-  useEffect(() => {
-    if (open && pos) menuRef.current?.querySelector('[role=menuitem]:not([disabled])')?.focus()
-  }, [open, pos])
-
   return (
     <span className={a.menuWrap} onClick={e => e.stopPropagation()}>
-      <button ref={btnRef} type="button" className={trigger ? undefined : a.menuBtn} aria-haspopup="menu" aria-expanded={open} aria-label={trigger ? undefined : label} title={trigger ? undefined : label} onClick={toggle}>
+      <button ref={btnRef} type="button" className={trigger ? undefined : a.menuBtn} aria-haspopup="menu" aria-expanded={open} aria-label={trigger ? undefined : label} title={trigger ? undefined : label} onClick={() => setOpen(value => !value)}>
         {trigger || <MoreHorizontal size={16} aria-hidden="true" />}
       </button>
-      {open && pos && (
-        <div ref={menuRef} role="menu" aria-label={label} className={a.menu} style={{ top: pos.top, left: pos.left }}>
+      {open && (
+        <div ref={menuRef} role="menu" aria-label={label} className={a.menu}>
           {list.map((it, i) => it.divider
             ? <hr key={`d${i}`} />
             : (

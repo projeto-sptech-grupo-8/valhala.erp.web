@@ -1,15 +1,7 @@
 .muted { color: var(--dim); font-size: 13px; }
-.deleteAction.deleteAction { color: var(--red); }
 .rowActions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; }
 .rowActions > button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 34px; padding: 6px 8px; font-size: 11px; }
 .rowActions > button svg { flex-shrink: 0; }
-.rowActions > button[data-tone="view"] { --action-color: #3b82f6; }
-.rowActions > button[data-tone="edit"] { --action-color: var(--gold2); }
-.rowActions > button[data-tone="pause"] { --action-color: #f59e0b; }
-.rowActions > button[data-tone="activate"] { --action-color: var(--green); }
-.rowActions > button[data-tone="delete"] { --action-color: var(--red); }
-.rowActions > button[data-tone] { color: var(--action-color); border-color: color-mix(in srgb, var(--action-color) 35%, transparent); background: color-mix(in srgb, var(--action-color) 9%, transparent); }
-.rowActions > button[data-tone]:hover { color: var(--action-color); border-color: var(--action-color); background: color-mix(in srgb, var(--action-color) 18%, transparent); }
 @media (max-width: 1100px) { .rowActions > button { width: 34px; padding: 6px; } .rowActions > button > span { display: none; } }
 .dangerSolid { background: #a9483a; border-color: #a9483a; color: #fff; font-weight: 700; }
 .dangerSolid:hover:not(:disabled) { background: #c0503f; border-color: #c0503f; color: #fff; }
@@ -38,8 +30,6 @@
 .status { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border-radius: 6px; font-size: 12px; white-space: nowrap; color: var(--dim); background: color-mix(in srgb, var(--dim) 10%, transparent); }
 .status[data-active="true"] { color: var(--green); background: color-mix(in srgb, var(--green) 10%, transparent); }
 .table .status { min-width: 80px; box-sizing: border-box; justify-content: center; }
-.table table th:nth-child(2), .table table td:nth-child(2) { text-align: center; }
-.table .status { display: flex; width: max-content; margin-inline: auto; }
 .empty { display: grid; justify-items: center; gap: 10px; padding: 20px; }
 .empty > span { color: var(--dim); font-size: 12px; }
 .empty > svg { color: var(--gold2); }

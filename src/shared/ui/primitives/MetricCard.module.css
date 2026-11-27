@@ -1,0 +1,182 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin: 22px 0;
+  container-type: inline-size;
+}
+
+.metric {
+  min-width: 0;
+  background: var(--card);
+  border: 0;
+  border-radius: 13px;
+  --metric-status: var(--dim);
+  --metric-status-bg: var(--raised);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  align-items: start;
+  gap: 9px;
+  padding: clamp(13px, 1.7cqi, 20px);
+}
+
+.metricTitleRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.metric h3 {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.metricValue {
+  align-self: center;
+  text-align: start;
+}
+
+
+.metric strong {
+  color: var(--metric-status);
+  font-size: clamp(22px, 2.4cqi, 32px);
+  line-height: 1.14;
+  font-weight: 700;
+  letter-spacing: -.045em;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric > p {
+  align-self: end;
+  margin: 0;
+  color: var(--dim);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.metricIcon {
+  display: grid;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  color: var(--metric-status);
+  background: var(--metric-status-bg);
+  border-radius: 8px;
+}
+
+.metric[data-tone='ok'] {
+  --metric-status: var(--green);
+  --metric-status-bg: var(--ok-bg);
+}
+
+.metric[data-tone='warn'] {
+  --metric-status: var(--gold2);
+  --metric-status-bg: var(--warn-bg);
+}
+
+.metric[data-tone='bad'] {
+  --metric-status: var(--red);
+  --metric-status-bg: var(--bad-bg);
+}
+
+.metric:is([data-tone='ok'], [data-tone='warn'], [data-tone='bad']),
+.metric[data-tone='info'] {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--metric-status-bg) 68%, transparent), transparent 70%), var(--card);
+}
+
+.help {
+  display: inline-flex;
+  flex: none;
+}
+
+.help > button {
+  min-height: 0;
+  padding: 3px;
+  border: 0;
+  background: transparent;
+  color: var(--dim);
+  cursor: help;
+}
+
+.help > [role='tooltip'] {
+  display: none;
+  position: absolute;
+  z-index: 20;
+  inset: 100% auto auto 0;
+  width: min(280px, 100%);
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 8px 24px #0004;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.help:is(:hover, :focus-within) > [role='tooltip'] {
+  display: block;
+}
+
+.reference {
+  display: block;
+  margin-top: 4px;
+  color: var(--dim);
+  font-size: 12px;
+}
+
+.metricStatus {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 46%;
+  gap: 6px;
+  min-height: 34px;
+  padding: 5px 11px;
+  border: 1px solid color-mix(in srgb, var(--metric-status) 45%, transparent);
+  border-radius: 8px;
+  background: var(--metric-status-bg);
+  color: var(--metric-status);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.metricStatus svg { flex: none; }
+
+.grid .metricStatus {
+  flex: none;
+  max-width: none;
+  gap: 4px;
+  min-height: 24px;
+  padding: 3px 6px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.grid .metricStatus svg {
+  width: 12px;
+  height: 12px;
+}
+
+.metric[data-tone=info] { --metric-status:#69a9df; --metric-status-bg:color-mix(in srgb,#69a9df 12%,transparent); }
+
+@media (max-width: 1200px) {
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 540px) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
+}

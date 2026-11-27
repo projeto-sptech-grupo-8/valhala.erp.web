@@ -88,6 +88,10 @@ export function NewMovementPage({ navigate, pageParams, setBackAction }) {
       <label>Operação<select aria-label="Operação" value={tipo} onChange={e => { setTipo(e.target.value); setProdutoId(''); setQuantidade(''); setSelectedLot(null); setEmFardo(false); setValidade(''); setLote('') }}>{Object.entries(TYPES).filter(([k]) => k !== 'ENTRADA_INICIAL').map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
       <RecordAutocomplete kind="produtos" label="Produto da movimentação" placeholder="Ex.: Vodka, morango ou caipirinha" productType={drink ? 'DRINK' : 'PADRAO'} value={produtoId} onChange={id => { setProdutoId(id); setSelectedLot(null); setEmFardo(false); setDirty(true) }} />
       <label>Quantidade ({asBundle ? 'fardos' : unit})<input placeholder="Ex.: 50" aria-label="Quantidade" type="number" min="0.001" step="any" required value={quantidade} onChange={e => setQuantidade(e.target.value)} /></label>
+      {p && !drink && !product.loading && <div className={ui.balancePreview} aria-live="polite">
+        <span>Saldo atual <strong>{fmtNum(saldo)} {unit}</strong></span>
+        {Number(quantidade) > 0 && <span>Saldo previsto <strong>{fmtNum(saldo + (POSITIVE.includes(tipo) ? 1 : -1) * quantityBase)} {unit}</strong></span>}
+      </div>}
       <label>Justificativa<input placeholder="Ex.: Recebimento de mercadoria ou contagem física" value={motivo} onChange={e => setMotivo(e.target.value)} required={tipo.startsWith('AJUSTE') || tipo === 'PERDA'} /></label>
       {canBundle && <label>Quantidade informada em<select aria-label="Quantidade informada em" value={String(emFardo)} onChange={e => setEmFardo(e.target.value === 'true')}><option value="false">Unidades</option><option value="true">Fardos ({p.unidadesFardo} unidades cada)</option></select></label>}
       {credit && <><label>Lote (referência)<input placeholder="Ex.: LOTE-2026-01" maxLength={100} value={lote} onChange={e => setLote(e.target.value)} /></label><label>Validade do lote<input type="date" value={validade} onChange={e => setValidade(e.target.value)} /></label></>}
@@ -95,7 +99,6 @@ export function NewMovementPage({ navigate, pageParams, setBackAction }) {
       {p && !drink && !credit && <LotSelect key={produtoId + tipo} productId={produtoId} value={selectedLot} onChange={lot => { setSelectedLot(lot); setDirty(true) }} allowExpired={tipo === 'PERDA' || tipo === 'AJUSTE_NEGATIVO'} />}
     </div>
     <QueryFeedback query={product} />
-    {p && !drink && !product.loading && <p>Saldo consultado: {fmtNum(saldo)} {unit}. {Number(quantidade) > 0 && <>Estimativa após: {fmtNum(saldo + (POSITIVE.includes(tipo) ? 1 : -1) * quantityBase)} {unit}.</>} O servidor confirma o saldo.</p>}
     <p>Lote e validade são persistidos nas entradas e ajustes positivos. Saídas usam FEFO quando nenhum lote é selecionado. O custo médio de entrada não é atualizado por esta operação.</p>
     </section></fieldset>
     <div className={layout.footer}><button type="button" disabled={busy} onClick={cancel}>Cancelar</button><button type="submit" className="gold" disabled={busy || uncertain || product.loading || !!product.error || !p}>{busy ? 'Salvando…' : 'Salvar movimentação'}</button></div>

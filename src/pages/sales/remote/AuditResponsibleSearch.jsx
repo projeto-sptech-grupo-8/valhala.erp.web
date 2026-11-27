@@ -1,8 +1,10 @@
+import { X } from 'lucide-react'
 import { useId, useState } from 'react'
 import { api } from '@/shared/api/api.js'
 import { useQueryResource } from '@/shared/lib/hooks/usePagedQuery.js'
 import { Notice } from '@/shared/ui/feedback/ManagementFeedback.jsx'
 import css from '@/features/catalog/product-editor/ui/CategoryAutocomplete.module.css'
+import s from './SalesRemote.module.css'
 
 const normalize=value=>String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('pt-BR')
 
@@ -24,7 +26,12 @@ export function AuditResponsibleSearch({value,name,onChange,canReadUsers}) {
  }
  return <div className={css.root} onBlur={event=>{if(!event.currentTarget.contains(event.relatedTarget)){setOpen(false);setText('')}}}>
   <label htmlFor={id}>Buscar responsável</label>
-  <input id={id} role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={id+'-list'} aria-activedescendant={open&&active>=0?id+'-option-'+active:undefined} autoComplete="off" placeholder="Ex.: Ana ou João" value={open?text:value?selectedName:''} onFocus={()=>{setRequested(true);setOpen(true);setText('');setActive(-1)}} onClick={()=>{if(!open){setRequested(true);setOpen(true);setText('');setActive(-1)}}} onChange={event=>{setText(event.target.value);setActive(-1);setOpen(true)}} onKeyDown={keys}/>
+  <div className={s.auditResponsibleInput}>
+   <input id={id} role="combobox" aria-autocomplete="list" aria-expanded={open} aria-controls={id+'-list'} aria-activedescendant={open&&active>=0?id+'-option-'+active:undefined} autoComplete="off" placeholder="Ex.: Ana ou João" value={open?text:value?(selectedName||'Responsável selecionado'):''} onFocus={()=>{setRequested(true);setOpen(true);setText('');setActive(-1)}} onClick={()=>{if(!open){setRequested(true);setOpen(true);setText('');setActive(-1)}}} onChange={event=>{setText(event.target.value);setActive(-1);setOpen(true)}} onKeyDown={keys}/>
+   {value && <button type="button" aria-label="Remover filtro de responsável" title="Remover filtro de responsável" onClick={()=>{
+    onChange('','');setOpen(false);setText('');setActive(-1)
+   }}><X size={14} aria-hidden="true"/></button>}
+  </div>
   {open&&<div className={css.dropdown}>
    <div id={id+'-list'} role="listbox" aria-label="Responsáveis disponíveis">{!users.loading&&!users.error&&options.map((user,index)=><div key={user.id} id={id+'-option-'+index} role="option" aria-selected={active===index} className={css.option} onMouseDown={event=>event.preventDefault()} onClick={()=>choose(user)}>{user.name}{user.active===false?' · Inativo':''}</div>)}</div>
    {users.loading?<p role="status">Carregando responsáveis…</p>:users.error?<Notice title="Não foi possível carregar responsáveis" onRetry={users.reload}>{users.error.message}</Notice>:!options.length?<p>Nenhum responsável encontrado.</p>:matching.length>20?<p>Mostrando os primeiros 20 nomes. Digite mais letras para refinar a busca.</p>:null}

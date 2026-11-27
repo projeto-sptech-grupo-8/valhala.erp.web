@@ -5,12 +5,21 @@ import { diffCodigos } from '@/shared/config/funcionalidades.js'
 import { Modal } from '@/shared/ui/feedback/ManagementFeedback.jsx'
 import a from '@/entities/access/ui/access.module.css'
 
+function effectivePermissions(profile, overrides) {
+  const codes = new Set(profile?.codigos)
+  for (const [code, effect] of Object.entries(overrides)) {
+    if (effect === 'GRANT') codes.add(code)
+    if (effect === 'REVOKE') codes.delete(code)
+  }
+  return codes
+}
+
 /* ─── Mudar perfil: escolha + diferença de permissões ─── */
 export function ChangeProfileModal({ user, perfis, funcionalidades, overrides = {}, isSelf, busy, error, onClose, onConfirm }) {
   const [perfilId, setPerfilId] = useState(user.profileId)
   const atual = perfis.find(p => p.id === user.profileId)
   const novo = perfis.find(p => p.id === perfilId)
-  const { ganha, perde } = diffCodigos(atual?.codigos, novo?.codigos)
+  const { ganha, perde } = diffCodigos(effectivePermissions(atual, overrides), effectivePermissions(novo, overrides))
   const nome = (c) => funcionalidades.find(f => f.codigo === c)?.nome || c
   const changed = perfilId && perfilId !== user.profileId
   // GRANT de algo que o novo perfil já tem, ou REVOKE de algo que ele não tem, deixa de ter efeito
@@ -47,7 +56,8 @@ export function ChangeProfileModal({ user, perfis, funcionalidades, overrides = 
       </div>
 
       </fieldset>
-      {changed && (
+      {changed && !ganha.length && !perde.length && <p className={a.note} aria-live="polite">O acesso deste usuário fica igual após a troca de perfil.</p>}
+      {changed && (ganha.length > 0 || perde.length > 0) && (
         <div className={a.diff} aria-live="polite">
           <div>
             <b className={a.diffAdd}><Plus size={13} aria-hidden="true" /> Passa a ter ({ganha.length})</b>

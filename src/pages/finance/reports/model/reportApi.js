@@ -10,6 +10,12 @@ export async function readReport(path, dias, signal) {
   return data
 }
 
+export function exportReport(path, dias, filters) {
+  const query = new URLSearchParams({ dias })
+  for (const [key, value] of Object.entries(filters)) if (value) query.set(key, value)
+  return authenticatedRequest(`/relatorios/${path}/exportar?${query}`, { responseType: 'blob' })
+}
+
 export function horarioReport(itens) {
   const primeiraHora = Math.min(HOURS[0], ...itens.map(linha => linha.hora))
   const horas = Array.from({ length: 24 - primeiraHora }, (_, i) => primeiraHora + i)

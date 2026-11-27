@@ -118,7 +118,7 @@ export function ProfilesList({ navigate, pageParams }) {
       {perfis.error && perfis.data && <ErrorBlock error={perfis.error} onRetry={perfis.reload} />}
       {perfis.loading ? <LoadingBlock lines={5} label="Carregando perfis" /> : (
         <div className={filters.profileTable}>
-          <DataTable
+          <DataTable compactColumns={['nome', 'users', 'acoes']}
             key={JSON.stringify([q, range])}
             caption="Perfis de acesso"
             columns={columns}

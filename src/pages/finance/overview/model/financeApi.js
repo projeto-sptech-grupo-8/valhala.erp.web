@@ -17,5 +17,5 @@ export const financeApi = {
   criar: body => financeiro('contas', { method: 'POST', body }),
   atualizar: (id, body) => financeiro(`contas/${id}`, { method: 'PUT', body }),
   baixar: (id, body) => financeiro(`contas/${id}/baixa`, { method: 'POST', body }),
-  cancelar: id => financeiro(`contas/${id}/cancelamento`, { method: 'POST' }),
+  cancelar: id => financeiro(`contas/${id}/inativacao`, { method: 'PATCH' }),
 }

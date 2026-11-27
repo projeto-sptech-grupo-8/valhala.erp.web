@@ -48,6 +48,7 @@ export function ReportTable({ title, columns, rows, searches, filters, emptyText
   const [searchTerms, setSearchTerms] = useState({})
   const [selected, setSelected] = useState({})
   const [pageSize, setPageSize] = useState(PAGE_SIZES[0])
+  const [exporting, setExporting] = useState(false)
   const activeFilters = filters.filter(({ key, options }) => options.some(option => option.value === selected[key]))
   if (activeFilters.length !== Object.keys(selected).length) {
     setSelected(Object.fromEntries(activeFilters.map(({ key }) => [key, selected[key]])))
@@ -65,6 +66,19 @@ export function ReportTable({ title, columns, rows, searches, filters, emptyText
     setSelected({})
   }
 
+  async function exportRows() {
+    if (exporting || !visibleRows.length) return
+    setExporting(true)
+    try {
+      await onExport(Object.fromEntries([
+        ...activeSearches.map(({ key, term }) => [key, term]),
+        ...activeFilters.map(({ key }) => [key, selected[key]]),
+      ]))
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <section className={s.details} aria-label={title} style={{ '--report-table-min-width': `${minTableWidth}px` }}>
       <div className={s.tableFilters}>
@@ -78,14 +92,14 @@ export function ReportTable({ title, columns, rows, searches, filters, emptyText
             <button type="button" disabled={!hasFilter} onClick={clearFilters}>
               <FilterX size={17} aria-hidden="true" />Limpar filtros
             </button>
-            {onExport && <button type="button" onClick={onExport}><Download size={15} aria-hidden="true" />Exportar</button>}
+            {onExport && <button type="button" onClick={exportRows} disabled={exporting || !visibleRows.length}><Download size={15} aria-hidden="true" />{exporting ? 'Exportando…' : hasFilter ? 'Exportar resultados filtrados' : 'Exportar Excel'}</button>}
           </div>
         </FilterHeader>
         <div id={id} className={s.tableFilterFields} data-field-count={searches.length + filters.length + 1} hidden={!expanded}>
           {searches.map(({ key, label, placeholder }) => (
             <label key={key} className={s.tableFilterField}>
               {label}
-              <input type="search" placeholder={placeholder} value={searchTerms[key] ?? ''}
+              <input type="search" maxLength={200} placeholder={placeholder} value={searchTerms[key] ?? ''}
                 onChange={event => setSearchTerms(current => ({ ...current, [key]: event.target.value }))} />
             </label>
           ))}
@@ -101,7 +115,7 @@ export function ReportTable({ title, columns, rows, searches, filters, emptyText
           </div>
         </div>
       </div>
-      <p className={s.tableHint}>Deslize a tabela para ver todas as colunas.</p>
+      {!tableProps.compactColumns && <p className={s.tableHint}>Deslize a tabela para ver todas as colunas.</p>}
       <DataTable {...tableProps} columns={columns} rows={visibleRows} pageSize={pageSize}
         emptyText={rows.length ? 'Nenhum resultado para os filtros aplicados.' : emptyText} />
     </section>

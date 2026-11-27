@@ -1,5 +1,9 @@
+import { DateRangeFilter } from '@/shared/ui/filters/DateRangeFilter.jsx'
 import { useFiscalCheckout } from '@/pages/sales/invoices/fiscalContext.js'
+import { needsInvoice } from '@/pages/sales/invoices/fiscalApi.js'
+import { OrderInvoice } from '@/pages/sales/invoices/ui/OrderInvoice.jsx'
 import { FilterActions, FilterHeader } from '@/shared/ui/filters/FilterActions.jsx'
+import { SearchInput } from '@/features/catalog/remote/RemoteControls.jsx'
 import { CashRatesPanel } from '@/features/sales/cash-settings/ui/CashRatesPanel.jsx'
 import { CashEquipmentPanel } from '@/features/sales/cash-settings/ui/CashEquipmentPanel.jsx'
 import { CashPolicyModal } from '@/features/sales/cash-settings/ui/CashPolicyModal.jsx'
@@ -13,6 +17,8 @@ import { useEffect, useRef, useState, useId } from 'react'
 import { readCash as read, writeCash as write, countOpenCashOrders } from '@/entities/sales/api/cashApi.js'
 import { CashOpening } from './CashOpening.jsx'
 import { CashHistory } from './CashHistory.jsx'
+import { CashSessionBadge } from './CashSessionBadge.jsx'
+import { CashSessionDetail } from './CashSessionDetail.jsx'
 import { useStore } from '@/entities/store'
 import { useListParams, useQueryResource } from '@/shared/lib/hooks/usePagedQuery.js'
 import { DataTable } from '@/shared/ui/data-table/DataTable.jsx'
@@ -27,8 +33,9 @@ const states={PENDENTE:'Pendente',PENDENTE_NA_POINT:'Aguardando Point',EM_TERMIN
 const paymentNames={DINHEIRO:'Dinheiro',PIX:'Pix',DEBITO:'Cartão de débito',CREDITO:'Cartão de crédito',VALOR:'Valor em reais (R$)',PERCENTUAL:'Percentual (%)'}
 const channels={BALCAO:'Balcão',MESA:'Mesa',RETIRADA:'Retirada',DELIVERY:'Delivery'}
 function Badge({value}) {
- const good=['APROVADO','CONCLUIDO','FECHADA','ABERTA'].includes(value)
- const bad=['CANCELADO','RECUSADO','EXPIRADO','EM_FECHAMENTO'].includes(value)
+ if (['ABERTA','FECHADA','EM_FECHAMENTO','CANCELADA'].includes(value)) return <CashSessionBadge value={value} />
+ const good=['APROVADO','CONCLUIDO'].includes(value)
+ const bad=['CANCELADO','RECUSADO','EXPIRADO'].includes(value)
  const Icon=good?CheckCircle2:bad?AlertCircle:Clock3
  return <span className={s.badge} data-tone={good?'success':bad?'danger':value==='PAGAMENTO_PARCIAL'?'info':'pending'}><Icon size={13} aria-hidden="true"/>{states[value]||value||'Não informado'}</span>
 }
@@ -66,17 +73,30 @@ function FormModal({spec,close,done}){
 }
 export function SalesList({kind='pedidos'}){
  const {user,can}=useStore()
+ const {invoiceRevision}=useFiscalCheckout()
  const [responsibleName,setResponsibleName]=useState('')
  const {params,update,clear}=useListParams(kind==='sessoes'?'abertaEm':kind==='auditoria'?'ocorridoEm':'atualizadoEm','DESC');const [expanded,setExpanded]=useState(true),[selected,setSelected]=useState(null)
- const request={pagina:params.pagina,tamanho:params.tamanho,ordenarPor:params.ordenarPor,direcao:params.direcao,dataInicio:params.dataInicio,dataFim:params.dataFim,...(kind==='pedidos'?{status:params.status,canal:params.canal,sessaoCaixaId:params.sessaoCaixaId}:kind==='sessoes'?{status:params.status}:{tipoEvento:params.tipoEvento,sessaoCaixaId:params.sessaoCaixaId,usuarioId:params.usuarioId})}
- const query=useQueryResource(signal=>params.dataInicio&&params.dataFim&&params.dataInicio>params.dataFim?Promise.reject(new Error('Confira o período: a data inicial deve ser anterior à final.')):read(kind,request,signal),[kind,request]);const rows=query.loading||query.error?[]:query.data?.itens||[]
+ const invoiceRefreshKey=kind==='pedidos'?invoiceRevision:undefined
+ const pendingOnly=kind==='pedidos'&&params.nfcePendente==='true'
+ const compactColumns=kind==='pedidos'?['numero','total','status','actions']:kind==='sessoes'?['caixaNome','abertaEm','status','actions']:['tipoEvento','usuarioNome','actions']
+ const detailId=kind==='pedidos'?params.pedidoId:selected?.id
+ function openDetail(row) {
+  if(kind==='pedidos')update({pedidoId:row.id},false)
+  else setSelected(row)
+ }
+ function closeDetail() {
+  if(kind==='pedidos')update({pedidoId:null},false)
+  else setSelected(null)
+ }
+ const request={pagina:params.pagina,tamanho:params.tamanho,ordenarPor:params.ordenarPor,direcao:params.direcao,dataInicio:params.dataInicio,dataFim:params.dataFim,...(kind==='pedidos'?{status:pendingOnly?undefined:params.status,canal:params.canal,sessaoCaixaId:params.sessaoCaixaId,numero:params.numero,nfcePendente:pendingOnly||undefined}:kind==='sessoes'?{status:params.status}:{tipoEvento:params.tipoEvento,sessaoCaixaId:params.sessaoCaixaId,usuarioId:params.usuarioId})}
+ const query=useQueryResource(signal=>params.dataInicio&&params.dataFim&&params.dataInicio>params.dataFim?Promise.reject(new Error('Confira o período: a data inicial deve ser anterior à final.')):read(kind,request,signal),[kind,request],{refreshKey:invoiceRefreshKey});const rows=query.loading||query.error?[]:query.data?.itens||[]
  const cols=kind==='pedidos'?[
   {key:'numero',header:'Pedido',render:r=><strong className={s.orderNumber}>#{r.numero}</strong>},
   {key:'criadoEm',header:'Data e hora',render:r=><span className={s.orderDate}>{r.criadoEm?fmtDateTime(r.criadoEm):'—'}</span>},
   {key:'canal',header:'Canal / Identificação',sort:false,render:r=><div className={s.orderIdentity}><strong>{channels[r.canal]||r.canal||'Não informado'}</strong>{r.identificadorAtendimento?.trim()&&<span>{r.identificadorAtendimento}</span>}</div>},
   {key:'total',header:'Total',align:'right',render:r=>r.total==null?'—':fmtBRL(r.total)},
   {key:'saldoRestante',header:'Pagamento',sort:false,render:r=><OrderPaymentSummary order={r}/>},
-  {key:'status',header:'Situação',render:r=><Badge value={r.status}/>}
+  {key:'status',header:'Situação',render:r=><div className={s.orderStatuses}><Badge value={r.status}/>{needsInvoice(r)&&<Badge value="NFC-e pendente"/>}</div>}
  ]:kind==='sessoes'?[{key:'caixaNome',header:'Caixa',sort:false},{key:'operadorNome',header:'Operador',sort:false},{key:'abertaEm',header:'Abertura',render:r=>fmtDateTime(r.abertaEm)},{key:'diferenca',header:'Diferença',render:r=>r.diferenca==null?'—':fmtBRL(r.diferenca)},{key:'status',header:'Situação',render:r=><Badge value={r.status}/>}]:[
   {key:'ocorridoEm',header:'Data e hora',render:r=><span className={s.orderDate}>{auditDateLabel(r.ocorridoEm)}</span>},
   {key:'tipoEvento',header:'Evento',render:r=><AuditEventBadge code={r.tipoEvento}/>},
@@ -85,13 +105,99 @@ export function SalesList({kind='pedidos'}){
   {key:'valor',header:'Valor',align:'right',render:r=>r.valor==null?'—':fmtBRL(r.valor)},
   {key:'descricao',header:'Resumo',sort:false,render:r=><span className={s.auditSummary} title={r.descricao||undefined}>{r.descricao||'—'}</span>}
  ]
- cols.push({key:'actions',header:'Ações',sort:false,render:r=><button type="button" onClick={()=>setSelected(r)}><Eye size={15} aria-hidden="true"/>Ver detalhes</button>})
- const filterActions=<FilterActions onClear={clear} onRefresh={query.reload} refreshing={query.loading}/>
- return <><section className={s.panel}><FilterHeader className={s.filterHeading}><h2><button className={s.collapse} onClick={()=>setExpanded(!expanded)} aria-expanded={expanded}><SlidersHorizontal size={17}/>Filtros de {kind==='sessoes'?'sessões de caixa':kind==='auditoria'?'auditoria':'pedidos'}<ChevronDown size={17} className={expanded?s.rotated:undefined} aria-hidden="true"/></button></h2>{filterActions}</FilterHeader>{expanded&&<div className={s.grid}>{kind==='auditoria'&&<AuditFilters params={params} update={update} user={user} responsibleName={responsibleName} canReadUsers={can('USUARIOS_VISUALIZAR')} onResponsibleChange={(id,name)=>{setResponsibleName(name);update({usuarioId:id})}}/ >}{kind!=='auditoria'&&<label>Situação<select value={params.status||''} onChange={e=>update({status:e.target.value})}><option value="">Todas</option>{(kind==='sessoes'?['ABERTA','EM_FECHAMENTO','FECHADA']:['EM_ATENDIMENTO','AGUARDANDO_MAQUINA','AGUARDANDO_PAGAMENTO','PAGAMENTO_PARCIAL','CONCLUIDO','CANCELADO','ESTORNADO']).map(v=><option key={v} value={v}>{states[v]}</option>)}</select></label>}{kind==='pedidos'&&<label>Canal<select value={params.canal||''} onChange={e=>update({canal:e.target.value})}><option value="">Todos</option>{['BALCAO','MESA','RETIRADA','DELIVERY'].map(v=><option key={v} value={v}>{channels[v]||v}</option>)}</select></label>}<label>Data inicial<input type="date" value={params.dataInicio||''} onChange={e=>update({dataInicio:e.target.value})}/></label><label>Data final<input type="date" value={params.dataFim||''} onChange={e=>update({dataFim:e.target.value})}/></label><label>Por página<select value={params.tamanho} onChange={e=>update({tamanho:e.target.value})}>{[10,20,50].map(n=><option key={n}>{n}</option>)}</select></label></div>}</section><Feedback query={query}/><DataTable caption={kind} pageSize={params.tamanho} columns={cols} rows={rows} emptyText="Nenhum registro nesta consulta." remote={{page:params.pagina,total:query.data?.totalItens||0,loading:query.loading,sort:{key:params.ordenarPor,dir:params.direcao.toLowerCase()},onPage:pagina=>update({pagina},false),onSort:o=>update({ordenarPor:o.key,direcao:o.dir.toUpperCase()})}}/>{selected&&(kind==='auditoria'?<CashAuditDetail event={selected} onClose={()=>setSelected(null)}/>:<Detail kind={kind} row={selected} close={()=>setSelected(null)} done={query.reload}/>)}</>
+ cols.push({key:'actions',header:'Ações',sort:false,render:r=><button type="button" onClick={()=>openDetail(r)}><Eye size={15} aria-hidden="true"/>Ver detalhes</button>})
+ const filterTitle=kind==='sessoes'?'sessões de caixa':kind==='auditoria'?'auditoria':'pedidos'
+ const statusOptions=kind==='sessoes'?['ABERTA','EM_FECHAMENTO','FECHADA']:
+  ['EM_ATENDIMENTO','AGUARDANDO_MAQUINA','AGUARDANDO_PAGAMENTO','PAGAMENTO_PARCIAL','CONCLUIDO','CANCELADO','ESTORNADO']
+ const divergencia=params.status==='EM_FECHAMENTO'
+ const hasExtraFilter=kind==='auditoria' && can('USUARIOS_VISUALIZAR')
+ const selectedPeriod=params.periodo || (!params.dataInicio && !params.dataFim ? 'todos' : undefined)
+ function changePeriod({id,dataInicio,dataFim}) {
+  update({periodo:id==='todos'?'':id,dataInicio,dataFim})
+ }
+ const pagination={
+  page:params.pagina,total:query.data?.totalItens||0,loading:query.loading,
+  sort:{key:params.ordenarPor,dir:params.direcao.toLowerCase()},
+  onPage:pagina=>update({pagina},false),
+  onSort:sort=>update({ordenarPor:sort.key,direcao:sort.dir.toUpperCase()}),
+ }
+ return <>
+  <section className={s.panel + ' ' + s.dateFilters}>
+   <FilterHeader className={s.filterHeading}>
+    <h2><button type="button" className={s.collapse} onClick={()=>setExpanded(value=>!value)} aria-expanded={expanded} aria-controls="sales-filter-fields">
+     <SlidersHorizontal size={17} aria-hidden="true"/>Filtros de {filterTitle}
+     <ChevronDown size={17} className={expanded?s.rotated:undefined} aria-hidden="true"/>
+    </button></h2>
+    <FilterActions onClear={clear} onRefresh={query.reload} refreshing={query.loading}>
+     {kind==='pedidos'&&<button type="button" aria-pressed={pendingOnly}
+      onClick={()=>update({nfcePendente:pendingOnly?'':'true',status:''})}>
+      <Eye size={17} aria-hidden="true"/>NFC-e pendente
+     </button>}
+     {kind==='sessoes'&&<button type="button" aria-pressed={divergencia}
+      onClick={()=>update({status:divergencia?'':'EM_FECHAMENTO'})}>
+      <Eye size={17} aria-hidden="true"/>Ver divergências pendentes
+     </button>}
+    </FilterActions>
+   </FilterHeader>
+   <div id="sales-filter-fields" hidden={!expanded}>
+    <div className={kind==='pedidos' ? s.grid : s.grid + ' ' + s.dateFilterGrid} data-extra-field={hasExtraFilter || undefined}>
+     {kind==='auditoria'?<AuditFilters params={params} update={update} user={user} responsibleName={responsibleName}
+      canReadUsers={can('USUARIOS_VISUALIZAR')} onResponsibleChange={(id,name)=>{setResponsibleName(name);update({usuarioId:id})}}/>:
+      <label>Situação<select disabled={pendingOnly} value={pendingOnly?'CONCLUIDO':params.status||''} onChange={event=>update({status:event.target.value})}>
+       <option value="">Todas</option>{statusOptions.map(value=><option key={value} value={value}>{states[value]}</option>)}
+      </select></label>}
+     {kind==='pedidos'&&<label>Canal<select value={params.canal||''} onChange={event=>update({canal:event.target.value})}>
+      <option value="">Todos</option>{['BALCAO','MESA','RETIRADA','DELIVERY'].map(value=><option key={value} value={value}>{channels[value]}</option>)}
+     </select></label>}
+     {kind!=='pedidos'&&<DateRangeFilter label={kind==='sessoes'?'Período de abertura':'Período'} className={s.dateFilterPeriod}
+      selected={selectedPeriod} onChange={changePeriod} />}
+     <label>Por página<select value={params.tamanho} onChange={event=>update({tamanho:event.target.value})}>
+      {[10,20,50].map(size=><option key={size}>{size}</option>)}
+     </select></label>
+    </div>
+   </div>
+   {kind==='pedidos'&&<div className={s.orderSearch}>
+    <label>Número do pedido<SearchInput label="Buscar número do pedido" placeholder="Ex.: 345" inputMode="numeric" maxLength={16}
+     value={params.numero||''} onChange={value=>update({numero:value.replace(/\D/g,'').replace(/^0+/,'')})}/></label>
+    <DateRangeFilter label="Período" className={s.dateFilterPeriod} selected={selectedPeriod} onChange={changePeriod} />
+   </div>}
+  </section>
+  <Feedback query={query}/>
+  <DataTable compactColumns={compactColumns} caption={filterTitle} pageSize={params.tamanho} columns={cols} rows={rows}
+   emptyText="Nenhum registro nesta consulta." remote={pagination}/>
+  {detailId&&(kind==='auditoria'?<CashAuditDetail event={selected} onClose={closeDetail}/>:
+   <Detail key={detailId} kind={kind} id={detailId} close={closeDetail} done={query.reload} invoiceRevision={invoiceRefreshKey}/>)}
+ </>
 }
-function Detail({kind,row,close,done}){
- const {can}=useStore();const query=useQueryResource(signal=>kind==='auditoria'?Promise.resolve(row):read(kind+'/'+row.id,{},signal),[kind,row.id]);const [op,setOp]=useState(null);const d=query.data
- return <Drawer title="Detalhes" onClose={close}><h2 className={s.drawerTitle}><Receipt size={22} aria-hidden="true"/>Detalhes {kind==='pedidos'?'do pedido':kind==='sessoes'?'da sessão':'do evento'}</h2><Feedback query={query}/>{!query.loading&&!query.error&&d&&<><h3>{d.caixaNome||d.identificadorAtendimento||d.descricao}</h3><p>{states[d.status]||d.tipoEvento} · {d.operadorNome||d.usuarioNome}</p>{kind==='pedidos'?<OrderContent order={d} refresh={()=>{query.reload();done()}}/>:<><div className={s.stats}>{Object.entries(d.resumoFechamento||d.resumoAtual||{}).filter(([,v])=>typeof v==='number').map(([k,v])=><div key={k}><span>{{qtdVendas:'Pedidos com recebimento',totalVendas:'Recebido aprovado',dinheiroEsperado:'Esperado na gaveta',dinheiroContado:'Dinheiro contado',fundoTroco:'Fundo de troco',sangrias:'Sangrias',reforcos:'Reforços',diferenca:'Diferença'}[k]||k}</span><strong>{k==='qtdVendas'?v:fmtBRL(v)}</strong></div>)}</div><p>{d.motivo||d.justificativaDivergencia||d.observacaoAbertura}</p>{d.movimentacoes?.map(m=><p key={m.id}>{m.tipo} · {fmtBRL(m.valor)} · {m.motivo}</p>)}{d.status==='EM_FECHAMENTO'&&can('CAIXA_RESOLVER_DIVERGENCIA')&&<button onClick={()=>setOp({title:'Resolver divergência',fields:[field('observacao','Observação')],run:v=>write('sessoes/'+d.id+'/resolucao-divergencia',v)})}>Resolver divergência</button>}{['dadosAnteriores','dadosNovos'].map(k=>d[k]&&<section key={k}><h3>{k==='dadosAnteriores'?'Antes':'Depois'}</h3><dl>{Object.entries(typeof d[k]==='object'?d[k]:{Detalhe:d[k]}).map(([label,value])=><div key={label}><dt>{label}</dt><dd className={s.wrap}>{typeof value==='object'?JSON.stringify(value):String(value??'—')}</dd></div>)}</dl></section>)}</>}</>}{op&&<FormModal spec={op} close={()=>setOp(null)} done={()=>{query.reload();done()}}/>}</Drawer>
+function Detail({kind,id,close,done,invoiceRevision}){
+ const {can}=useStore()
+ const query=useQueryResource(signal=>read(kind+'/'+id,{},signal),[kind,id],{refreshKey:invoiceRevision})
+ const [op,setOp]=useState(null)
+ const d=query.data
+ function refresh() { query.reload(); done() }
+
+ if(kind==='sessoes'){
+  const resolve=can('CAIXA_RESOLVER_DIVERGENCIA') ? id=>setOp({
+   title:'Resolver divergência',
+   fields:[field('observacao','Observação')],
+   run:values=>write('sessoes/'+id+'/resolucao-divergencia',values),
+  }) : undefined
+  return <>
+   <CashSessionDetail query={query} onClose={close} onResolve={resolve}/>
+   {op&&<FormModal spec={op} close={()=>setOp(null)} done={refresh}/>}
+  </>
+ }
+
+ return <Drawer title="Detalhes" onClose={close}>
+  <h2 className={s.drawerTitle}><Receipt size={22} aria-hidden="true"/>Detalhes do pedido</h2>
+  <Feedback query={query}/>
+  {!query.loading&&!query.error&&d&&<>
+   <h3>{d.caixaNome||d.identificadorAtendimento||d.descricao||'Pedido #'+d.numero}</h3>
+   <p>{states[d.status]||d.tipoEvento} · {d.operadorNome||d.usuarioNome}</p>
+   <OrderInvoice order={d} canIssue={can('CAIXA_OPERAR')} onIssued={refresh}/>
+   <OrderContent order={d} refresh={refresh}/>
+  </>}
+ </Drawer>
 }
 export const OrdersPage=p=><SalesList {...p}/>
 export const SessionsPage=p=><SalesList {...p} kind="sessoes"/>
@@ -149,8 +255,20 @@ export function CashSettings({pageParams,navigate}){
  const booleanFields=['pointHabilitado','dinheiroHabilitado','debitoHabilitado','creditoHabilitado','pixHabilitado','parcelamentoHabilitado','imprimirComprovante','permitirPagamentoManual']
  const names={pointHabilitado:'Point integrada',dinheiroHabilitado:'Dinheiro',debitoHabilitado:'Débito',creditoHabilitado:'Crédito',pixHabilitado:'Pix',parcelamentoHabilitado:'Parcelamento',imprimirComprovante:'Imprimir comprovante no aparelho',permitirPagamentoManual:'Permitir contingência manual'}
  function editBox(box){setOp({title:'Editar caixa',width:'min(640px, calc(100vw - 32px))',description:box.emUso?'Este caixa está com turno aberto e não pode ser inativado.':'Inativar preserva sessões e pagamentos anteriores. Com a Point habilitada, mantenha uma maquininha ativa disponível.',initial:{nome:box.nome,ativo:box.ativo},fields:[{...field('nome','Nome do caixa'),maxLength:100,placeholder:'Ex.: Caixa Principal'},field('ativo','Caixa ativo','checkbox',false)],confirm:'Salvar caixa',run:v=>write('caixas/'+box.id,v,'PATCH')})}
- function addTerminal(box){setOp({title:'Adicionar maquininha',width:'min(640px, calc(100vw - 32px))',description:'Vincule um dispositivo do Mercado Pago ao caixa '+box.nome+'. O identificador do dispositivo deve ser único.',fields:[{...field('nome','Nome da maquininha'),maxLength:100,placeholder:'Ex.: Maquininha do balcão'},{...field('terminalId','Identificador no Mercado Pago'),maxLength:100,placeholder:'Ex.: PAX_A910__SMARTPOS1234567890'}],confirm:'Adicionar maquininha',run:v=>write('caixas/'+box.id+'/terminais',v)})}
- function editTerminal(box,terminal){setOp({title:'Editar maquininha',width:'min(640px, calc(100vw - 32px))',description:'O identificador do dispositivo não pode ser alterado. Para trocar de dispositivo, inative este vínculo e adicione outro. A Point habilitada exige ao menos uma maquininha ativa disponível.',initial:{nome:terminal.nome,ativo:terminal.ativo},fields:[{...field('nome','Nome da maquininha'),maxLength:100,placeholder:'Ex.: Maquininha do balcão'},field('ativo','Maquininha ativa','checkbox',false)],confirm:'Salvar maquininha',run:v=>write('caixas/'+box.id+'/terminais/'+terminal.id,v,'PATCH')})}
+ function addTerminal(box){
+  setOp({
+   title:'Adicionar maquininha',
+   width:'min(640px, calc(100vw - 32px))',
+   description:'Vincule um dispositivo do Mercado Pago ao caixa '+box.nome+'. O identificador do dispositivo deve ser único.',
+   fields:[
+    {...field('nome','Nome da maquininha'),fullWidth:true,maxLength:100,placeholder:'Ex.: Maquininha do balcão'},
+    {...field('terminalId','Identificador no Mercado Pago'),fullWidth:true,maxLength:100,placeholder:'Ex.: PAX_A910__SMARTPOS1234567890'},
+   ],
+   confirm:'Adicionar maquininha',
+   run:values=>write('caixas/'+box.id+'/terminais',values),
+  })
+ }
+ function editTerminal(box,terminal){setOp({title:'Editar maquininha',width:'min(640px, calc(100vw - 32px))',description:`Vinculada ao caixa ${box.nome}. Para trocar de dispositivo, desative este vínculo e adicione outro. Com a Point habilitada, mantenha ao menos uma maquininha ativa disponível.`,initial:{nome:terminal.nome,ativo:terminal.ativo},fields:[{...field('nome','Nome da maquininha'),maxLength:100,placeholder:'Ex.: Maquininha do balcão'},field('ativo','Maquininha ativa','checkbox',false)],confirm:'Salvar maquininha',run:v=>write('caixas/'+box.id+'/terminais/'+terminal.id,v,'PATCH')})}
  function changeMode(terminal){setOp({title:'Modo de operação',width:'min(640px, calc(100vw - 32px))',description:'Altera o modo do dispositivo '+terminal.nome+' no Mercado Pago. PDV recebe cobranças integradas ao caixa; independente permite operar pelo aparelho.',fields:[{key:'modoOperacao',label:'Modo do aparelho',options:[{value:'PDV',label:'Integrada ao caixa (PDV)'},{value:'STANDALONE',label:'Uso independente (Standalone)'}],required:true}],confirm:'Alterar modo',run:v=>write('terminais/'+terminal.id+'/modo-operacao',v,'PATCH')})}
  function deleted(box){setEquipmentMessage('O caixa '+box.nome+' foi excluído.');if(page>0&&d?.itens?.length===1)setPage(value=>value-1);else query.reload()}
  return <>

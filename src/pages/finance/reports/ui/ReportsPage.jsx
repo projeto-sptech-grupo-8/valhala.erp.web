@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import {
@@ -6,13 +6,13 @@ import {
   ResponsiveContainer, ReferenceLine, LabelList, Rectangle, Dot,
 } from 'recharts'
 import {
-  AlarmClock, Banknote, Bike, CalendarArrowDown, CalendarArrowUp, CalendarClock, CalendarX, ChartNoAxesCombined, CircleCheck, CircleMinus, CircleX, Clock3,
+  AlarmClock, Banknote, Bike, CalendarArrowDown, CalendarArrowUp, CalendarClock, CalendarX, ChartNoAxesCombined, ChevronDown, CircleCheck, CircleMinus, CircleX, Clock3,
   CupSoda, Eye, Grid3x3, Package, PackageX, Percent, Repeat, ShoppingBag, Store, Table2, TrendingDown, TrendingUp, Utensils,
 } from 'lucide-react'
 import { ToneBadge } from '@/shared/ui/primitives/ui.jsx'
 import { useToast } from '@/shared/ui/notifications/useToast.js'
 import { fmtBRL, fmtNum } from '@/shared/lib/format.js'
-import { downloadCSV, stamp } from '@/shared/lib/csv.js'
+import { stamp } from '@/shared/lib/csv.js'
 import { LIMITE_FALTA_RECORRENTE, METAS, PRIORIDADES_ABC, TONE_COLOR, toneHigher, toneLower } from '@/entities/reports'
 import { useStore } from '@/entities/store'
 import { binOf, WEEKDAYS } from '@/entities/reports'
@@ -22,7 +22,7 @@ import { PeriodSelector } from '@/shared/ui/period-selector/PeriodSelector.jsx'
 import p from '@/shared/styles/panel.module.css'
 import { useQueryResource } from '@/shared/lib/hooks/usePagedQuery.js'
 import { ErrorBlock, LoadingBlock, Notice } from '@/shared/ui/feedback/ManagementFeedback.jsx'
-import { readReport, estoqueAtual, horarioReport, perdasReport, produtosDoHorario } from '../model/reportApi.js'
+import { readReport, exportReport, estoqueAtual, horarioReport, perdasReport, produtosDoHorario } from '../model/reportApi.js'
 import { ReportTable } from './ReportTable.jsx'
 import s from './ReportsPage.module.css'
 
@@ -36,7 +36,7 @@ const ABAS = [
   { id: 'horarios', label: 'Horários de venda', Icon: Clock3, title: 'Horários de venda',
     description: 'Identifique os dias e horários em que o caixa fica mais movimentado.' },
   { id: 'canais', label: 'Canais de venda', Icon: Store, title: 'Canais de venda',
-    description: 'Compare balcão, mesa e delivery.' },
+    description: 'Compare as vendas de balcão, mesa, retirada e delivery.' },
   { id: 'perdas', label: 'Perdas por motivo', Icon: TrendingDown, title: 'Perdas por motivo',
     description: 'Veja quanto foi perdido a preço de custo e quais motivos mais pesaram.' },
 ]
@@ -44,7 +44,13 @@ const PERIODOS = [7, 30, 90].map(id => ({ id, label: `${id} dias` }))
 const BUSCA_PRODUTO = { key: 'name', label: 'Buscar produto', placeholder: 'Digite o nome do produto' }
 const BUSCA_CATEGORIA = { key: 'cat', label: 'Buscar categoria', placeholder: 'Digite o nome da categoria' }
 const SITUACAO_RUPTURA = { ok: 'Sem registro', warn: 'Pontual', bad: 'Recorrente' }
-const ICONES_CANAL = new Map([['Balcão', Store], ['Mesa', Utensils], ['Retirada', ShoppingBag], ['Delivery', Bike]])
+const ESTILO_CANAL_PADRAO = { Icon: Store, accent: 'gold' }
+const ESTILO_POR_CANAL = new Map([
+  ['Balcão', ESTILO_CANAL_PADRAO],
+  ['Mesa', { Icon: Utensils, accent: 'green' }],
+  ['Retirada', { Icon: ShoppingBag, accent: 'blue' }],
+  ['Delivery', { Icon: Bike, accent: 'purple' }],
+])
 const ESTILO_POR_MOTIVO = {
   'Perda / quebra': { color: TONE_COLOR.bad, accent: 'red', Icon: PackageX },
   Vencimento: { color: TONE_COLOR.warn, accent: 'gold', Icon: CalendarX },
@@ -227,9 +233,8 @@ function TabelaProdutosABC({ rows, dias, exportar }) {
   return (
     <>
       <ReportTable title="Detalhamento por produto" caption="Curva ABC" searches={[BUSCA_PRODUTO, BUSCA_CATEGORIA]} filters={filtros}
-        columns={columns} rows={rows} minColumnWidth={152}
-        onExport={() => exportar('curva-abc', ['Posição', 'Produto', 'Categoria', 'Unidades', 'Faturamento', '% do total', '% acumulado', 'Classe'],
-          rows.map(r => [r.pos, r.name, r.cat, r.qty, r.receita, r.pct?.toFixed(2), r.acumulado?.toFixed(2), r.classe]))}
+        columns={columns} rows={rows} minColumnWidth={152} compactColumns={['name', 'receita', 'classe', 'acoes']}
+        onExport={({ name, cat, classe }) => exportar('abc', 'curva-abc', { produto: name, categoria: cat, classe })}
         initialSort={{ key: 'pos', dir: 'asc' }} emptyText="Nenhum produto vendido no período."
         rowClassName={row => row.id === produtoAbertoId ? s.abcSelectedRow : undefined} />
       {produtoAberto && <DetalhesProdutoABC produto={produtoAberto} dias={dias} onClose={() => setProdutoAbertoId(null)} />}
@@ -391,10 +396,54 @@ function Margem({ data, unidade }) {
       </article>
       <ReportTable title="Detalhamento por categoria" caption="Margem por categoria"
         searches={[BUSCA_CATEGORIA]} filters={filtros}
-        columns={columns} rows={rows} rowKey={r => r.cat}
+        columns={columns} rows={rows} rowKey={r => r.cat} compactColumns={['cat', 'receita', 'margem']}
         initialSort={{ key: 'margem', dir: 'desc' }} emptyText="Nenhuma categoria com vendas no período." />
     </>
   )
+}
+
+function RuptureChart({ rows, dias }) {
+  const titleId = useId()
+  const top = [...rows].sort((a, b) => b.dias - a.dias).slice(0, 10)
+
+  return <article className={s.card} aria-labelledby={titleId}>
+    <div className={s.cardHead}>
+      <div>
+        <h3 id={titleId}><PackageX size={18} aria-hidden="true" />Dias sem estoque por produto</h3>
+        {top.length > 0 && <p>{rows.length > top.length && `Os ${top.length} produtos com mais dias de falta · `}Período de {dias} dias</p>}
+      </div>
+    </div>
+    {top.length === 0 ? <p className={s.empty}>Nenhum dia sem estoque registrado neste período.</p> : <>
+      <div className={s.ruptureLegend} role="group" aria-label="Faixas de falta de estoque">
+        <ToneBadge tone="warn" label={`Pontual · até ${LIMITE_FALTA_RECORRENTE}% dos dias`} />
+        <ToneBadge tone="bad" label={`Recorrente · mais de ${LIMITE_FALTA_RECORRENTE}% dos dias`} />
+        <span className={s.ruptureCutoff}>Limite de {LIMITE_FALTA_RECORRENTE}%</span>
+      </div>
+      <div className={s.ruptureAxis} aria-hidden="true">
+        <span>Produto</span><span className={s.ruptureScale}><span>0</span><span>{dias} dias</span></span><span>Sem estoque</span>
+      </div>
+      <ol className={s.ruptureRows} role="list" aria-label="Produtos ordenados por dias sem estoque" style={{ '--rupture-cutoff': `${LIMITE_FALTA_RECORRENTE}%` }}>
+        {top.map(row => (
+          <li key={row.id}>
+            <details data-tone={row.tone}>
+              <summary className={s.ruptureRow}>
+                <span className={s.ruptureProduct}><strong>{row.name}</strong>{row.cat && <small>{row.cat}</small>}</span>
+                <span className={s.ruptureTrack} aria-hidden="true"><span style={{ width: `${Math.min(row.dias / dias * 100, 100)}%` }} /></span>
+                <span className={s.ruptureValue}><strong>{fmtNum(row.dias)} {row.dias === 1 ? 'dia' : 'dias'}</strong><small>{pct(row.dias / dias * 100, 1)} do período</small></span>
+                <ChevronDown className={s.ruptureChevron} size={16} aria-hidden="true" />
+              </summary>
+              <dl className={s.ruptureDetails}>
+                <div><dt>Situação</dt><dd><ToneBadge tone={row.tone} label={SITUACAO_RUPTURA[row.tone]} /></dd></div>
+                <div><dt>Ocorrências</dt><dd>{fmtNum(row.ocorrencias)}</dd></div>
+                <div><dt>Venda perdida estimada</dt><dd>{fmtBRL(row.vendaPerdida)}</dd></div>
+              </dl>
+            </details>
+          </li>
+        ))}
+      </ol>
+      <p className={s.chartNote}>A venda perdida é estimada multiplicando as unidades não vendidas pelo preço do produto.</p>
+    </>}
+  </article>
 }
 
 function Ruptura({ data, dias, receita, exportar, unidade }) {
@@ -408,7 +457,6 @@ function Ruptura({ data, dias, receita, exportar, unidade }) {
   }))
   const comRuptura = rows.filter(r => r.dias > 0)
   const recorrentes = comRuptura.filter(r => r.tone === 'bad').length
-  const top = comRuptura.slice(0, 10).map(r => ({ ...r, nome: r.name.length > 22 ? r.name.slice(0, 21) + '…' : r.name }))
   const perdido = rows.reduce((a, r) => a + r.vendaPerdida, 0)
   const columns = [
     { key: 'name', header: 'Produto', render: r => <b className={p.cellStrong}>{r.name}</b> },
@@ -416,7 +464,7 @@ function Ruptura({ data, dias, receita, exportar, unidade }) {
     { key: 'dias', header: 'Dias sem estoque', align: 'right', render: r => `${r.dias} de ${dias}` },
     { key: 'ocorrencias', header: 'Ocorrências', align: 'right' },
     { key: 'perdidas', header: 'Unid. não vendidas', align: 'right', render: r => fmtNum(r.perdidas) },
-    { key: 'vendaPerdida', header: 'Venda perdida', align: 'right', render: r => fmtBRL(r.vendaPerdida) },
+    { key: 'vendaPerdida', header: 'Venda perdida estimada', align: 'right', render: r => fmtBRL(r.vendaPerdida) },
     ...(consultarEstoque ? [{
       key: 'estoqueAtual', header: 'Estoque hoje', align: 'right', sort: r => r.estoque?.qty,
       render: r => r.estoque ? `${fmtNum(r.estoque.qty)} / mín. ${fmtNum(r.estoque.min)}` : '—',
@@ -449,38 +497,10 @@ function Ruptura({ data, dias, receita, exportar, unidade }) {
           description: `Sem estoque em mais de ${LIMITE_FALTA_RECORRENTE}% dos dias`, tone: recorrentes ? 'bad' : rows.length ? 'ok' : 'neutral',
         },
       ]} />
-      <article className={s.card}>
-        <div className={s.cardHead}>
-          <h3><PackageX size={18} aria-hidden="true" />Dias sem estoque por produto</h3>
-        </div>
-        {top.length === 0 ? <p className={s.empty}>Nenhum dia sem estoque registrado neste período.</p> : (
-          <ResponsiveContainer width="100%" height={top.length * 38 + 40}>
-            <BarChart data={top} layout="vertical" margin={{ top: 4, right: 24, left: 0, bottom: 4 }}>
-              <CartesianGrid horizontal={false} stroke="var(--grid)" />
-              <XAxis type="number" allowDecimals={false} tick={axisTick} axisLine={false} tickLine={false} />
-              <YAxis type="category" dataKey="nome" tick={axisTick} axisLine={false} tickLine={false} width={105} />
-              <Tooltip content={<Tip color={reportBarColor} fmt={(v, p) => `${v} dia(s) · ${fmtBRL(p.vendaPerdida)} perdidos`}
-                title={p => p.name} />} cursor={{ fill: 'rgb(var(--ink) / .04)' }} />
-              <Bar dataKey="dias" name="Dias sem estoque" radius={[0, 4, 4, 0]} barSize={16} isAnimationActive={false}
-                shape={ReportBarShape}>
-                <LabelList dataKey="dias" position="right" style={{ fill: 'var(--text)', fontSize: 12 }} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        )}
-        {top.length > 0 && (
-          <div className={s.chartLegend} role="group" aria-label="Faixas de falta de estoque">
-            <ToneBadge tone="ok" label="Sem falta registrada · 0 dias" />
-            <ToneBadge tone="warn" label={`Pontual · falta em até ${LIMITE_FALTA_RECORRENTE}% dos dias`} />
-            <ToneBadge tone="bad" label={`Recorrente · mais de ${LIMITE_FALTA_RECORRENTE}% dos dias`} />
-          </div>
-        )}
-        <p className={s.chartNote}>A estimativa multiplica as unidades que deixaram de ser vendidas pelo preço do produto.</p>
-      </article>
+      <RuptureChart rows={comRuptura} dias={dias} />
       <ReportTable title="Detalhamento por produto" caption="Falta de estoque por produto"
-        searches={[BUSCA_PRODUTO, BUSCA_CATEGORIA]} filters={filtros} columns={columns} rows={rows}
-        onExport={() => exportar('ruptura', ['Produto', 'Dias zerado', 'Ocorrências', 'Unidades não vendidas', 'Venda perdida', ...(consultarEstoque ? ['Estoque hoje'] : [])],
-          rows.map(r => [r.name, r.dias, r.ocorrencias, r.perdidas, r.vendaPerdida, ...(consultarEstoque ? [r.estoque?.qty] : [])]))}
+        searches={[BUSCA_PRODUTO, BUSCA_CATEGORIA]} filters={filtros} columns={columns} rows={rows} compactColumns={['name', 'dias', 'sit']}
+        onExport={({ name, cat, tone }) => exportar('ruptura', 'falta-estoque', { produto: name, categoria: cat, situacao: tone })}
         initialSort={{ key: 'vendaPerdida', dir: 'desc' }} emptyText="Nenhum produto no catálogo." />
     </>
   )
@@ -644,7 +664,7 @@ function Canais({ data, unidade }) {
   const rows = data.itens.map(row => ({ ...row, ticket: row.ticketMedio, share: row.participacao }))
   const melhor = [...rows].sort((a, b) => b.ticket - a.ticket)[0]
   const porCanal = new Map(rows.map(row => [row.canal, row]))
-  const canais = new Set([...ICONES_CANAL.keys(), ...porCanal.keys()])
+  const canais = new Set([...ESTILO_POR_CANAL.keys(), ...porCanal.keys()])
   return (
     <>
       <Indicadores unidade={unidade} items={Array.from(canais, canal => {
@@ -652,8 +672,9 @@ function Canais({ data, unidade }) {
         const vendas = row?.vendas ?? 0
         const featured = vendas > 0 && row === melhor
         const share = row?.share ?? (data.totais.faturamento > 0 ? 0 : null)
+        const { Icon, accent } = ESTILO_POR_CANAL.get(canal) ?? ESTILO_CANAL_PADRAO
         return {
-          label: canal, Icon: ICONES_CANAL.get(canal) ?? Store, value: fmtBRL(row?.faturamento), percent: pct(share, 1),
+          label: canal, Icon, accent, value: fmtBRL(row?.faturamento), percent: pct(share, 1),
           percentLabel: 'do faturamento',
           description: vendas ? `${vendas} vendas · ${fmtBRL(row.ticket)} em média por venda${featured ? ' · Maior valor médio' : ''}` : '0 vendas',
           featured,
@@ -670,7 +691,10 @@ function Canais({ data, unidade }) {
             <tbody>
               {!rows.length && <tr><td colSpan={6}>Nenhuma venda registrada no período.</td></tr>}
               {rows.map(r => (
-                <tr key={r.canal}><th scope="row">{r.canal}</th><td>{fmtNum(r.vendas)}</td><td>{fmtBRL(r.faturamento)}</td><td>{pct(r.share, 1)}</td><td>{fmtBRL(r.ticket)}</td><td>{fmtNum(r.itensPorVenda)}</td></tr>
+                <tr key={r.canal}>
+                  <th scope="row"><span className={s.channelName} data-accent={(ESTILO_POR_CANAL.get(r.canal) ?? ESTILO_CANAL_PADRAO).accent}>{r.canal}</span></th>
+                  <td>{fmtNum(r.vendas)}</td><td>{fmtBRL(r.faturamento)}</td><td>{pct(r.share, 1)}</td><td>{fmtBRL(r.ticket)}</td><td>{fmtNum(r.itensPorVenda)}</td>
+                </tr>
               ))}
             </tbody>
           </table>
@@ -743,7 +767,7 @@ function Perdas({ data, receita, unidade }) {
       </article>
       <ReportTable title="Detalhamento por período" caption="Perdas por motivo"
         searches={[{ key: 'label', label: 'Buscar período', placeholder: 'Digite o período exibido na tabela' }]} filters={filtros}
-        columns={columns} rows={rows} rowKey={r => r.k}
+        columns={columns} rows={rows} rowKey={r => r.k} compactColumns={['label', 'total']}
         initialSort={{ key: 'label', dir: 'asc' }} emptyText="Sem perdas no período." />
     </>
   )
@@ -760,9 +784,18 @@ export function Relatorios({ navigate, pageParams, headerActionsElement }) {
   const data = !consulta.loading && !consulta.error ? consulta.data : null
   const filtros = { aba: aba.id, dias, unidade }
   const alterar = (patch) => navigate('relatorios', { ...filtros, ...patch }, { replace: true })
-  const exportar = (nome, headers, rows) => {
-    downloadCSV(`${nome}-${dias}d-${stamp()}`, headers, rows)
-    toast(`${rows.length} linha(s) exportada(s).`, { title: 'Exportação concluída' })
+  const exportar = async (path, nome, filtrosExportacao) => {
+    try {
+      const { blob } = await exportReport(path, dias, filtrosExportacao)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${nome}-${dias}d-${stamp()}.xlsx`
+      link.click()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (error) {
+      toast(error.message, { type: 'error', title: 'Não foi possível exportar o relatório' })
+    }
   }
   const seletorPeriodo = <PeriodSelector options={PERIODOS} selected={periodo} onChange={dias => alterar({ dias })} alignEnd />
 

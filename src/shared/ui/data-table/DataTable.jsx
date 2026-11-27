@@ -22,10 +22,12 @@ export function DataTable({
   onRowClick,
   rowClassName,
   remote,
+  compactColumns,
 }) {
   const [localSort, setSort] = useState(initialSort || null) // { key, dir: 'asc' | 'desc' }
   const [rawPage, setPage] = useState(0)
   const [selected, setSelected] = useState(() => new Set())
+  const [showAllColumns, setShowAllColumns] = useState(false)
 
   const sort = remote ? remote.sort : localSort
   const sorted = useMemo(() => {
@@ -81,7 +83,7 @@ export function DataTable({
   const to = Math.min(total, page * pageSize + visible.length)
 
   return (
-    <div className={s.wrap}>
+    <div className={s.wrap} data-compact-table={compactColumns ? true : undefined} data-all-columns={showAllColumns || undefined}>
       {selectable && selectedRows.length > 0 && (
         <div className={s.bulk} role="region" aria-label="Ações em lote">
           <span><b>{selectedRows.length}</b> selecionado{selectedRows.length > 1 ? 's' : ''}</span>
@@ -92,6 +94,9 @@ export function DataTable({
         </div>
       )}
 
+      {compactColumns && <button type="button" className={s.columnToggle} aria-expanded={showAllColumns} onClick={() => setShowAllColumns(value => !value)}>
+        {showAllColumns ? 'Mostrar colunas principais' : 'Mostrar todas as colunas'}
+      </button>}
       <div className={s.scroll}>
         <table className={s.table}>
           {caption && <caption className={s.caption}>{caption}</caption>}
@@ -109,6 +114,7 @@ export function DataTable({
                   <th
                     key={col.key}
                     scope="col"
+                    data-secondary-column={compactColumns && !compactColumns.includes(col.key) || undefined}
                     style={{ width: col.width, textAlign: col.align }}
                     aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}
                   >
@@ -137,7 +143,7 @@ export function DataTable({
                     </td>
                   )}
                   {columns.map(col => (
-                    <td key={col.key} className={col.className} style={{ textAlign: col.align }}>
+                    <td key={col.key} className={col.className} style={{ textAlign: col.align }} data-secondary-column={compactColumns && !compactColumns.includes(col.key) || undefined}>
                       {col.render ? col.render(row) : row[col.key]}
                     </td>
                   ))}

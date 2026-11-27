@@ -1,16 +1,13 @@
-export const TIPOS_CONTA = { PAGAR: 'A pagar', RECEBER: 'A receber' }
-export const STATUS_CONTA = { ABERTA: 'Em aberto', PAGA: 'Baixada', CANCELADA: 'Cancelada' }
+import { acrescentarDias } from '@/shared/lib/format.js'
+
+export { acrescentarDias }
+
+export const STATUS_CONTA = { ABERTA: 'Em aberto', PAGA: 'Baixada', INATIVA: 'Cancelada' }
 export const CENTROS_CUSTO = { COMPRAS: 'Compras', OPERACIONAL: 'Operacional', VENDAS: 'Vendas', ADMINISTRATIVO: 'Administrativo' }
 export const CATEGORIAS_CONTA = { MERCADORIA: 'Mercadoria', DESPESA_FIXA: 'Despesa fixa', DESPESA_VARIAVEL: 'Despesa variável' }
 
 const mesCurto = new Intl.DateTimeFormat('pt-BR', { month: 'short', timeZone: 'UTC' })
 const isoDia = data => data.toISOString().slice(0, 10)
-
-export function acrescentarDias(dia, quantidade) {
-  const data = new Date(dia + 'T00:00:00Z')
-  data.setUTCDate(data.getUTCDate() + quantidade)
-  return isoDia(data)
-}
 
 export function diaBR(iso) {
   return iso ? iso.split('-').reverse().join('/') : '—'

@@ -21,7 +21,7 @@ function Security({ active, userId }) {
 
 function General({ userId, canEdit }) {
   return (
-    <div className={styles.secGrid}>
+    <div className={styles.secGrid + ' ' + styles.generalGrid}>
       <EstablishmentDetails key={userId} canEdit={canEdit} />
       <article className="card form">
         <h3><Palette size={19} aria-hidden="true" />Aparência</h3>

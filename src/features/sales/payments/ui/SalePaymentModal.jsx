@@ -148,7 +148,7 @@ export function SalePaymentModal({order,onClose}) {
     onRetry={terminalFailed?revisedAttempt:undefined} />}
   {cardStatus && finalOrder && fiscalRow && <Notice tone={fiscalRow.error?'warning':'info'} title={fiscalRow.pending?'Emitindo NFC-e…':fiscalRow.note?'NFC-e nº '+fiscalRow.note.numero:'Emissão pendente'}>
     {fiscalRow.note && <>{fiscalRow.note.ambiente==='HOMOLOGACAO'?'Homologação · sem valor fiscal':'Produção'} <button type="button" onClick={()=>fiscal.download(fiscalRow.note)}>Baixar</button></>}
-    {fiscalRow.error && 'Confira o pedido em Notas fiscais.'}
+    {fiscalRow.error && <a href={'#/pedidos?pedidoId='+encodeURIComponent(order.id)} onClick={()=>{fiscal.dismiss(order.id);onClose()}}>Conferir emissão no pedido</a>}
   </Notice>}
   {!cardStatus&&allDone&&<Notice tone="info" title="Pagamento confirmado">O recebimento foi registrado. {current?.saldoRestante>0?'Ainda há saldo a receber neste pedido.':'Confira o estado atualizado do pedido.'}</Notice>}
   {!cardStatus&&(waiting||otherPending)&&<Notice tone="info" title={activeResult?.status==='PENDENTE_CONCILIACAO'?'Recebimento externo precisa de conferência':'Aguardando confirmação do pagamento'}>A próxima parte fica bloqueada até a confirmação. Você pode voltar ao pedido para acompanhar, sincronizar ou conciliar a cobrança.<button type="button" disabled={busy||query.loading} onClick={query.reload}><RefreshCw size={14} aria-hidden="true"/>Atualizar pagamento</button></Notice>}

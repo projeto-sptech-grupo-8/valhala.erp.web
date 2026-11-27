@@ -64,7 +64,7 @@ button.profileChip:hover { border-color: var(--gold); background: rgb(var(--acce
 .menuBtn { border: 0; padding: 6px; border-radius: 6px; color: var(--dim); }
 .menuBtn:hover, .menuBtn[aria-expanded='true'] { background: rgb(var(--accent) / .1); color: var(--gold2); }
 .menu {
-  position: fixed; z-index: 350; width: 240px; padding: 6px;
+  position: fixed; z-index: 350; width: min(240px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); overflow: auto; padding: 6px;
   background: var(--raised); border: 1px solid var(--line); border-radius: 10px;
   box-shadow: 0 16px 40px rgb(var(--shadow) / calc(.5 * var(--shadow-k)));
   animation: pop .12s ease-out;

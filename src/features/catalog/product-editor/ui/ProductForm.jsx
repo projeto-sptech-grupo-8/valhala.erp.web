@@ -158,7 +158,7 @@ function Editor({ initial, initialIngredients, navigate, setTitle, setBackAction
         {initial && field('unit', 'Unidade de venda', { maxLength: 10, required: true, autoComplete: 'off' })}
         {initial && <label>Situação cadastral<select aria-label="Situação cadastral" value={String(form.ativo)} onChange={e => update('ativo', e.target.value === 'true')}><option value="true">Ativo</option><option value="false">Inativo</option></select></label>}
       </div></section>
-      <section className="card form"><SectionTitle title={tipo === 'drink' ? 'Preço de venda' : 'Preço e estoque'} text="Informe o preço cobrado na venda. Para produtos padrão, registre também o custo por embalagem ou unidade, o saldo inicial e o mínimo que deve gerar atenção para reposição." /><div className={s.grid}>
+      <section className="card form"><SectionTitle title={tipo === 'drink' ? 'Preço de venda' : 'Preço e estoque'} text={tipo === 'drink' ? 'Informe quanto será cobrado por copo.' : 'Informe o preço de venda e o custo de uma unidade ou embalagem. O estoque mínimo indica quando repor.'} /><div className={s.grid}>
         {field('price', 'Preço de venda (R$) *', { required: true })}
         {tipo === 'padrao' && <>
           {field('cost', 'Preço de custo por unidade/embalagem (R$)', {})}

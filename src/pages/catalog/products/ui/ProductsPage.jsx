@@ -58,21 +58,26 @@ export function Products({ navigate }) {
       setExporting(false)
     }
   }
+  function renderRecipeLink(product, label) {
+    return <button type="button" className={ui.recipeLink} onClick={() => setDetail(product.id)}
+      aria-label={`${label} · consultar ingredientes de ${product.name}`}>{label}</button>
+  }
+
   const columns = [
     { key: 'sku', header: 'Código', width: 85 },
     { key: 'name', header: 'Produto', width: 190, render: p => <div><button className={ui.name} title={p.name} onClick={() => setDetail(p.id)}>{p.name}</button></div> },
     { key: 'cat', header: 'Categoria', width: 110, sort: false },
     { key: 'tipo', header: 'Tipo / Venda', width: 120, sort: false, render: p => <div className={ui.kindTags}>{p.tipo === 'drink' ? <span className={ui.productKind} data-kind="drink"><Wine size={14} aria-hidden="true" />Drink</span> : <><span className={ui.productKind} data-kind="standard"><Package size={14} aria-hidden="true" />Padrão</span>{(p.fracionado || p.vendaFardo) && <span className={ui.saleIcons}>{p.fracionado && <span className={ui.packSale} data-sale="dose" role="img" tabIndex={0} aria-label={p.volumeEmbalagem ? `Venda por dose · volume da embalagem: ${fmtNum(p.volumeEmbalagem)} ml` : 'Venda por dose · volume não informado'} title={p.volumeEmbalagem ? `Venda por dose · volume da embalagem: ${fmtNum(p.volumeEmbalagem)} ml` : 'Venda por dose · volume não informado'}><GlassWater size={15} aria-hidden="true" />{!p.vendaFardo && <span>Dose{p.volumeEmbalagem ? ` · ${fmtNum(p.volumeEmbalagem)} ml` : ''}</span>}</span>}{p.vendaFardo && <span className={ui.packSale} role="img" tabIndex={0} aria-label={p.unidadesFardo ? `Fardo: ${fmtNum(p.unidadesFardo)} unidades` : 'Fardo · quantidade não informada'} title={p.unidadesFardo ? `Fardo: ${fmtNum(p.unidadesFardo)} unidades` : 'Fardo · quantidade não informada'}><Boxes size={15} aria-hidden="true" />{!p.fracionado && <span>Fardo{p.unidadesFardo ? ` · ${fmtNum(p.unidadesFardo)} un` : ''}</span>}</span>}</span>}</>}</div> },
-    { key: 'qty', header: 'Saldo / mínimo', width: 145, align: 'right', sort: false, render: p => p.tipo === 'drink' ? <button type="button" className={ui.recipeLink} onClick={() => setDetail(p.id)} aria-label={'Por receita · consultar ingredientes de ' + p.name}>Por receita</button> : p.fracionado ? <>{fmtNum(p.quantidadeEstoqueBase)} / {fmtNum(p.estoqueMinimoBase)} ml</> : <>{fmtNum(p.qty)} / {fmtNum(p.min)} {p.unit}</> },
+    { key: 'qty', header: 'Saldo / mínimo', width: 145, align: 'right', sort: false, render: p => p.tipo === 'drink' ? renderRecipeLink(p, 'Por receita') : p.fracionado ? <>{fmtNum(p.quantidadeEstoqueBase)} / {fmtNum(p.estoqueMinimoBase)} ml</> : <>{fmtNum(p.qty)} / {fmtNum(p.min)} {p.unit}</> },
     { key: 'price', header: 'Preço', width: 95, align: 'right', render: p => fmtBRL(p.price) },
-    { key: 'cost', header: 'Custo', width: 95, align: 'right', render: p => p.tipo === 'drink' ? 'Na receita' : fmtBRL(p.cost) },
+    { key: 'cost', header: 'Custo', width: 95, align: 'right', render: p => p.tipo === 'drink' ? renderRecipeLink(p, 'Na receita') : fmtBRL(p.cost) },
     ...(showMargin ? [{ key: 'margem', header: 'Margem bruta', width: 155, align: 'right', sort: false, render: p => <MarginCell loading={metrics.loading || query.loading} data={metrics.data?.[p.id]} /> }] : []),
     ...(showTurnover ? [
       { key: 'giro', header: 'Giro (30 dias)', width: 155, align: 'right', sort: false, render: p => <TurnoverCell product={p} loading={metrics.loading || query.loading} data={metrics.data?.[p.id]} /> },
       { key: 'cobertura', header: 'Cobertura estimada', width: 155, align: 'right', sort: false, render: p => <TurnoverCell coverage product={p} loading={metrics.loading || query.loading} data={metrics.data?.[p.id]} /> },
     ] : []),
-    { key: 'stockStatus', header: 'Nível (estimado)', width: 130, sort: false, render: p => p.tipo === 'drink' ? 'Na receita' : p.quantidadeEstoqueBase > 0 && !p.estoqueMinimoBase ? 'Sem mínimo' : <StatusChip status={getStatus({ ...p, qty: p.quantidadeEstoqueBase ?? p.qty, min: p.estoqueMinimoBase ?? p.min })} /> },
-    { key: 'ativo', header: 'Status', width: 85, sort: false, render: p => p.ativo ? 'Ativo' : 'Inativo' },
+    { key: 'stockStatus', header: 'Nível (estimado)', width: 130, sort: false, render: p => p.tipo === 'drink' ? renderRecipeLink(p, 'Na receita') : p.quantidadeEstoqueBase > 0 && !p.estoqueMinimoBase ? 'Sem mínimo' : <StatusChip status={getStatus({ ...p, qty: p.quantidadeEstoqueBase ?? p.qty, min: p.estoqueMinimoBase ?? p.min })} /> },
+    { key: 'ativo', header: 'Status', width: 85, sort: false, render: p => <span className={ui.status} data-active={p.ativo}>{p.ativo ? 'Ativo' : 'Inativo'}</span> },
     { key: 'actions', header: 'Ações', width: 65, align: 'center', sort: false, render: p => <ProductRowActions product={p} can={can} onDetail={() => setDetail(p.id)} navigate={navigate} /> },
   ]
   return <>
@@ -100,7 +105,7 @@ export function Products({ navigate }) {
     {(params.status || params.cat) && <p className={s.notice}>O filtro antigo por nome/situação não foi aplicado. Busque uma categoria acima; a API ainda não oferece filtro global por nível de estoque.</p>}
     <QueryFeedback query={query} />
     <div className={ui.table} style={{ '--catalog-table-width': (1225 + (showMargin ? 155 : 0) + (showTurnover ? 310 : 0)) + 'px' }}>
-    <DataTable key={JSON.stringify(request)} caption="Lista de produtos" columns={columns} rows={rows} pageSize={params.tamanho}
+    <DataTable key={JSON.stringify(request)} caption="Lista de produtos" columns={columns} rows={rows} pageSize={params.tamanho} compactColumns={['name', 'qty', 'price', 'actions']}
       rowClassName={p => p.tipo === 'drink' ? ui.drinkRow : undefined}
       remote={{ page: params.pagina, total: query.data?.totalItens || 0, loading: query.loading,
         sort: { key: sorts[request.ordenarPor], dir: params.direcao.toLowerCase() },

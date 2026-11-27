@@ -4,44 +4,41 @@ import { useState } from 'react'
 import { fmtNum } from '@/shared/lib/format.js'
 import { api } from '@/shared/api/api.js'
 import { useStore } from '@/entities/store'
-import { useQueryResource } from '@/shared/lib/hooks/usePagedQuery.js'
-import { QueryFeedback } from '@/features/catalog/remote/RemoteControls.jsx'
+import { useListParams, useQueryResource } from '@/shared/lib/hooks/usePagedQuery.js'
+import { QueryFeedback, SearchInput } from '@/features/catalog/remote/RemoteControls.jsx'
+import { RecordAutocomplete } from '@/features/catalog/product-editor/ui/CategoryAutocomplete.jsx'
+import { MetricCard, MetricGrid } from '@/shared/ui/primitives/MetricCard.jsx'
 import { DataTable } from '@/shared/ui/data-table/DataTable.jsx'
 import { AlertTriangle, PackageX, Settings2, ShieldCheck, ChevronDown, SlidersHorizontal, CircleHelp } from 'lucide-react'
-import { minimumMetrics, filterRestockAlerts } from '../model/restockAlerts.js'
+import { minimumMetrics } from '../model/restockAlerts.js'
 import { RestockRowActions } from './RestockRowActions.jsx'
 import s from './RestockPage.module.css'
 
+const SITUACOES = { '': 'Todos', ZERADO: 'Zerados', CRITICO: 'Abaixo do mínimo' }
+
 export function Reposicao({ navigate }) {
   const { can } = useStore()
+  const { params, update, clear } = useListParams()
+  const [filtersOpen, setFiltersOpen] = useState(true)
+  const ordem = ['name', 'percentage'].includes(params.ordem) ? params.ordem : 'priority'
   const query = useQueryResource(signal => api.dashboard.resumo(1, signal), [])
   const stock = query.data?.estoque
-  const rows = query.loading || query.error ? [] : stock?.alertas || []
-  const units = useQueryResource(async signal => {
-    const result = {}
-    for (let index = 0; index < rows.length; index += 2) {
-      await Promise.all(rows.slice(index, index + 2).map(async row => {
-        try { const p = await api.produtos.obter(row.produtoId, signal); result[row.produtoId] = p.fracionado ? 'ml' : p.unit }
-        catch (ex) { if (signal.aborted) throw ex; result[row.produtoId] = null }
-      }))
-    }
-    return result
-  }, [rows.map(row => row.produtoId), query.loading])
-  const amount = (row, key) => row[key] == null ? '—' : fmtNum(row[key]) + ' ' + (!units.loading && units.data?.[row.produtoId] || '(unidade-base)')
-  const [search, setSearch] = useState('')
-  const [status, setStatus] = useState('')
-  const [category, setCategory] = useState('')
-  const [range, setRange] = useState('')
-  const [order, setOrder] = useState('priority')
-  const [filtersOpen, setFiltersOpen] = useState(true)
-  const categories = [...new Set(rows.map(r => r.categoria).filter(Boolean))]
-  const filtered = filterRestockAlerts(rows, { search, status, category, range, order })
-  const available = stock && !query.error && !query.loading
+  const request = { busca: params.busca, categoriaId: params.categoriaId, situacao: params.status, faixa: params.faixa, ordem, pagina: params.pagina, tamanho: params.tamanho }
+  const list = useQueryResource(signal => api.dashboard.reposicao(request, signal), [request])
+  const rows = list.loading || list.error ? [] : list.data?.itens || []
+  const amount = (row, key) => row[key] == null ? '—' : fmtNum(row[key]) + ' ' + (row.unidadeMedida || '(unidade-base)')
+  const summary = query.loading || query.error ? null : stock
+  const saude = summary?.produtosComMinimoDefinido === 0 ? null : summary?.saudePercentual
+  const healthTone = saude < 25 ? 'bad' : saude < 75 ? 'warn' : 'ok'
   const indicators = [
-    { label: 'Produtos zerados', value: stock?.zerados, text: 'Sem saldo em estoque', Icon: PackageX, tone: stock?.zerados > 0 ? 'danger' : 'blue' },
-    { label: 'Estoque crítico', value: stock?.criticos, text: 'Saldo abaixo do mínimo definido', Icon: AlertTriangle, tone: stock?.criticos > 0 ? 'danger' : 'blue' },
-    { label: 'Sem mínimo definido', value: stock?.produtosSemMinimoDefinido, text: 'Configure para acompanhar a reposição', Icon: Settings2, tone: 'orange' },
-    { label: 'Saúde do estoque', value: stock?.saudePercentual, suffix: '%', text: 'Indicador calculado pelo servidor', Icon: ShieldCheck, tone: stock?.saudePercentual < 25 ? 'danger' : stock?.saudePercentual < 75 ? 'yellow' : 'green' },
+    { label: 'Produtos zerados', value: summary?.zerados, description: 'Produtos sem saldo em estoque', Icon: PackageX,
+      tone: summary?.zerados > 0 ? 'bad' : 'info' },
+    { label: 'Estoque crítico', value: summary?.criticos, description: 'Produtos abaixo do mínimo definido', Icon: AlertTriangle,
+      tone: summary?.criticos > 0 ? 'bad' : 'info' },
+    { label: 'Sem mínimo definido', value: summary?.produtosSemMinimoDefinido, description: 'Configure o mínimo para acompanhar a reposição',
+      Icon: Settings2, tone: 'warn' },
+    { label: 'Saúde do estoque', value: saude, suffix: '%', description: 'Produtos com saldo suficiente entre os que têm mínimo definido',
+      Icon: ShieldCheck, tone: healthTone, statusLabel: { bad: 'Ruim', warn: 'Médio', ok: 'Bom' }[healthTone] },
   ]
   const columns = [
     { key: 'nome', header: 'Produto', sort: false },
@@ -53,26 +50,48 @@ export function Reposicao({ navigate }) {
     { key: 'acao', header: 'Ações', width: 80, align: 'center', sort: false, render: r => <RestockRowActions product={r} can={can} navigate={navigate} /> },
   ]
   return <>
-    <section className={s.kpis} aria-label="Indicadores de reposição" aria-busy={query.loading}>
-      {indicators.map(({ label, value, text, Icon, tone, suffix = '' }) => <article key={label} className={s.kpi} data-tone={available && value != null ? tone : 'neutral'}><div className={s.kpiTop}><span>{label}</span><Icon size={19} aria-hidden="true" /></div><strong>{available && value != null ? value + suffix : '—'}</strong><p>{text}</p></article>)}
-    </section>
+    <MetricGrid aria-label="Indicadores de reposição" aria-busy={query.loading}>
+      {indicators.map(({ label, value, description, Icon, tone, statusLabel, suffix = '' }) => (
+        <MetricCard key={label} label={label} value={value == null ? '—' : fmtNum(value) + suffix} description={description}
+          Icon={Icon} tone={value == null ? 'neutral' : tone} statusLabel={value == null ? undefined : statusLabel} />
+      ))}
+    </MetricGrid>
     <QueryFeedback query={query} />
     <section className={s.filterPanel} aria-labelledby="restock-filters">
-    <FilterHeader className={s.heading}><div><h2 id="restock-filters"><button className={s.toggle} aria-expanded={filtersOpen} aria-controls="restock-filter-fields" onClick={() => setFiltersOpen(open => !open)}><SlidersHorizontal size={16} aria-hidden="true" />Filtros dos alertas exibidos<ChevronDown size={18} aria-hidden="true" className={filtersOpen ? s.expanded : undefined} /></button></h2>{!filtersOpen && (search || status || category || range || order !== 'priority') && <p>Há filtros ou ordenação aplicados à lista.</p>}</div><FilterActions compact onClear={() => { setSearch(''); setStatus(''); setCategory(''); setRange(''); setOrder('priority') }} onRefresh={query.reload} refreshing={query.loading} refreshLabel="Atualizar alertas"><button onClick={() => navigate('produtos')}>Ver catálogo completo</button></FilterActions></FilterHeader>
-    <div id="restock-filter-fields" hidden={!filtersOpen}>
-    <div className={s.filters}>
-      <label>Categoria<select aria-label="Categoria" value={category} onChange={e => setCategory(e.target.value)}><option value="">Todas as categorias</option>{category && !categories.includes(category) && <option value={category}>{category}</option>}{categories.map(c => <option key={c}>{c}</option>)}</select></label>
-      <div className={s.rangeField}><div className={s.rangeLabel}><label htmlFor="restock-minimum-range">Mínimo disponível</label><span className={s.metricHelp}><button type="button" aria-label="Como é calculado o mínimo disponível" aria-describedby="restock-minimum-help"><CircleHelp size={15} aria-hidden="true" /></button><span id="restock-minimum-help" role="tooltip">Saldo atual ÷ estoque mínimo × 100. Até 25% inclui produtos zerados; de 25% a 50% exclui 25%. Sem saldo ou mínimo válido, o percentual não é calculado. “Falta para o mínimo” mostra apenas a diferença até o mínimo, não uma sugestão completa de compra.</span></span></div><select id="restock-minimum-range" value={range} onChange={e => setRange(e.target.value)}><option value="">Todas as faixas</option><option value="25">Até 25% do mínimo</option><option value="50">Acima de 25% até 50%</option><option value="above50">Acima de 50% do mínimo</option></select></div>
-      <label>Ordenar por<select aria-label="Ordenar por" value={order} onChange={e => setOrder(e.target.value)}><option value="priority">Prioridade do servidor</option><option value="name">Nome do produto · A–Z</option><option value="percentage">Menor percentual do mínimo</option></select></label>
-    </div>
-    </div>
-    <div className={s.searchRow}>
-    <label className={s.search}>Buscar nome<input type="search" placeholder="Digite o nome do produto" value={search} onChange={e => setSearch(e.target.value)} /></label>
-      <div className={s.situationField}><span>Situação dos alertas recebidos</span><div className={access.segFilter + ' ' + s.situations} role="group" aria-label="Situação">{[['', 'Todos'], ['ZERADO', 'Zerados'], ['CRITICO', 'Abaixo do mínimo']].map(([value, label]) => <button key={value} type="button" className={status === value ? access.segFilterOn : undefined} aria-pressed={status === value} onClick={() => setStatus(value)}>{label}<small>{query.loading || query.error ? '—' : value ? rows.filter(row => row.status === value).length : rows.length}</small></button>)}</div></div>
-    </div>
+      <FilterHeader className={s.heading}>
+        <h2 id="restock-filters"><button className={s.toggle} type="button" aria-expanded={filtersOpen} aria-controls="restock-filter-fields" onClick={() => setFiltersOpen(open => !open)}>
+          <SlidersHorizontal size={16} aria-hidden="true" />Filtros de reposição<ChevronDown size={18} aria-hidden="true" className={filtersOpen ? s.expanded : undefined} />
+        </button></h2>
+        <FilterActions compact onClear={clear} onRefresh={() => { query.reload(); list.reload() }} refreshing={query.loading || list.loading} refreshLabel="Atualizar alertas">
+          <button type="button" onClick={() => navigate('produtos')}>Ver catálogo completo</button>
+        </FilterActions>
+      </FilterHeader>
+      <div id="restock-filter-fields" hidden={!filtersOpen}>
+        <div className={s.filters}>
+          <RecordAutocomplete kind="categorias" active={false} label="Buscar categoria" value={params.categoriaId} onChange={categoriaId => update({ categoriaId })} />
+          <div className={s.rangeField}>
+            <div className={s.rangeLabel}>
+              <label htmlFor="restock-minimum-range">Mínimo disponível</label>
+              <span className={s.metricHelp}><button type="button" aria-label="Como é calculado o mínimo disponível" aria-describedby="restock-minimum-help"><CircleHelp size={15} aria-hidden="true" /></button>
+                <span id="restock-minimum-help" role="tooltip">Saldo atual ÷ estoque mínimo × 100. Até 25% inclui produtos zerados. A segunda faixa começa acima de 25%.</span>
+              </span>
+            </div>
+            <select id="restock-minimum-range" value={params.faixa || ''} onChange={e => update({ faixa: e.target.value })}><option value="">Todas as faixas</option><option value="25">Até 25% do mínimo</option><option value="50">Acima de 25% até 50%</option><option value="above50">Acima de 50% do mínimo</option></select>
+          </div>
+          <label htmlFor="restock-sort">Ordenar por<select id="restock-sort" aria-label="Ordenar por" value={ordem} onChange={e => update({ ordem: e.target.value })}><option value="priority">Prioridade</option><option value="name">Nome do produto · A–Z</option><option value="percentage">Menor percentual do mínimo</option></select></label>
+        </div>
+      </div>
+      <div className={s.searchRow}>
+        <label className={s.search}>Buscar nome<SearchInput label="Buscar nome" placeholder="Digite o nome do produto" value={params.busca} maxLength={120} onChange={busca => update({ busca })} /></label>
+        <div className={s.situationField}><span>Situação</span><div className={access.segFilter + ' ' + s.situations} role="group" aria-label="Situação">
+          {Object.entries(SITUACOES).map(([value, label]) => <button key={value} type="button" className={(params.status || '') === value ? access.segFilterOn : undefined} aria-pressed={(params.status || '') === value} onClick={() => update({ status: value })}>{label}</button>)}
+        </div></div>
+      </div>
     </section>
-    {!query.loading && !query.error && <p className={s.resultSummary} role="status">Exibindo {filtered.length} de {rows.length} alerta(s) recebido(s).</p>}
-    <DataTable key={JSON.stringify([search, status, category, range, order])} caption="Alertas prioritários de reposição" rowKey={r => r.produtoId} columns={columns} rows={filtered} pageSize={20}
-      emptyText={query.loading ? 'Consultando alertas…' : query.error ? 'Não foi possível consultar a reposição.' : rows.length ? 'Nenhum alerta exibido corresponde aos filtros.' : 'Nenhum alerta retornado nesta consulta.'} />
+    <QueryFeedback query={list} />
+    <DataTable compactColumns={['nome', 'quantidadeAtual', 'status', 'acao']} caption="Alertas prioritários de reposição" rowKey={row => row.produtoId} columns={columns} rows={rows} pageSize={params.tamanho}
+      rowClassName={row => row.status === 'ZERADO' ? s.zeroRow : undefined}
+      remote={{ page: params.pagina, total: list.loading || list.error ? 0 : list.data?.totalItens || 0, loading: list.loading, onPage: pagina => update({ pagina }, false) }}
+      emptyText={list.loading ? 'Consultando alertas…' : list.error ? 'Não foi possível consultar a reposição.' : 'Nenhum produto abaixo do mínimo corresponde aos filtros.'} />
   </>
 }

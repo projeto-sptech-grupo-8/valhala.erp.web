@@ -18,6 +18,17 @@
   font-size: 13px;
 }
 
+.columnToggle { display: none; }
+
+@media (max-width: 760px) {
+  [data-compact-table] > .columnToggle { display: flex; margin: 8px 10px; font-size: 12px; }
+  [data-compact-table]:not([data-all-columns]) [data-secondary-column] { display: none; }
+  [data-compact-table]:not([data-all-columns]) .table { min-width: 0; table-layout: auto; }
+  [data-compact-table]:not([data-all-columns]) .table :is(th, td) { padding-inline: 6px; white-space: normal; overflow-wrap: anywhere; }
+  [data-compact-table]:not([data-all-columns]) .table th:not(.check) { width: auto !important; }
+  [data-compact-table]:not([data-all-columns]) .check { width: 26px; }
+}
+
 .caption {
   position: absolute;
   width: 1px;

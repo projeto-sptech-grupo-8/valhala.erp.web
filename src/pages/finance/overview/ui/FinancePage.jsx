@@ -1,14 +1,15 @@
-import { useId, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid,
 } from 'recharts'
 import {
-  ArrowUpRight, CalendarClock, CalendarDays, ChartNoAxesCombined, Check, ChevronDown, ChevronRight, ChevronLeft,
-  Info, Banknote, Percent, CircleCheck, CircleHelp, CircleMinus, CircleX, LayoutDashboard, Package, ReceiptText, TrendingUp, Wallet,
+  ArrowUpRight, CalendarClock, CalendarDays, ChartColumnIncreasing, ChartNoAxesCombined, Check, ChevronDown, ChevronRight, ChevronLeft,
+  Banknote, Percent, FilePlus2, Package, ReceiptText, TrendingUp, Wallet,
 } from 'lucide-react'
 import { METAS, toneHigher, toneLower } from '@/entities/reports'
 import { fmtBRL, fmtNum } from '@/shared/lib/format.js'
+import { MetricCard } from '@/shared/ui/primitives/MetricCard.jsx'
 import { ChartTip } from '@/shared/ui/charts/ChartTip.jsx'
 import { PeriodSelector } from '@/shared/ui/period-selector/PeriodSelector.jsx'
 import { axisTick } from '@/shared/ui/charts/chartStyles.js'
@@ -22,14 +23,14 @@ import { FinanceAccounts, AccountList } from './FinanceAccounts.jsx'
 import s from './FinancePage.module.css'
 
 const tabs = [
-  { id: 'visao', label: 'Visão geral', Icon: LayoutDashboard },
-  { id: 'dre', label: 'Resultado', Icon: ReceiptText },
+  { id: 'visao', label: 'Saldos e contas a pagar', Icon: Wallet },
+  { id: 'dre', label: 'Resultado e vendas', Icon: ChartColumnIncreasing },
 ]
 const centros = [['', 'Todos'], ...Object.entries(CENTROS_CUSTO)]
 const statusIndicador = {
-  ok: { label: 'Bom', Icon: CircleCheck },
-  warn: { label: 'Médio', Icon: CircleMinus },
-  bad: { label: 'Ruim', Icon: CircleX },
+  ok: 'Bom',
+  warn: 'Médio',
+  bad: 'Ruim',
 }
 
 const fmtPct = value => value == null ? '—' : fmtNum(value) + '%'
@@ -39,31 +40,6 @@ function prazoTone(dias) {
   if (dias < 0) return 'bad'
   if (dias <= 7) return 'warn'
   return 'ok'
-}
-
-function SeloIndicador({ tone }) {
-  const status = statusIndicador[tone]
-  if (!status) return null
-
-  return (
-    <span className={s.metricStatus}>
-      {status.Icon && <status.Icon size={17} aria-hidden="true" />}
-      {status.label}
-    </span>
-  )
-}
-
-function Indicador({ label, value, description, tone = 'neutral', Icon, featured, title, statusLabel, neutralBorder = false, toneIcon = false }) {
-  return (
-    <article className={s.metric} data-tone={tone} data-neutral-border={neutralBorder || undefined} data-featured={featured || undefined} title={title}>
-      <div className={s.metricTitleRow}>
-        <h3>{Icon && <span className={s.metricIcon} data-tone-icon={toneIcon || undefined}><Icon size={18} aria-hidden="true" /></span>}{label}{title && <span tabIndex={0} aria-label={title} title={title} className={s.metricHelp}><Info size={14} aria-hidden="true"/></span>}</h3>
-        {statusLabel ? <span className={s.metricStatus}>{statusLabel}</span> : <SeloIndicador tone={tone} />}
-      </div>
-      <strong>{value}</strong>
-      <p>{description}</p>
-    </article>
-  )
 }
 
 function FluxoDeCaixa({ fluxo }) {
@@ -152,7 +128,6 @@ function Vencimentos({ referencia, revision, onOpen }) {
 }
 
 function IndicadoresResultado({ resultado, percentual }) {
-  const helpId = useId()
   const { lucroBruto, lucroLiquido: lucroLiq, cmv, margemBrutaPercentual: margemBruta,
     margemLiquidaPercentual: margemLiq, cmvPercentual: cmvPct } = resultado
   const toneMargemLiq = toneHigher(margemLiq, METAS.margemLiquida)
@@ -193,27 +168,11 @@ function IndicadoresResultado({ resultado, percentual }) {
   return (
     <section aria-label="Indicadores do resultado">
       <div className={s.resultMetrics} role="region" aria-label="Indicadores em linha" tabIndex={0}>
-        {indicadores.map(({ label, labelPercentual, Icon, ajuda, valor, margem, base, meta, tone }, index) => (
-          <article key={label} className={s.resultMetric} data-tone={tone}>
-            <div className={s.metricTitleRow}>
-              <h4>
-                <span className={s.metricIcon} data-tone-icon><Icon size={18} aria-hidden="true" /></span>
-                {percentual ? labelPercentual : label}
-                {ajuda && <span className={s.resultHelp}>
-                  <button type="button" aria-label={`Sobre ${percentual ? labelPercentual : label}`} aria-describedby={`${helpId}-${index}`}>
-                    <CircleHelp size={15} aria-hidden="true" />
-                  </button>
-                  <span id={`${helpId}-${index}`} role="tooltip">{ajuda}</span>
-                </span>}
-              </h4>
-              <SeloIndicador tone={tone} />
-            </div>
-            <div>
-              <strong>{percentual ? fmtPct(margem) : fmtBRL(valor)}</strong>
-              <span className={s.resultMetricBase}>{margem == null ? 'Sem receita de referência' : percentual ? base : fmtPct(margem) + ' ' + base}</span>
-            </div>
-            <p>{meta}</p>
-          </article>
+        {indicadores.map(({ label, labelPercentual, Icon, ajuda, valor, margem, base, meta, tone }) => (
+          <MetricCard key={label} label={percentual ? labelPercentual : label} Icon={Icon} help={ajuda} tone={tone}
+            value={percentual ? fmtPct(margem) : fmtBRL(valor)}
+            reference={margem == null ? 'Sem receita de referência' : percentual ? base : fmtPct(margem) + ' ' + base}
+            description={meta} statusLabel={margem != null ? statusIndicador[tone] : undefined} />
         ))}
       </div>
     </section>
@@ -341,8 +300,13 @@ export function Finance({ pageParams }) {
   const resultado = useQueryResource(signal => periodo ? financeApi.resultado(periodo.inicio, periodo.fim, signal) : null,
     [periodo?.inicio, periodo?.fim])
   const { vencidas, vencemEmAte7Dias } = data?.aPagar30Dias ?? {}
-  const tonePagar = vencidas ? 'bad' : vencemEmAte7Dias ? 'warn' : 'info'
+  const vencimentosDisponiveis = vencidas != null && vencemEmAte7Dias != null
+  const tonePagar = vencidas ? 'bad' : vencemEmAte7Dias ? 'warn' : vencimentosDisponiveis ? 'info' : 'neutral'
+  const statusPagar = vencidas ? 'Contas vencidas' : vencemEmAte7Dias ? 'Vencimentos próximos'
+    : vencimentosDisponiveis ? 'Sem urgências' : undefined
   const cobertura = data?.coberturaContasAPagar
+  const toneSaldo = cobertura != null ? toneHigher(cobertura, METAS.coberturaPagar)
+    : data?.saldoRealizado > 0 ? 'ok' : data?.saldoRealizado < 0 ? 'bad' : 'neutral'
 
   function abrirConta(event, options) {
     event.currentTarget.focus({ preventScroll: true })
@@ -357,8 +321,8 @@ export function Finance({ pageParams }) {
 
   const acoes = canManage && (
     <div className={s.actions}>
-      <button type="button" className="gold" onClick={event => abrirConta(event, { mode: 'create', tipo: 'PAGAR' })}>
-        <ArrowUpRight size={16} aria-hidden="true" />Nova conta
+      <button type="button" className="gold" onClick={event => abrirConta(event, { mode: 'create' })}>
+        <FilePlus2 size={16} aria-hidden="true" />Nova conta
       </button>
     </div>
   )
@@ -382,12 +346,12 @@ export function Finance({ pageParams }) {
           {resumo.error && <ErrorBlock error={resumo.error} onRetry={resumo.reload} />}
           {data && <>
             <section className={s.balanceGrid} aria-label="Saldos e compromissos" aria-busy={resumo.loading}>
-              <Indicador label="Saldo financeiro acumulado" neutralBorder toneIcon value={fmtBRL(data.saldoRealizado)} Icon={Wallet} title="Recebimentos acumulados das vendas somados às baixas das contas financeiras. A gaveta do turno é consultada na tela Caixa."
-                tone={data.saldoRealizado > 0 ? 'ok' : data.saldoRealizado < 0 ? 'bad' : 'neutral'}
-                statusLabel={data.saldoRealizado > 0 ? 'Positivo' : data.saldoRealizado < 0 ? 'Negativo' : 'Zerado'}
+              <MetricCard label="Saldo financeiro acumulado" value={fmtBRL(data.saldoRealizado)} Icon={Wallet} help="Recebimentos acumulados das vendas somados às baixas das contas financeiras. A gaveta do turno é consultada na tela Caixa."
+                tone={toneSaldo} statusLabel={cobertura != null ? statusIndicador[toneSaldo] : undefined}
                 description={cobertura == null ? 'Sem contas a pagar no intervalo' : `Equivale a ${fmtNum(cobertura)}× as contas a pagar em 30 dias`} />
-              <Indicador label="A pagar em 30 dias" value={fmtBRL(data.aPagar30Dias.valor)} Icon={ArrowUpRight} tone={tonePagar} statusLabel={vencidas ? 'Contas vencidas' : vencemEmAte7Dias ? 'Vencimentos próximos' : 'Sem urgências'}
-                description={vencidas ? (vencidas === 1 ? '1 conta vencida' : vencidas + ' contas vencidas')
+              <MetricCard label="A pagar em 30 dias" value={fmtBRL(data.aPagar30Dias?.valor)} Icon={ArrowUpRight}
+                tone={tonePagar} statusLabel={statusPagar}
+                description={!vencimentosDisponiveis ? 'Vencimentos indisponíveis' : vencidas ? (vencidas === 1 ? '1 conta vencida' : vencidas + ' contas vencidas')
                   : (vencemEmAte7Dias === 1 ? '1 conta vence em até 7 dias' : vencemEmAte7Dias + ' contas vencem em até 7 dias')} />
             </section>
             <div className={s.card + ' ' + s.overviewGrid} role="group" aria-label="Vencimentos e fluxo financeiro">
@@ -398,7 +362,7 @@ export function Finance({ pageParams }) {
         </>
       )}
 
-      {finTab === 'visao' && <AccountList revision={revision} canManage={canManage}
+      {finTab === 'visao' && <AccountList revision={revision} referencia={data?.referencia} canManage={canManage}
         onSelect={(id, mode) => setDialog({ id, mode })} />}
 
       {finTab === 'dre' && (

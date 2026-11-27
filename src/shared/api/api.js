@@ -440,6 +440,7 @@ const realApi = {
   // série mensal = quantidade de movimentações (entradas/saídas) por mês, já com os meses sem movimento
   dashboard: {
     resumo: (meses = 6, signal) => catalogRead(`/dashboard/resumo?meses=${meses}`, signal).then(toResumoDashboard),
+    reposicao: (params, signal) => paginaDe('/dashboard/reposicao', params, signal),
   },
 
   lotes: {

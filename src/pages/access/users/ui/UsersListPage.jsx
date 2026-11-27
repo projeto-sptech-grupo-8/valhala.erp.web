@@ -119,7 +119,7 @@ export function UsersList({ navigate, pageParams }) {
 
       {users.loading ? <LoadingBlock lines={6} label="Carregando usuários" /> : (
         <div className={filters.userTable}>
-          <DataTable
+          <DataTable compactColumns={['name', 'profileName', 'active', 'acoes']}
             key={pageSize}
             pageSize={pageSize}
             caption="Usuários do estabelecimento"

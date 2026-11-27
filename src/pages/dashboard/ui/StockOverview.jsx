@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertTriangle, ArrowDown, ArrowLeftRight, ArrowUp, BarChart3, Boxes, CalendarX, Download, Gauge, PackageX, ShieldCheck } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowLeftRight, ArrowUp, BarChart3, Boxes, CalendarX, ChevronDown, Download, Gauge, PackageX, ShieldCheck } from 'lucide-react'
 import { MovementTypeBadge } from '@/entities/inventory/ui/MovementTypeBadge.jsx'
 import { api } from '@/shared/api/api.js'
 import { downloadCSV, stamp } from '@/shared/lib/csv.js'
@@ -16,6 +16,7 @@ import s from './DashboardPage.module.css'
 
 const formatCount = value => value == null ? '—' : fmtNum(value)
 const alertColor = value => value == null ? 'neutral' : value > 0 ? 'bad' : 'info'
+const ALERT_LIMIT = 3
 
 export function StockOverview({ navigate, headerTarget }) {
   const toast = useToast()
@@ -28,7 +29,7 @@ export function StockOverview({ navigate, headerTarget }) {
   const expiry = useQueryResource(signal => api.lotes.resumo(signal), [])
   const data = !summary.loading && !summary.error ? summary.data : null
   const stock = data?.estoque
-  const alerts = stock?.alertas?.slice(0, 5) || []
+  const alerts = stock?.alertas?.slice(0, ALERT_LIMIT) || []
   const recent = data?.ultimasMovimentacoes?.slice(0, 5) || []
   const serie = data?.serieMensal || []
   const ids = [...new Set([...alerts, ...recent].map(row => row.produtoId).filter(Boolean))]
@@ -57,6 +58,11 @@ export function StockOverview({ navigate, headerTarget }) {
     toast('Arquivo CSV gerado com a série retornada pelo servidor.', { title: 'Exportação concluída' })
   }
   const critical = dashboardNumber(stock?.criticos)
+  const shownAlerts = alerts.length
+  const priorityLabel = shownAlerts === 1 ? 'o mais crítico' : `os ${fmtNum(shownAlerts)} mais críticos`
+  const alertContext = critical > shownAlerts
+    ? `Mostrando ${priorityLabel} de um total de ${fmtNum(critical)} produtos abaixo do mínimo.`
+    : `${fmtNum(shownAlerts)} ${shownAlerts === 1 ? 'produto' : 'produtos'} abaixo do mínimo.`
   const zero = dashboardNumber(stock?.zerados)
   const health = dashboardHealth(stock)
   const stockTotal = dashboardNumber(stock?.totalProdutos)
@@ -83,63 +89,72 @@ export function StockOverview({ navigate, headerTarget }) {
     {summary.error && <ErrorBlock error={summary.error} onRetry={summary.reload} />}
     <section className={'stats ' + s.stats} aria-label="Indicadores da operação" aria-busy={busy}>
       <OverviewStat icon={AlertTriangle} label="Estoque crítico" value={formatCount(critical)} accent={alertColor(critical)}
-        description="Produtos abaixo do mínimo, incluindo os zerados." />
+        description="Produtos abaixo do mínimo, incluindo os zerados." action={<button type="button" className={s.kpiLink} onClick={() => navigate('reposicao')}>Ver produtos abaixo do mínimo</button>} />
       <OverviewStat icon={PackageX} label="Produtos zerados" value={formatCount(zero)} accent={alertColor(zero)}
-        description="Produtos com mínimo definido e saldo zerado." />
+        description="Produtos com mínimo definido e saldo zerado." action={<button type="button" className={s.kpiLink} onClick={() => navigate('reposicao', { status: 'ZERADO' })}>Ver zerados</button>} />
       <OverviewStat icon={ShieldCheck} label="Saúde do estoque" value={health.percent == null ? '—' : health.percent + '%'} accent={health.tone} progress={health.percent}
         description={stock?.produtosComMinimoDefinido === 0 ? 'Nenhum produto com mínimo definido para avaliar.' : stock?.saudaveis != null && stock?.produtosComMinimoDefinido != null ? stock.saudaveis + ' de ' + stock.produtosComMinimoDefinido + ' produtos com mínimo estão saudáveis.' : 'Produtos saudáveis entre os que têm mínimo.'}
         help="O saldo saudável é de pelo menos 1,5 vez o mínimo. Verde a partir de 75%, amarelo de 25% a menos de 75% e vermelho abaixo de 25%." />
-      <OverviewStat icon={CalendarX} label="Lotes vencidos" value={formatCount(expired)} accent={alertColor(expired)} description="Lotes de produtos ativos com saldo e validade passada." />
+      <OverviewStat icon={CalendarX} label="Lotes vencidos" value={formatCount(expired)} accent={alertColor(expired)} description="Lotes de produtos ativos com saldo e validade passada."
+        action={<button type="button" className={s.kpiLink} onClick={() => navigate('validades', { situacao: 'VENCIDO' })}>Ver lotes vencidos</button>} />
     </section>
     <div className={s.grid}>
         <article className={'card ' + s.card} aria-label="Alertas prioritários de estoque">
-          <header className={s.cardHeading}><h3><AlertTriangle size={18} />Prioridades de reposição</h3><button onClick={() => navigate('reposicao')}>Ver reposição</button></header>
-          {stock && <section className={s.stockCoverage} aria-label="Cobertura do estoque mínimo">
-            <header className={s.coverageHeading}>
-              <h4><Gauge size={15} aria-hidden="true" />Cobertura do estoque mínimo</h4>
-              <strong>{coverage == null ? '—' : coverage + '%'}</strong>
-            </header>
-            {coverage != null && <Meter pct={coverage} label="Produtos com mínimo definido" />}
-            {coverage == null
-              ? <p>{stockTotal === 0 ? 'Nenhum produto ativo com estoque.' : 'Cobertura indisponível.'}</p>
-              : <p className={s.coverageLegend}>
-                <span><i aria-hidden="true" />{fmtNum(withMinimum)} de {fmtNum(stockTotal)} com mínimo</span>
-                <span><i aria-hidden="true" />{formatCount(withoutMinimum)} sem mínimo</span>
-              </p>}
-            {withMinimum > 0 && <div className={s.minimumBreakdown}>
-              <h5>Entre os produtos com mínimo</h5>
-              <dl className={s.minimumBands} aria-label="Situação dos produtos com mínimo definido">
-                {minimumBands.map(({ label, description, count, tone }) => (
-                  <div key={tone} data-tone={count > 0 ? tone : undefined}>
-                    <dt>{label}</dt>
-                    <dd>{formatCount(count)}</dd>
-                    <dd className={s.minimumBandDescription}>{description}</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>}
-          </section>}
+          <header className={s.cardHeading}>
+            <h3><AlertTriangle size={18} aria-hidden="true" />Prioridades de reposição</h3>
+            <button type="button" onClick={() => navigate('reposicao')}>Ver reposição</button>
+          </header>
           {summary.loading ? <LoadingBlock label="Consultando alertas prioritários…" /> : summary.error ? <p className={s.empty}>Alertas indisponíveis.</p> :
-            alerts.length ? <ul className={s.alerts}>{alerts.map(row => {
-              const min = dashboardNumber(row.estoqueMinimo), balance = dashboardNumber(row.quantidadeAtual)
-              const missing = min == null || balance == null ? null : Math.max(0, min - balance)
-              const zeroBalance = row.status === 'ZERADO'
-              return <li key={row.produtoId}>
-                <span>
-                  <span className={s.alertName}>
-                    <strong>{row.nome}</strong>
+            alerts.length ? <>
+              <p className={s.cardContext}>{alertContext}</p>
+              <ul className={s.alerts}>{alerts.map(row => {
+                const min = dashboardNumber(row.estoqueMinimo)
+                const balance = dashboardNumber(row.quantidadeAtual)
+                const missing = min == null || balance == null ? null : Math.max(0, min - balance)
+                const zeroBalance = row.status === 'ZERADO'
+                return <li key={row.produtoId}>
+                  <div className={s.alertHeading}>
+                    <div><strong>{row.nome}</strong><small>{row.categoria || 'Categoria não informada'}</small></div>
                     <span className={s.alertStatus} data-zero={zeroBalance}>{zeroBalance ? 'Zerado' : 'Crítico'}</span>
-                  </span>
-                  <small>{row.categoria || 'Categoria não informada'} · Mínimo: {quantity(row.produtoId, min)}</small>
-                </span>
-                <span className={s.balance} data-zero={zeroBalance}>
-                  <span className={s.alertCurrent}><small>Saldo atual</small><b>{quantity(row.produtoId, balance)}</b></span>
-                  <small>Falta para o mínimo: {quantity(row.produtoId, missing)}</small>
-                </span>
-              </li>
-            })}</ul> : <p className={s.empty}>Nenhum alerta retornado nesta consulta.</p>}
-          {stock && <p className={s.hint}>{alerts.length} alerta(s) exibido(s){critical != null && ' de ' + critical + ' produto(s) em alerta'}. Até cinco prioridades por consulta.</p>}
-          {stock && !units.loading && Object.values(units.data || {}).includes(null) && <p className={s.unitWarning}>Algumas unidades não puderam ser confirmadas. As quantidades estão em unidade-base.</p>}
+                  </div>
+                  <dl className={s.alertAmounts}>
+                    <div><dt>Saldo atual</dt><dd>{quantity(row.produtoId, balance)}</dd></div>
+                    <div><dt>Mínimo</dt><dd>{quantity(row.produtoId, min)}</dd></div>
+                    <div data-shortage={zeroBalance ? 'critical' : 'low'}><dt>Falta para o mínimo</dt><dd>{quantity(row.produtoId, missing)}</dd></div>
+                  </dl>
+                </li>
+              })}</ul>
+              {!units.loading && alerts.some(row => units.data?.[row.produtoId] === null) && <p className={s.unitWarning}>As quantidades sem unidade confirmada estão em unidade-base.</p>}
+            </> : <p className={s.empty}>Nenhum alerta retornado nesta consulta.</p>}
+          {stock && <details className={`${s.cardDisclosure} ${s.coverageDisclosure}`}>
+            <summary>
+              <Gauge size={16} aria-hidden="true" />
+              <span>Cobertura do estoque mínimo</span>
+              <strong>{coverage == null ? '—' : coverage + '%'}</strong>
+              <ChevronDown size={15} aria-hidden="true" />
+            </summary>
+            <section className={s.stockCoverage} aria-label="Cobertura do estoque mínimo">
+              {coverage != null && <Meter pct={coverage} label="Produtos com mínimo definido" />}
+              {coverage == null
+                ? <p>{stockTotal === 0 ? 'Nenhum produto ativo com estoque.' : 'Cobertura indisponível.'}</p>
+                : <p className={s.coverageLegend}>
+                  <span><i aria-hidden="true" />{fmtNum(withMinimum)} de {fmtNum(stockTotal)} com mínimo</span>
+                  <span><i aria-hidden="true" />{formatCount(withoutMinimum)} sem mínimo</span>
+                </p>}
+              {withMinimum > 0 && <div className={s.minimumBreakdown}>
+                <h4>Entre os produtos com mínimo</h4>
+                <dl className={s.minimumBands} aria-label="Situação dos produtos com mínimo definido">
+                  {minimumBands.map(({ label, description, count, tone }) => (
+                    <div key={tone} data-tone={count > 0 ? tone : undefined}>
+                      <dt>{label}</dt>
+                      <dd>{formatCount(count)}</dd>
+                      <dd className={s.minimumBandDescription}>{description}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>}
+            </section>
+          </details>}
         </article>
         <ExpirySummary query={expiry} navigate={navigate} />
 

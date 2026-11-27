@@ -246,6 +246,11 @@ function LocalEntradaNF({ navigate, onStateChange }) {
           <span className={s.muted} aria-live="polite">
             {pendentes.length ? `${pendentes.length} item(ns) pendente(s)` : `${ativos.length} de ${linhas.length} itens prontos`}
           </span>
+          {pendentes.length > 0 && <button type="button" onClick={() => {
+            const next = document.getElementById('nf-item-' + pendentes[0].it.nItem)
+            next?.focus()
+            next?.scrollIntoView({ block: 'center' })
+          }}>Conferir primeiro item pendente</button>}
           <button className="gold" disabled={busy || pendentes.length > 0 || !ativos.length} onClick={confirmar}>
             {busy ? 'Dando entrada…' : `Confirmar entrada (${ativos.length})`} {!busy && <CheckCircle2 size={14} aria-hidden="true" />}
           </button>
@@ -267,7 +272,7 @@ function LocalEntradaNF({ navigate, onStateChange }) {
         {linhas.map((l, i) => {
           const { it, prod } = l
           return (
-            <article key={it.nItem} className={`card ${s.nfItem} ${it.ignorar ? s.nfIgnored : ''} ${l.problemas.length ? s.nfPending : ''}`} aria-label={`Item ${it.nItem}: ${it.xProd}`}>
+            <article key={it.nItem} id={'nf-item-' + it.nItem} tabIndex={-1} className={`card ${s.nfItem} ${it.ignorar ? s.nfIgnored : ''} ${l.problemas.length ? s.nfPending : ''}`} aria-label={`Item ${it.nItem}: ${it.xProd}`}>
               <header>
                 <div>
                   <small>Item {it.nItem} · cód. {it.cProd}{it.cEAN ? ` · EAN ${it.cEAN}` : ' · sem GTIN'}</small>

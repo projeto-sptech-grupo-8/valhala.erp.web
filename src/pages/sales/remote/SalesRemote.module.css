@@ -138,6 +138,7 @@
 .orderIdentity { display:grid; gap:6px; min-width:110px; max-width:230px; overflow-wrap:anywhere; }
 .orderIdentity strong { font-size:12px; font-weight:600; }
 .orderIdentity > span { font-size:12px; color:var(--dim); line-height:1.5; }
+.orderStatuses { display:grid; gap:5px; }
 .orderDate { white-space:nowrap; font-variant-numeric:tabular-nums; }
 .paymentSummary { display:grid; justify-items:start; gap:7px; min-width:110px; }
 .paymentSummary > small { color:var(--dim); font-size:11px; white-space:nowrap; }
@@ -152,9 +153,6 @@
 .auditSummary { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; min-width:160px; max-width:280px; line-height:1.6; }
 .auditResponsible { display:flex; align-items:center; gap:8px; min-width:120px; }
 .auditResponsible { overflow-wrap:anywhere; }
-.auditFilterChip button { display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; padding:6px; min-width:32px; min-height:32px; }
-.auditUserFilter { display:flex; flex-wrap:wrap; gap:10px; align-items:center; grid-column:1/-1; order:99; padding-top:16px; border-top:1px solid var(--line); font-size:12px; color:var(--dim); }
-.auditFilterChip { display:flex; align-items:center; gap:6px; border:1px solid var(--line); padding:3px 4px 3px 9px; border-radius:7px; color:var(--text); }
 .auditDetail { line-height:1.7; }
 .auditDetail .drawerTitle { margin-right:28px; }
 .auditDescription { color:var(--dim); font-size:13px; overflow-wrap:anywhere; margin:18px 0 24px; }
@@ -198,3 +196,35 @@
   .cashCreated { grid-template-columns:auto minmax(0,1fr); }
   .cashCreated > button { grid-column:1/-1; }
 }
+
+.orderSearch { display:grid; grid-template-columns:minmax(0,1fr); align-items:end; gap:16px; margin:10px 0; }
+.orderSearch label { display:grid; gap:9px; min-width:0; font-size:12px; color:var(--filter-label); font-weight:500; }
+.orderSearch input { width:100%; min-width:0; height:44px; box-sizing:border-box; }
+@container (min-width: 530px) {
+  .orderSearch { grid-template-columns:clamp(190px,30%,320px) minmax(0,1fr); }
+  .orderSearch > .dateFilterPeriod { grid-column:auto; }
+  .orderSearch .dateFilterPeriod > [role='group'] { height:44px; }
+  .orderSearch .dateFilterPeriod > [role='group'] button { flex:1 1 auto; padding-inline:5px; white-space:normal; }
+}
+.panel button[aria-pressed=true] { border-color:var(--gold); background:var(--active-bg); color:var(--gold2); }
+.auditResponsible small { display:block; margin-top:4px; color:var(--dim); }
+
+
+.dateFilters { container-type:inline-size; }
+.dateFilterPeriod { grid-column:1 / -1; display:grid; gap:9px; min-width:0; color:var(--filter-label); font-size:12px; font-weight:500; }
+@container (min-width: 625px) {
+  .dateFilterGrid.dateFilterGrid:not([data-extra-field]) { grid-template-columns:minmax(120px,1fr) minmax(300px,2fr) minmax(110px,1fr); }
+  .dateFilterGrid:not([data-extra-field]) > .dateFilterPeriod { grid-column:auto; }
+  .dateFilterPeriod > [role='group'] { height:44px; }
+  .dateFilterPeriod > [role='group'] button { flex:1 1 auto; padding-inline:5px; white-space:normal; }
+}
+
+
+@container (min-width: 750px) {
+  .dateFilterGrid.dateFilterGrid[data-extra-field] { grid-template-columns:minmax(100px,1fr) minmax(120px,1fr) minmax(310px,2fr) minmax(110px,1fr); }
+  .dateFilterGrid[data-extra-field] > .dateFilterPeriod { grid-column:auto; }
+}
+
+.auditResponsibleInput { position:relative; min-width:0; }
+.auditResponsibleInput:has(> button) > input { padding-inline-end:42px; }
+.auditResponsibleInput > button { position:absolute; inset-inline-end:5px; top:50%; transform:translateY(-50%); display:grid; place-items:center; width:32px; height:32px; padding:0; border:0; color:var(--dim); }

@@ -192,7 +192,7 @@ function Shell({ exit }) {
         )}
         {allowed && (
           <>
-            <PageHeader onActionsMount={setHeaderActionsElement} page={page} navigate={navigate} extra={editName || titles[routeKey]} onBack={handleBack} help={headerHelp?.page === page ? headerHelp.text : null} action={cashViewAction} />
+            <PageHeader onActionsMount={setHeaderActionsElement} page={page} reportTab={page === 'relatorios' ? params.aba : undefined} navigate={navigate} extra={editName || titles[routeKey]} onBack={handleBack} help={headerHelp?.page === page ? headerHelp.text : null} action={cashViewAction} />
             {(page==='caixa'||page==='pedidos') && <FiscalReceipts />}
             <Outlet context={{ setTitle, setBackAction, setHeaderHelp, headerActionsElement }} />
           </>

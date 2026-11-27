@@ -1,0 +1,6 @@
+.options { display: flex; height: 42px; box-sizing: border-box; border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; }
+.options button { flex: 1 0 auto; min-width: 0; height: 100%; padding: 0 7px; border: 0; border-radius: 0; color: var(--dim); font-size: 11px; line-height: 1.5; white-space: nowrap; }
+.options button + button { border-left: 1px solid var(--line); }
+.options button:is([aria-checked="true"], [aria-pressed="true"]) { background: rgb(var(--accent) / .12); color: var(--gold2); font-weight: 600; }
+.options button:focus-visible { outline: 2px solid var(--gold2); outline-offset: -3px; }
+@media (max-width: 600px) { .options { flex-wrap: wrap; height: auto; } .options button { flex: 1 1 24%; height: auto; min-height: 36px; padding: 4px; white-space: normal; } }

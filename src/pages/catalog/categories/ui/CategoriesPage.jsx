@@ -26,9 +26,9 @@ export function Cards({ navigate }) {
     ordenarPor: ['nome', 'criadoEm', 'atualizadoEm'].includes(params.ordenarPor) ? params.ordenarPor : 'nome', direcao: params.direcao }
   const query = useQueryResource(signal => api.categorias.pagina(request, signal), [request])
   const columns = [
-    { key: 'nome', header: 'Categoria', width: '33.333%', render: c => <div className={a.categoryCell}><strong>{c.nome}</strong>{c.descricao && <span title={c.descricao}>{c.descricao}</span>}</div> },
-    { key: 'ativo', header: 'Status', width: '33.334%', align: 'center', sort: false, render: c => <span className={a.status} data-active={c.ativo}>{c.ativo ? <CheckCircle2 size={14} aria-hidden="true" /> : <CirclePause size={14} aria-hidden="true" />}{c.ativo ? 'Ativa' : 'Inativa'}</span> },
-    { key: 'acoes', header: 'Ações', width: '33.333%', align: 'center', sort: false, render: c => <CategoryRowActions category={c} can={can} onEdit={() => setModal({ categoria: c })} onDelete={() => setDeleteCategory(c)} onStatus={() => setStatusCategory(c)} navigate={navigate} /> },
+    { key: 'nome', header: 'Categoria', width: '23%', render: c => <div className={a.categoryCell}><strong>{c.nome}</strong>{c.descricao && <span title={c.descricao}>{c.descricao}</span>}</div> },
+    { key: 'ativo', header: 'Status', width: '33%', align: 'center', sort: false, render: c => <span className={a.status} data-active={c.ativo}>{c.ativo ? <CheckCircle2 size={14} aria-hidden="true" /> : <CirclePause size={14} aria-hidden="true" />}{c.ativo ? 'Ativa' : 'Inativa'}</span> },
+    { key: 'acoes', header: 'Ações', width: '44%', align: 'center', sort: false, render: c => <CategoryRowActions category={c} can={can} onEdit={() => setModal({ categoria: c })} onDelete={() => setDeleteCategory(c)} onStatus={() => setStatusCategory(c)} navigate={navigate} /> },
   ]
   return <>
     <section className={ui.panel} aria-labelledby="category-filter-title">

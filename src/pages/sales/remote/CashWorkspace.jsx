@@ -6,7 +6,7 @@ import { readCash, writeCash, createCashOrder, MAX_OPEN_CASH_ORDERS, OPEN_CASH_O
 import { useQueryResource } from '@/shared/lib/hooks/usePagedQuery.js'
 import { RecordAutocomplete } from '@/features/catalog/product-editor/ui/CategoryAutocomplete.jsx'
 import { LoadingBlock, ErrorBlock, Notice } from '@/shared/ui/feedback/ManagementFeedback.jsx'
-import { fmtBRL } from '@/shared/lib/format.js'
+import { fmtBRL, fmtNum } from '@/shared/lib/format.js'
 import s from './CashWorkspace.module.css'
 const statuses={EM_ATENDIMENTO:'Em atendimento',AGUARDANDO_MAQUINA:'Aguardando maquininha',AGUARDANDO_PAGAMENTO:'Aguardando pagamento',PAGAMENTO_PARCIAL:'Pagamento parcial',CONCLUIDO:'Concluído',CANCELADO:'Cancelado',ESTORNADO:'Estornado'}
 
@@ -105,8 +105,14 @@ export function CashWorkspace({sessionId,selectedId,onSelect,creationRevision,ca
   }catch(ex){setError(ex);if(ex.status===409)reloadCatalog();if(ex.status===0&&!ex.mutationNotStarted)setUncertain(true)}finally{lock.current=false;setBusy(false)}
  }
  function searchKey(event){if(event.key!=='Enter')return;event.preventDefault();if(catalog.loading||search!==debounced)return;const exact=rows.find(p=>p.sku?.toLowerCase()===search.trim().toLowerCase());if(exact||rows.length===1)update(exact||rows[0],1)}
+ const itemCount = (order?.itens || []).reduce((total, item) => total + (Number(item.quantidade) || 0), 0)
  return <section className={s.workspace} aria-label="Atendimento do caixa">
-  <div className={s.mobileTabs}><button aria-pressed={mobile==='products'} onClick={()=>setMobile('products')}><Package size={16}/>Produtos</button><button aria-label="Exibir atendimento" aria-pressed={mobile==='order'} onClick={()=>setMobile('order')}><Receipt size={16}/>{displayTitle}</button></div>
+  <div className={s.mobileTabs}>
+   <button type="button" aria-pressed={mobile==='products'} onClick={()=>setMobile('products')}><Package size={16} aria-hidden="true" />Produtos</button>
+   <button type="button" aria-label="Exibir atendimento" aria-description={order ? `${fmtNum(itemCount)} itens · ${fmtBRL(order.total)}` : undefined} aria-pressed={mobile==='order'} onClick={()=>setMobile('order')}>
+    <Receipt size={16} aria-hidden="true" /><span>{order ? 'Ver pedido' : displayTitle}{order && <small>{fmtNum(itemCount)} {itemCount === 1 ? 'item' : 'itens'} · {fmtBRL(order.total)}</small>}</span>
+   </button>
+  </div>
   <article className={s.catalog} data-mobile-hidden={mobile!=='products'}>
    <header className={s.catalogHeading}><div><h2><ShoppingBasket size={21} aria-hidden="true"/>Selecione os itens</h2><p>Clique em um produto ou drink para adicionar ao pedido.</p></div><label className={s.pageSize}>Itens por página<select aria-label="Itens por página do catálogo do caixa" value={pageSize} onChange={e=>{setPageSize(Number(e.target.value));setPage(0)}}>{[9,12,18].map(size=><option key={size} value={size}>{size}</option>)}</select></label></header>
    <div className={s.filters}><label className={s.search}><span>Buscar nome ou SKU</span><div><Search size={17} aria-hidden="true"/><input ref={searchRef} type="search" aria-label="Buscar produto ou SKU" value={search} placeholder="Ex.: Cerveja, caipirinha ou SKU" onChange={e=>setSearch(e.target.value)} onKeyDown={searchKey}/></div></label><RecordAutocomplete label="Categoria" required={false} value={category} onChange={id=>{setCategory(id);setPage(0)}} placeholder="Todas as categorias"/></div>

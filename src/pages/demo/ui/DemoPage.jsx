@@ -4,8 +4,8 @@ import Brand from '@/shared/ui/brand/Brand.jsx'
 import s from '@/pages/demo/ui/DemoPage.module.css'
 
 const views = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'produtos', label: 'Produtos', icon: Package },
+  { id: 'dashboard', label: 'Visão geral', icon: LayoutDashboard },
+  { id: 'produtos', label: 'Produtos e drinks', icon: Package },
   { id: 'estoque', label: 'Estoque', icon: Boxes },
   { id: 'financeiro', label: 'Financeiro', icon: ChartNoAxesCombined },
 ]
@@ -18,7 +18,7 @@ const samples = {
     rows: [['Movimentações hoje', '32 registros', 'Atualizado agora'], ['Produtos em atenção', '8 itens', 'Estoque baixo'], ['Validades próximas', '4 lotes', 'Próximos 30 dias']],
   },
   produtos: {
-    title: 'Catálogo de produtos',
+    title: 'Produtos e drinks',
     description: 'Consulte preços, categorias e saldo dos itens.',
     metrics: [['Itens cadastrados', '1.248'], ['Categorias', '18'], ['Drinks', '36']],
     rows: [['Gin London Dry 750ml', 'R$ 119,90', 'Em estoque'], ['Vodka Premium 1L', 'R$ 89,90', 'Estoque baixo'], ['Água tônica 350ml', 'R$ 6,50', 'Em estoque']],

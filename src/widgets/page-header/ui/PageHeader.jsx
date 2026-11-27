@@ -9,7 +9,7 @@ import { pages } from '@/entities/access'
 import s from '@/shared/styles/panel.module.css'
 
 /* Cabeçalho com retorno para a tela de origem, título e descrição. */
-export function PageHeader({ page, navigate, extra, onBack, help, onActionsMount, action }) {
+export function PageHeader({ page, navigate, extra, onBack, help, onActionsMount, action, reportTab }) {
   const helpId = useId()
   const meta = pages[page]
   if (!meta) return null
@@ -29,7 +29,7 @@ export function PageHeader({ page, navigate, extra, onBack, help, onActionsMount
         {page === 'produtos' && <CatalogListHelp />}
         {page === 'movimentacoes' && <MovementListHelp />}
         {page === 'auditoria' && <AuditColorLegend />}
-        {hasFinanceHelp && <FinanceMetricsHelp reports={page === 'relatorios'} />}
+        {hasFinanceHelp && <FinanceMetricsHelp reports={page === 'relatorios'} reportTab={reportTab} />}
         {helpText && <span className={ui.help}><button type="button" className={ui.helpButton} aria-label={page === 'validades' ? 'Sobre os indicadores de validade e lotes' : 'Sobre os indicadores de reposição'} aria-describedby={helpId}><CircleAlert size={19} aria-hidden="true" /></button><span id={helpId} role="tooltip" className={ui.helpText}>{helpText}</span></span>}
       </h1>
       <p>{page === 'novo' && extra === 'Novo produto padrão' ? 'Cadastre a identificação, os preços e o estoque de um produto vendido por unidade ou de forma fracionada.' : page === 'novo' && extra === 'Novo drink' ? 'Defina o preço e os ingredientes da receita para controlar o consumo de cada drink.' : meta.desc}</p>
