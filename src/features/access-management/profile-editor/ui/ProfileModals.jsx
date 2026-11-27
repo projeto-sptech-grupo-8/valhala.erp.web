@@ -25,7 +25,7 @@ export function EditProfileModal({ perfil, perfis, onClose, onSaved }) {
 
   async function submit(e) {
     e?.preventDefault()
-    const err = 'nome' in patch ? validarNomePerfil(nome, perfis, perfil.id) : null
+    const err = 'nome' in patch ? validarNomePerfil(nome, perfis, perfil.id, { allowManager: isManagerProfile(perfil.nome) }) : null
     if (err) { setErrors({ nome: err }); return }
     if (!changed) return
     if (busy) return

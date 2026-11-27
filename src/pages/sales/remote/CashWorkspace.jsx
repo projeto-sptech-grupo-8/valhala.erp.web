@@ -8,6 +8,7 @@ import { readCash, writeCash, createCashOrder, MAX_OPEN_CASH_ORDERS, OPEN_CASH_O
 import { useQueryResource } from '@/shared/lib/hooks/usePagedQuery.js'
 import { RecordAutocomplete } from '@/features/catalog/product-editor/ui/CategoryAutocomplete.jsx'
 import { LoadingBlock, ErrorBlock, Notice } from '@/shared/ui/feedback/ManagementFeedback.jsx'
+import { canEditOrderItems } from '@/features/sales/payments/model/paymentRules.js'
 import { fmtBRL, fmtNum } from '@/shared/lib/format.js'
 import s from './CashWorkspace.module.css'
 const statuses={EM_ATENDIMENTO:'Em atendimento',AGUARDANDO_MAQUINA:'Aguardando maquininha',AGUARDANDO_PAGAMENTO:'Aguardando pagamento',PAGAMENTO_PARCIAL:'Pagamento parcial',CONCLUIDO:'Concluído',CANCELADO:'Cancelado',ESTORNADO:'Estornado'}
@@ -74,7 +75,7 @@ export function CashWorkspace({sessionId,selectedId,onSelect,creationRevision,ca
   : !selectedId && !draft && !queue.data?.overflow && slots.some(slot => !slot) ? 'Selecione uma posição livre.' : null)
  const slotIndex=draft?draft.position:slots.findIndex(slot=>slot?.id===selectedId)
  const displayTitle=slotIndex>=0?'Pedido '+(slotIndex+1):order&&!OPEN_CASH_ORDER_STATES.includes(order.status)?'Atendimento finalizado':'Pedido'
- const editable=!order||order.status==='EM_ATENDIMENTO'&&!order.pagamentos?.some(p=>!['CANCELADO','RECUSADO','EXPIRADO'].includes(p.status))
+ const editable=!order||canEditOrderItems(order)
  const catalogInitialLoading = catalogLoading && !catalog.refreshing
  const rows = catalogInitialLoading || catalog.error ? [] : catalog.data?.itens ?? []
  const addingDisabled = !canOperate || busy || uncertain || !editable || !order || Boolean(selectedId && (query.loading || query.error))

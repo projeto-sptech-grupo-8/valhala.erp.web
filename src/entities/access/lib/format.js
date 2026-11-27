@@ -20,12 +20,25 @@ export function passwordScore(v = '') {
     .filter(Boolean).length
 }
 
-const norm = (v = '') => v.trim().toLocaleLowerCase('pt-BR')
+export function normalizeProfileKey(name) {
+  return String(name ?? '').normalize('NFD').replace(/\p{M}/gu, '')
+    .toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '')
+}
 
-/* nome: obrigatório, ≤ 100, único no estabelecimento (sem diferenciar maiúsculas) */
-export function validarNomePerfil(nome, perfis = [], ignoreId) {
-  if (!nome.trim()) return 'O nome do perfil é obrigatório.'
-  if (nome.trim().length > 100) return 'Use no máximo 100 caracteres.'
-  if (perfis.some(p => p.id !== ignoreId && norm(p.nome) === norm(nome))) return 'Já existe um perfil com este nome.'
+// Mesma normalização usada pelo backend para identificar o perfil reservado.
+export function isManagerProfile(name) {
+  return normalizeProfileKey(name) === 'GERENTE'
+}
+
+/* nome: obrigatório, ≤ 100, único no estabelecimento (normalizado igual ao backend) */
+export function validarNomePerfil(nome, perfis = [], ignoreId, { allowManager = false } = {}) {
+  const trimmed = String(nome ?? '').trim()
+  if (!trimmed) return 'O nome do perfil é obrigatório.'
+  if (trimmed.length > 100) return 'Use no máximo 100 caracteres.'
+  if (!allowManager && isManagerProfile(trimmed)) return 'Gerente é um nome reservado.'
+  const key = normalizeProfileKey(trimmed)
+  if (perfis.some(p => p.id !== ignoreId && normalizeProfileKey(p.nome) === key)) {
+    return 'Já existe um perfil com este nome.'
+  }
   return null
 }

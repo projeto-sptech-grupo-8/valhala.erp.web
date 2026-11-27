@@ -1,39 +1,26 @@
 import { moduloDoCodigo, rotuloDoCodigo } from '@/shared/config/funcionalidades.js'
+import { createCsrfManager, isCsrfRejection, requiresCsrf } from './csrf.js'
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
 
-/* ─── CSRF: o backend exige X-XSRF-TOKEN em POST/PUT/PATCH/DELETE (exceto /auth/login) ─── */
-const MUTATIONS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
-let csrfToken = null
-
-const readCsrfCookie = () => document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/)?.[1] ?? null
-
-// cookie (mesmo host do front) ou GET /auth/csrf (API em outro domínio)
-async function csrfHeader({ cookieOnly = false } = {}) {
-  const fromCookie = readCsrfCookie()
-  if (fromCookie) return { 'X-XSRF-TOKEN': decodeURIComponent(fromCookie) }
-  if (cookieOnly) return {}
-  if (!csrfToken) {
-    const res = await fetch(BASE + '/auth/csrf', { credentials: 'include' }).catch(() => null)
-    const body = res?.ok ? await res.json().catch(() => null) : null
-    csrfToken = body?.token ?? body?.tokenCsrf ?? null
-  }
-  return csrfToken ? { 'X-XSRF-TOKEN': csrfToken } : {}
-}
+/* ─── CSRF: o backend exige X-XSRF-TOKEN em POST/PUT/PATCH/DELETE autenticados ─── */
+const csrfManager = createCsrfManager({ baseUrl: BASE })
 
 // um único refresh por vez: o backend rotaciona o refresh token, então chamadas paralelas derrubariam a sessão
 let refreshing = null
 function refreshSession() {
-  refreshing ??= csrfHeader({ cookieOnly: true }) // /auth/csrf exige o access token, que é o que expirou
+  refreshing ??= csrfManager.header({ cookieOnly: true }) // /auth/csrf exige o access token, que é o que expirou
     .then(headers => fetch(BASE + '/auth/refresh', { method: 'POST', credentials: 'include', headers }))
     .then(res => res.ok, () => false)
-    .finally(() => { csrfToken = null; refreshing = null })
+    .finally(() => { csrfManager.clear(); refreshing = null })
   return refreshing
 }
 
-async function request(path, options = {}, isRetry = false) {
+async function request(path, options = {}, retryState = {}) {
+  const state = typeof retryState === 'boolean' ? { authRetry: retryState } : retryState
   const method = (options.method ?? 'GET').toUpperCase()
-  const csrf = MUTATIONS.has(method) && path !== '/auth/login' ? await csrfHeader() : {}
+  const needsCsrf = requiresCsrf(method, path)
+  const csrf = needsCsrf ? await csrfManager.header({ overrideToken: state.csrfOverride }) : {}
   let res
   try {
     res = await fetch(BASE + path, {
@@ -48,15 +35,22 @@ async function request(path, options = {}, isRetry = false) {
       { status: 0 }
     )
   }
-  if (path === '/auth/login' || path === '/auth/logout') csrfToken = null
+  if (path === '/auth/login' || path === '/auth/logout') csrfManager.clear()
 
-  if (res.status === 401 && !isRetry && !path.startsWith('/auth')) {
-    if (await refreshSession()) return request(path, options, true)
+  if (res.status === 401 && !state.authRetry && !path.startsWith('/auth')) {
+    if (await refreshSession()) return request(path, options, { ...state, authRetry: true, csrfOverride: null })
     throw Object.assign(new Error('Sessão expirada'), { status: 401 })
   }
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
+    if (isCsrfRejection(res.status, body) && needsCsrf && !state.csrfRetry && path !== '/auth/refresh') {
+      csrfManager.clear()
+      const refreshed = await csrfManager.refresh()
+      if (refreshed) {
+        return request(path, options, { ...state, csrfRetry: true, csrfOverride: refreshed })
+      }
+    }
     const fallback = res.status === 403 ? 'Você não tem permissão para esta ação.' : 'Erro inesperado'
     throw Object.assign(new Error(body.message ?? fallback), {
       status: res.status,

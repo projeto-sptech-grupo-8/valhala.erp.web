@@ -40,6 +40,8 @@ function validate(f, isEdit) {
   if (!isEdit) {
     if (!f.profileId) e.profileId = 'Selecione o perfil de acesso.'
     if (f.password.length < 8) e.password = 'A senha precisa ter ao menos 8 caracteres.'
+    else if (f.password.length > 72) e.password = 'A senha deve ter no máximo 72 caracteres.'
+    else if (new TextEncoder().encode(f.password).length > 72) e.password = 'Esta senha é muito longa para o servidor. Reduza a quantidade de caracteres.'
     else if (!(/[a-zA-Z]/.test(f.password) && /\d/.test(f.password))) e.password = 'Use letras e números.'
     if (!e.password && f.confirm !== f.password) e.confirm = 'As senhas não coincidem.'
   }
@@ -203,10 +205,10 @@ export function UserForm({ navigate, userId, setTitle }) {
               <p className={s.sectionDesc}>Repasse a senha ao usuário por um canal seguro. Ele poderá alterá-la em Segurança.</p>
               <div className="two">
                 <Field name="password" label="Senha" required error={errors.password}>
-                  <input type={showPass ? 'text' : 'password'} value={form.password} onChange={e => upd('password', e.target.value)} autoComplete="new-password" placeholder="Mínimo 8 caracteres, letras e números" />
+                  <input type={showPass ? 'text' : 'password'} value={form.password} maxLength={72} onChange={e => upd('password', e.target.value)} autoComplete="new-password" placeholder="Mínimo 8 caracteres, letras e números" />
                 </Field>
                 <Field name="confirm" label="Confirmar senha" required error={errors.confirm}>
-                  <input type={showPass ? 'text' : 'password'} value={form.confirm} onChange={e => upd('confirm', e.target.value)} autoComplete="new-password" />
+                  <input type={showPass ? 'text' : 'password'} value={form.confirm} maxLength={72} onChange={e => upd('confirm', e.target.value)} autoComplete="new-password" />
                 </Field>
               </div>
               <div className={a.passRow}>

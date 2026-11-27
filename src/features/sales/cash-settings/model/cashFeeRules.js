@@ -16,8 +16,7 @@ export function validateFee(values,config) {
  if(!Number.isInteger(count)||count<1||count>12)errors.parcelas='Informe um número inteiro de 1 a 12.'
  else if(values.forma!=='CREDITO'&&count!==1)errors.parcelas='Pix e débito aceitam somente 1 parcela.'
  const percentage=decimal(values.taxaPercentual),fixed=decimal(values.taxaFixa)
- if(!Number.isFinite(percentage)||percentage<0||percentage>100||Math.abs(percentage*10000-Math.round(percentage*10000))>0.00001)errors.taxaPercentual='Informe de 0 a 100%, com até quatro casas decimais.'
- else if(effectiveFeeTransfer(values,config)===true&&percentage>=100)errors.taxaPercentual='Para repassar ao cliente, o percentual deve ser menor que 100%.'
+ if(!Number.isFinite(percentage)||percentage<0||percentage>=100||Math.abs(percentage*10000-Math.round(percentage*10000))>0.00001)errors.taxaPercentual='Informe de 0 a menos de 100%, com até quatro casas decimais.'
  if(!Number.isFinite(fixed)||fixed<0||fixed>=1e10||Math.abs(fixed*100-Math.round(fixed*100))>0.00001)errors.taxaFixa='Informe um valor a partir de R$ 0,00, com até duas casas decimais.'
  if(!['GLOBAL','LOJA','CLIENTE'].includes(values.repasse))errors.repasse='Selecione uma regra de repasse.'
  else if(values.repasse==='GLOBAL'&&effectiveFeeTransfer(values,config)==null)errors.repasse='Carregue a política geral para confirmar o repasse.'

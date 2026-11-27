@@ -61,7 +61,7 @@ export function CashFeeModal({rate,onClose,onSaved}) {
     <section className={s.section}>
      <Heading title="Custos por transação" icon={Percent} help="O percentual é a taxa total para esta quantidade de parcelas, não uma taxa mensal. A taxa fixa é cobrada uma vez por transação. Informe zero quando não houver um dos custos."/>
      <div className={s.grid}>
-      <label onBlur={()=>blur('taxaPercentual')}><span>Taxa percentual (%) <b className={s.required}>*</b></span><input aria-label="Taxa percentual (%)" aria-invalid={!!errors.taxaPercentual} type="text" inputMode="decimal" required value={values.taxaPercentual} onChange={event=>change('taxaPercentual',event.target.value)} placeholder="Ex.: 3,5000"/><small>Percentual total. Até quatro casas decimais.</small>{fieldError('taxaPercentual')}</label>
+      <label onBlur={()=>blur('taxaPercentual')}><span>Taxa percentual (%) <b className={s.required}>*</b></span><input aria-label="Taxa percentual (%)" aria-invalid={!!errors.taxaPercentual} type="text" inputMode="decimal" required value={values.taxaPercentual} onChange={event=>change('taxaPercentual',event.target.value)} placeholder="Ex.: 3,5000"/><small>Percentual total (menor que 100%). Até quatro casas decimais.</small>{fieldError('taxaPercentual')}</label>
       <label onBlur={()=>blur('taxaFixa')}><span>Taxa fixa (R$) <b className={s.required}>*</b></span><MoneyInput aria-label="Taxa fixa (R$)" aria-invalid={!!errors.taxaFixa} required value={values.taxaFixa} onValueChange={value=>change('taxaFixa',value)} placeholder="Ex.: 0,50"/><small>Valor por transação. Informe 0,00 se não houver.</small>{fieldError('taxaFixa')}</label>
      </div>
     </section>

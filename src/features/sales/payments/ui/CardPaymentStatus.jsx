@@ -10,7 +10,7 @@ const statuses = {
   PENDENTE_CONCILIACAO: ['Conferência necessária', 'Volte ao pedido para conferir o comprovante e conciliar o recebimento.'],
   ACAO_NECESSARIA: ['Pagamento requer atenção', 'Volte ao pedido para verificar os detalhes da cobrança.'],
   CANCELAMENTO_SOLICITADO: ['Cancelamento em andamento', 'Aguarde a confirmação do cancelamento antes de cobrar novamente.'],
-  ESTORNO_EM_ANDAMENTO: ['Estorno em andamento', 'Aguarde a confirmação do estorno antes de continuar.'],
+  ESTORNO_EM_ANDAMENTO: ['Estorno em andamento', 'Aguarde a confirmação ou volte ao pedido para retomar o estorno caso tenha ocorrido falha na comunicação.'],
   RECUSADO: ['Pagamento recusado', 'Você pode tentar outra forma de pagamento ou repetir a cobrança.'],
   EXPIRADO: ['Cobrança expirada', 'Inicie uma nova tentativa para receber esta parte.'],
   CANCELADO: ['Pagamento cancelado', 'Inicie uma nova tentativa para receber esta parte.'],

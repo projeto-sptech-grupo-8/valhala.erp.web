@@ -17,6 +17,7 @@ export const AUDIT_EVENTS = [
  ['PAGAMENTO_POINT_EXPIRADO','Cobrança expirada','Pagamentos','orange'],['PAGAMENTO_POINT_FALHOU','Falha na cobrança','Pagamentos','danger'],
  ['PAGAMENTO_POINT_CANCELAMENTO_SOLICITADO','Cancelamento de cobrança solicitado','Pagamentos','pending'],
  ['CONCILIACAO_MANUAL','Conciliação manual','Pagamentos','purple'],['PAGAMENTO_CANCELADO','Pagamento cancelado','Pagamentos','danger'],['PAGAMENTO_ESTORNADO','Pagamento estornado','Pagamentos','purple'],
+ ['NFCE_EMITIDA','NFC-e emitida','Fiscal','success'],['NFCE_CANCELADA','NFC-e cancelada','Fiscal','danger'],
 ]
 
 export function readableAuditLabel(value) {
@@ -56,7 +57,7 @@ export function auditComparison(before,after) {
 }
 
 export function auditReference(event) {
- return event.pedidoIdentificador?.trim()||(event.pedidoId?'Pedido vinculado':({SESSAO_CAIXA:'Sessão de caixa',CONFIGURACAO_CAIXA:'Configuração do caixa',CAIXA:'Caixa físico',TERMINAL_CAIXA:'Maquininha',TAXA_PAGAMENTO:'Taxa de pagamento',PAGAMENTO_PEDIDO:'Pagamento'}[event.entidade]||'—'))
+ return event.pedidoIdentificador?.trim()||(event.pedidoId?'Pedido vinculado':({SESSAO_CAIXA:'Sessão de caixa',CONFIGURACAO_CAIXA:'Configuração do caixa',CAIXA:'Caixa físico',TERMINAL_CAIXA:'Maquininha',TAXA_PAGAMENTO:'Taxa de pagamento',PAGAMENTO_PEDIDO:'Pagamento',NOTA_FISCAL:'Nota fiscal'}[event.entidade]||'—'))
 }
 
 export function auditDateLabel(value) {
