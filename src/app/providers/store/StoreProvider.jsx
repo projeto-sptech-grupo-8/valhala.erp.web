@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { useLocation } from 'react-router-dom'
 import { StoreCtx } from '@/entities/store'
 import { makeCan } from '@/entities/access'
 import { readTheme, saveTheme, applyTheme, clearTheme } from '@/entities/preferences'
@@ -8,16 +7,16 @@ import {
   addLot, normalizeLots, weightedCost, SEM_LOTE,
 } from '@/entities/inventory'
 
-const KEY = 'valhalla:store:v2'
+const LEGACY_KEY = 'valhalla:store:v2'
 const LOCAL_FIELDS = ['doseMl', 'unidadesFardo', 'saidas30d', 'lotes']
-const isUuid = (id) => /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(String(id))
+const xmlStorageKey = userId => `valhalla:xml-import:v1:${userId || 'local'}`
 
 const round = (n) => Math.round(n * 1000) / 1000
 
 function seed() {
   return {
     version: 2,
-    // catálogo: começa vazio e é preenchido pela API
+    // catálogo: começa vazio e é preenchido sob demanda pela API apenas na importação XML
     products: [],
     drinks: [],
     movements: [],
@@ -28,36 +27,43 @@ function seed() {
   }
 }
 
-function load() {
+function readJsonStorage(key) {
   try {
-    const raw = localStorage.getItem(KEY)
-    if (raw) {
-      const st = JSON.parse(raw)
-      // cache antigo (ids que não são UUID, ex.: BEB-/DRK-) não se mistura com o catálogo da API
-      if ([...(st.products || []), ...(st.drinks || [])].some(p => !isUuid(p.id))) {
-        Object.assign(st, { products: [], drinks: [], movements: [] })
-      }
-      return { ...seed(), ...st }
-    }
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : null
   } catch { /* storage indisponível ou corrompido */ }
-  return seed()
+  return null
 }
 
+function loadXmlMetadata(userId) {
+  const scoped = readJsonStorage(xmlStorageKey(userId))
+  if (scoped && typeof scoped === 'object') {
+    return {
+      vinculos: scoped.vinculos && typeof scoped.vinculos === 'object' ? scoped.vinculos : {},
+      nfsImportadas: Array.isArray(scoped.nfsImportadas) ? scoped.nfsImportadas : [],
+    }
+  }
+  const legacy = readJsonStorage(LEGACY_KEY)
+  if (legacy && typeof legacy === 'object') {
+    return {
+      vinculos: legacy.vinculos && typeof legacy.vinculos === 'object' ? legacy.vinculos : {},
+      nfsImportadas: Array.isArray(legacy.nfsImportadas) ? legacy.nfsImportadas : [],
+    }
+  }
+  return { vinculos: {}, nfsImportadas: [] }
+}
+
+function saveXmlMetadata(userId, { vinculos, nfsImportadas }) {
+  try {
+    localStorage.setItem(xmlStorageKey(userId), JSON.stringify({ version: 1, vinculos, nfsImportadas }))
+  } catch { /* storage indisponível */ }
+}
 
 export function StoreProvider({ user, onUserChange, onLogout, children }) {
-  const { pathname } = useLocation()
-  // Migrated pages own their queries. Legacy consumers still hydrate on entry.
-  const remotePage = ['dashboard', 'produtos', 'categorias', 'novo', 'editar', 'movimentacoes', 'novamovimentacao', 'reposicao', 'validades', 'entradanf'].includes(pathname.split('/').filter(Boolean).at(-1))
   const staleCatalog = useRef(true)
-  const legacyHydrated = useRef(!remotePage)
-  const [state, setState] = useState(() => remotePage ? seed() : load())
+  const [state, setState] = useState(() => ({ ...seed(), ...loadXmlMetadata(user?.id) }))
   const ref = useRef(state) // sempre atualizado por commit()
   const [printJob, setPrintJob] = useState(null)
-
-  useEffect(() => {
-    if (!legacyHydrated.current) return // preserve the existing local store until a legacy flow needs it
-    try { localStorage.setItem(KEY, JSON.stringify(state)) } catch { /* ignore */ }
-  }, [state])
 
   const operador = user?.name || 'Operador'
 
@@ -66,16 +72,11 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
     setState(next)
   }
 
-  /* ─── Catálogo remoto: API + campos locais ─── */
+  /* ─── Catálogo remoto sob demanda para a importação XML ─── */
   const can = makeCan(user)
-  const stockAccess = can('VISUALIZAR_ESTOQUE')
-  const [catalog, setCatalog] = useState({ status: 'loading', error: null })
+  const [catalog, setCatalog] = useState({ status: 'idle', error: null })
 
   async function syncCatalog() {
-    if (!legacyHydrated.current) {
-      legacyHydrated.current = true
-      commit(load())
-    }
     try {
       const lista = await api.produtos.listar()
       const drinksApi = lista.filter(p => p.tipo === 'drink')
@@ -93,7 +94,7 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
       })
       // histórico: as movimentações mais recentes do back (substituem as locais)
       const movs = await api.movimentacoes.listar()
-      commit({ ...ref.current, products, drinks, movements: movs.map(m => toMovimento(m, products)) })
+      commit({ ...ref.current, ...loadXmlMetadata(user?.id), products, drinks, movements: movs.map(m => toMovimento(m, products)) })
       setCatalog({ status: 'ready', error: null })
       staleCatalog.current = false
     } catch (error) {
@@ -101,7 +102,6 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
     }
   }
 
-  useEffect(() => { if (!remotePage && stockAccess && staleCatalog.current) syncCatalog() }, [remotePage, stockAccess]) // eslint-disable-line react-hooks/exhaustive-deps
   const invalidateCatalog = () => { staleCatalog.current = true }
   const reloadCatalog = () => { setCatalog(c => ({ ...c, status: 'loading' })); return syncCatalog() }
 
@@ -181,6 +181,7 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
     try {
       // movimentações locais ficam no início da lista; envia da mais antiga para a mais nova
       await postarMovimentos([...novas].reverse(), antes.products)
+      saveXmlMetadata(user?.id, ref.current)
     } catch (e) {
       commit(antes)
       await syncCatalog()
@@ -197,7 +198,7 @@ export function StoreProvider({ user, onUserChange, onLogout, children }) {
   useEffect(() => clearTheme, [])
   const setTheme = (t) => { setThemeState(t); saveTheme(t) }
   // sessão: atualizar dados do usuário logado e encerrar a sessão (ex.: permissões revogadas)
-  const session = { updateSelf: (u) => onUserChange?.({ ...user, ...u }), logout: () => onLogout?.() }
+  const session = { updateSelf: (u) => onUserChange?.({ ...user, ...u }), logout: (opts) => onLogout?.(opts) }
   return (
     <StoreCtx.Provider value={{ ...state, importarNF, print: job => setPrintJob({ ...job, id: Date.now() }), clearPrint: () => setPrintJob(null), invalidateCatalog, operador, user, role, can, session, theme, setTheme, printJob, catalog: { ...catalog, remote: true, reload: reloadCatalog } }}>
       {children}

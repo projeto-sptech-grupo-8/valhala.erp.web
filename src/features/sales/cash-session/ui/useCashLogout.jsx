@@ -43,7 +43,7 @@ export function useCashLogout({ can, onLogout, navigate }) {
     if (lock.current) return
     lock.current = true; setBusy(true); setError('')
     try {
-      const turn = await readCash('sessoes/' + dialog.turn.id)
+      const turn = await readCash('sessoes/' + encodeURIComponent(dialog.turn.id))
       if (!turn?.id || turn.id !== dialog.turn.id || !['ABERTA', 'FECHADA', 'EM_FECHAMENTO'].includes(turn.status)) throw new Error('O servidor não confirmou a situação do fechamento.')
       if (turn.status === 'FECHADA') { await onLogout(); setDialog(null) }
       else if (turn.status === 'EM_FECHAMENTO') setDialog({ phase: 'pending', turn })
@@ -58,7 +58,7 @@ export function useCashLogout({ can, onLogout, navigate }) {
     if (difference !== null && difference !== 0 && !reason.trim()) { setError('Informe a justificativa para a diferença entre o dinheiro esperado e o contado.'); return }
     lock.current = true; setBusy(true); setError('')
     try {
-      const turn = await writeCash('sessoes/' + dialog.turn.id + '/fechamento', { dinheiroContado: Number(counted), justificativaDivergencia: reason.trim() || null, observacao: note.trim() || null })
+      const turn = await writeCash('sessoes/' + encodeURIComponent(dialog.turn.id) + '/fechamento', { dinheiroContado: Number(counted), justificativaDivergencia: reason.trim() || null, observacao: note.trim() || null })
       if (!turn?.id || turn.id !== dialog.turn.id || !['FECHADA', 'EM_FECHAMENTO'].includes(turn.status)) { setUncertain(true); throw new Error('A resposta não confirmou o fechamento. Confira a situação antes de reenviar.') }
       if (turn.status === 'FECHADA') { await onLogout(); setDialog(null) }
       else setDialog({ phase: 'pending', turn })

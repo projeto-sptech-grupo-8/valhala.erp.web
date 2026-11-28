@@ -72,3 +72,36 @@ test('createCsrfManager lê cookie, consulta /auth/csrf sob demanda, prioriza ov
   assert.deepEqual(await manager.header({ cookieOnly: true }), {})
   assert.equal(fetched.length, 2)
 })
+
+test('createCsrfManager deduplica chamadas concorrentes de refresh e reaproveita token em memória quando allowFetch é false', async () => {
+  let fetches = 0
+  let resolveFetch
+  const manager = createCsrfManager({
+    baseUrl: 'http://localhost:8080',
+    readCookie: () => null,
+    fetchImpl: () => {
+      fetches++
+      return new Promise(resolve => {
+        resolveFetch = resolve
+      })
+    },
+  })
+
+  // Sem cookie nem cache: allowFetch=false não chama /auth/csrf
+  assert.deepEqual(await manager.header({ allowFetch: false }), {})
+  assert.equal(fetches, 0)
+
+  // Duas chamadas concorrentes de header()/refresh() compartilham um único GET /auth/csrf
+  const p1 = manager.header()
+  const p2 = manager.refresh()
+  assert.equal(fetches, 1)
+
+  resolveFetch({ ok: true, json: async () => ({ token: 'shared-csrf' }) })
+  const [h1, t2] = await Promise.all([p1, p2])
+  assert.deepEqual(h1, { 'X-XSRF-TOKEN': 'shared-csrf' })
+  assert.equal(t2, 'shared-csrf')
+
+  // allowFetch=false usa o token em memória quando cookie não está acessível (deploy cross-host)
+  assert.deepEqual(await manager.header({ allowFetch: false }), { 'X-XSRF-TOKEN': 'shared-csrf' })
+  assert.equal(fetches, 1)
+})

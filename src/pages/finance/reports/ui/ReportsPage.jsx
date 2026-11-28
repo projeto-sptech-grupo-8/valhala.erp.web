@@ -107,9 +107,9 @@ function Tip({ active, payload, label, fmt = fmtBRL, title, color }) {
   return (
     <div className={p.tip}>
       <span className={p.tipLabel}>{title ? title(payload[0].payload) : label}</span>
-      {payload.map(p => (
-        <span key={p.dataKey} className={p.tipRow}>
-          <i style={{ background: color?.(p.payload) ?? p.color }} aria-hidden="true" />{p.name}: <b>{fmt(p.value, p.payload)}</b>
+      {payload.map(entry => (
+        <span key={entry.dataKey} className={p.tipRow}>
+          <i style={{ background: color?.(entry.payload) ?? entry.color }} aria-hidden="true" />{entry.name}: <b>{fmt(entry.value, entry.payload)}</b>
         </span>
       ))}
     </div>

@@ -29,26 +29,38 @@ export function createCsrfManager({
   baseUrl = '',
   fetchImpl = (...args) => globalThis.fetch(...args),
   readCookie = () => readCsrfCookie(),
+  timeoutMs = null,
 } = {}) {
   let csrfToken = null
+  let pendingRefresh = null
 
   function clear() {
     csrfToken = null
+    pendingRefresh = null
   }
 
   async function refresh() {
-    const res = await fetchImpl(baseUrl + '/auth/csrf', { credentials: 'include' }).catch(() => null)
-    const body = res?.ok ? await res.json().catch(() => null) : null
-    csrfToken = body?.token ?? body?.tokenCsrf ?? null
-    return csrfToken
+    if (!pendingRefresh) {
+      const fetchOptions = timeoutMs > 0 && typeof AbortSignal?.timeout === 'function'
+        ? { credentials: 'include', signal: AbortSignal.timeout(timeoutMs) }
+        : { credentials: 'include' }
+      pendingRefresh = fetchImpl(baseUrl + '/auth/csrf', fetchOptions)
+        .then(res => (res?.ok ? res.json().catch(() => null) : null), () => null)
+        .then(body => {
+          csrfToken = body?.token ?? body?.tokenCsrf ?? null
+          return csrfToken
+        })
+        .finally(() => { pendingRefresh = null })
+    }
+    return pendingRefresh
   }
 
-  async function header({ cookieOnly = false, overrideToken = null } = {}) {
+  async function header({ cookieOnly = false, allowFetch = true, overrideToken = null } = {}) {
     if (overrideToken) return { 'X-XSRF-TOKEN': overrideToken }
     const fromCookie = readCookie()
     if (fromCookie) return { 'X-XSRF-TOKEN': fromCookie }
     if (cookieOnly) return {}
-    if (!csrfToken) await refresh()
+    if (!csrfToken && allowFetch) await refresh()
     return csrfToken ? { 'X-XSRF-TOKEN': csrfToken } : {}
   }
 

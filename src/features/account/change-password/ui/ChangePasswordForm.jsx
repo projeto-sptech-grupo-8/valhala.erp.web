@@ -8,13 +8,17 @@ import { changeOwnPassword } from '../api/changePassword.js'
 import { validatePasswordChange } from '../model/passwordRules.js'
 import s from './ChangePasswordForm.module.css'
 
-export function ChangePasswordForm() {
+ function clearSecrets(setCurrentPassword, setPassword, setConfirmation, setVisible) {
+  setCurrentPassword(''); setPassword(''); setConfirmation('')
+  setVisible({ currentPassword: false, password: false, confirmation: false })
+ }
+ export function ChangePasswordForm() {
  const {user,session}=useStore(),navigate=useNavigate(),toast=useToast(),id=useId(),form=useRef(null),lock=useRef(false)
  const [currentPassword,setCurrentPassword]=useState(''),[password,setPassword]=useState(''),[confirmation,setConfirmation]=useState(''),[visible,setVisible]=useState({currentPassword:false,password:false,confirmation:false}),[errors,setErrors]=useState({}),[error,setError]=useState(null),[busy,setBusy]=useState(false),[uncertain,setUncertain]=useState(false)
- function clear(){setCurrentPassword('');setPassword('');setConfirmation('');setErrors({});setError(null);setVisible({currentPassword:false,password:false,confirmation:false})}
- async function goToLogin(){
+ function clear(){clearSecrets(setCurrentPassword,setPassword,setConfirmation,setVisible);setErrors({});setError(null)}
+ async function goToLogin({force=false}={}){
   setBusy(true)
-  try{if(await session.logout()!==false)navigate('/login',{replace:true})}finally{setBusy(false)}
+  try{if(await session.logout({force,redirectTo:'/login'})!==false)navigate('/login',{replace:true})}finally{setBusy(false)}
  }
  async function submit(event){
   event.preventDefault();if(lock.current||uncertain||!user?.id)return
@@ -26,7 +30,7 @@ export function ChangePasswordForm() {
    await changeOwnPassword(user.id,currentPassword,password)
    saved=true;clear()
    toast('Entre novamente com a nova senha. As sessões anteriores foram revogadas.',{type:'success',title:'Senha atualizada',duration:8000})
-   await goToLogin()
+   await goToLogin({force:true})
   }catch(ex){
    if(saved){navigate('/login',{replace:true});return}
    const nextErrors={}
@@ -38,7 +42,8 @@ export function ChangePasswordForm() {
    setErrors(nextErrors)
    setError(ex)
    if(Object.keys(nextErrors).length){requestAnimationFrame(()=>form.current?.querySelector('[aria-invalid="true"]')?.focus())}
-   if(ex.status===0||ex.status>=500){setUncertain(true);setCurrentPassword('');setPassword('');setConfirmation('');setVisible({currentPassword:false,password:false,confirmation:false})}
+   if(ex.status===401){clearSecrets(setCurrentPassword,setPassword,setConfirmation,setVisible)}
+   if(ex.status===0||ex.status>=500){setUncertain(true);clearSecrets(setCurrentPassword,setPassword,setConfirmation,setVisible)}
   }finally{lock.current=false;setBusy(false)}
  }
  function change(key,value){if(key==='currentPassword')setCurrentPassword(value);else if(key==='password')setPassword(value);else setConfirmation(value);setErrors(previous=>({...previous,[key]:undefined}));setError(null)}
@@ -47,8 +52,8 @@ export function ChangePasswordForm() {
   <h3 id={id+'-title'} className={s.title}><KeyRound size={19} aria-hidden="true"/>Alterar senha</h3>
   <p className={s.description}>Confirme sua senha atual e defina uma nova senha para sua conta. Após a alteração, será necessário entrar novamente.</p>
   {!user?.id&&<Notice title="Conta não identificada">Entre novamente para alterar sua senha.</Notice>}
-  {error&&<Notice title="Não foi possível confirmar a alteração" focus>{error.status===401?'Sua sessão expirou. Entre novamente antes de alterar a senha.':error.message}{error.status===401&&<button type="button" disabled={busy} onClick={goToLogin}><LogIn size={15} aria-hidden="true"/>Ir para o login</button>}</Notice>}
-  {uncertain&&<Notice tone="warning" title="Confira sua senha antes de repetir">O servidor pode ter concluído a alteração. O formulário foi bloqueado para evitar um novo envio. Entre novamente com a nova senha; se ela não funcionar, use a anterior.<button type="button" disabled={busy} onClick={goToLogin}><LogIn size={15} aria-hidden="true"/>Ir para o login</button></Notice>}
+  {error&&<Notice title="Não foi possível confirmar a alteração" focus>{error.status===401?'Sua sessão expirou. Entre novamente antes de alterar a senha.':error.message}{error.status===401&&<button type="button" disabled={busy} onClick={()=>goToLogin({force:true})}><LogIn size={15} aria-hidden="true"/>Ir para o login</button>}</Notice>}
+  {uncertain&&<Notice tone="warning" title="Confira sua senha antes de repetir">O servidor pode ter concluído a alteração. O formulário foi bloqueado para evitar um novo envio. Entre novamente com a nova senha; se ela não funcionar, use a anterior.<button type="button" disabled={busy} onClick={()=>goToLogin({force:true})}><LogIn size={15} aria-hidden="true"/>Ir para o login</button></Notice>}
   <form ref={form} onSubmit={submit} noValidate aria-busy={busy}>
    <fieldset disabled={busy||uncertain||!user?.id||error?.status===401} className={s.fields}>
     {[

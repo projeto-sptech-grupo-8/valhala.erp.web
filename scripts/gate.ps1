@@ -1,4 +1,4 @@
-# Verificação completa de um módulo (ou de todos). Para no primeiro passo que falhar.
+﻿# Verificação completa de um módulo (ou de todos). Para no primeiro passo que falhar.
 #   powershell -File scripts/gate.ps1            -> roda tudo (regressão completa)
 #   powershell -File scripts/gate.ps1 -Modulo auth
 # Pré-requisitos: Postgres, API em :8080, `npm run dev` em :5173.
@@ -15,6 +15,7 @@ function Step([string]$Nome, [scriptblock]$Cmd) {
 
 Step 'build' { npm run build --silent }
 Step 'lint'  { npx oxlint src }
+Step 'testes unitários' { node --test tests/*.test.js }
 if ($env:RESET_DB) { Step 'reset do banco' { & $env:RESET_DB; $global:LASTEXITCODE = 0 } }
 foreach ($s in Get-ChildItem "scripts/smoke/$Modulo.ps1" | Where-Object Name -ne 'lib.ps1') {
   Step "smoke API: $($s.BaseName)" { powershell -NoProfile -ExecutionPolicy Bypass -File $s.FullName }

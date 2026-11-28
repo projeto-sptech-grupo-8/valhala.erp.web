@@ -12,7 +12,7 @@ const names = { DINHEIRO:'Dinheiro',PIX:'Pix',CREDITO:'Crédito',DEBITO:'Débito
 function Feedback({query,label}) {return query.loading?<LoadingBlock lines={2} label={label}/>:query.error?<ErrorBlock error={query.error} onRetry={query.reload}/>:null}
 export function CashHistory({sessionId,onClose}) {
  const [page,setPage]=useState(0),[status,setStatus]=useState('CONCLUIDO'),[selected,setSelected]=useState(undefined)
- const session=useQueryResource(signal=>readCash('sessoes/'+sessionId,{},signal),[sessionId])
+ const session=useQueryResource(signal=>readCash('sessoes/'+encodeURIComponent(sessionId),{},signal),[sessionId])
  const orders=useQueryResource(signal=>readCash('pedidos',{sessaoCaixaId:sessionId,status,pagina:page,tamanho:10,ordenarPor:'numero',direcao:'DESC'},signal),[sessionId,status,page])
  const rows=orders.loading||orders.error?[]:orders.data?.itens||[]
  const current=session.loading||session.error?null:session.data
@@ -36,7 +36,7 @@ export function CashHistory({sessionId,onClose}) {
  </div></Drawer>
 }
 function SaleItems({id}) {
- const query=useQueryResource(signal=>readCash('pedidos/'+id,{},signal),[id])
+ const query=useQueryResource(signal=>readCash('pedidos/'+encodeURIComponent(id),{},signal),[id])
  const order=query.loading||query.error?null:query.data
  return <div className={s.saleDetails}><Feedback query={query} label="Carregando produtos vendidos…"/>{order&&<><h4><Package size={15} aria-hidden="true"/>Itens registrados</h4><div className={s.tableWrap}><table><caption className={s.srOnly}>Produtos do pedido #{order.numero}</caption><thead><tr><th>Produto</th><th>Qtd.</th><th>Unitário</th><th>Subtotal</th></tr></thead><tbody>{order.itens?.map(item=><tr key={item.id}><td><strong>{item.descricaoProduto}</strong>{item.categoriaNome&&<small>{item.categoriaNome}</small>}</td><td>{fmtNum(item.quantidade)}</td><td>{amount(item.precoUnitario)}</td><td>{amount(item.subtotal)}</td></tr>)}</tbody></table></div><dl className={s.totals}>{[['Subtotal',order.subtotal],['Desconto',order.desconto],['Total do pedido',order.total],['Recebido aprovado',order.totalPago],['Saldo restante',order.saldoRestante]].map(([label,value])=><div key={label}><dt>{label}</dt><dd>{amount(value)}</dd></div>)}</dl><p className={s.hint}>Valores dos itens registrados na venda. O desconto do pedido é apresentado separadamente.</p></>}</div>
 }

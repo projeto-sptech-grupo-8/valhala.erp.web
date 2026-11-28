@@ -30,7 +30,7 @@ const paymentStates = {
 
 function Attempts({ orderId }) {
   const query = useQueryResource(async signal => {
-    const rows = await readCash('pedidos/' + orderId + '/pagamentos', {}, signal)
+    const rows = await readCash('pedidos/' + encodeURIComponent(orderId) + '/pagamentos', {}, signal)
     if (!Array.isArray(rows)) throw new Error('As tentativas de pagamento não foram retornadas.')
     return rows
   }, [orderId])

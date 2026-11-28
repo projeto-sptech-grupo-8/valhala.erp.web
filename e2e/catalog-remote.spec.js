@@ -129,7 +129,7 @@ test('movimentação envia unidade-base e tipo exato sem inferir perda pelo moti
   await page.goto('/#/movimentacoes?novo=1&produto=' + vodka.id)
   await expect(page).toHaveURL(/novamovimentacao/)
   await expect(page.getByRole('heading', { name: 'Nova movimentação', exact: true })).toBeVisible()
-  await expect(page.getByText('Saldo consultado:', { exact: false })).toContainText('2.000 ml')
+  await expect(page.getByText('Saldo atual', { exact: false })).toContainText('2.000 ml')
   await page.getByRole('spinbutton', { name: 'Quantidade', exact: true }).fill('50')
   await page.getByLabel('Justificativa').fill('Reposição após perda anterior')
   await page.getByRole('button', { name: 'Salvar movimentação' }).click()
@@ -293,7 +293,7 @@ test('validade usa consulta remota sem hidratar catálogo local', async ({ page 
   await expect(tooltip).toBeHidden()
   await help.hover()
   await expect(tooltip).toContainText('referência 15/11/2026 · 1 lote(s) sem validade')
-  await expect(tooltip).toContainText('As saídas usam FEFO no servidor')
+  await expect(tooltip).toContainText('Nas saídas, o sistema usa primeiro os lotes de validade mais próxima')
   await page.mouse.move(0, 0)
   await expect(tooltip).toBeHidden()
   expect(calls.some(c => c.path === '/lotes/resumo')).toBe(true)
@@ -1275,7 +1275,7 @@ test('movimentação em fardos deixa a conversão do payload para o servidor', a
   await page.goto('/#/novamovimentacao?produto=' + strawberry.id)
   await page.getByLabel('Quantidade informada em', { exact: true }).selectOption('true')
   await page.getByRole('spinbutton', { name: 'Quantidade', exact: true }).fill('2')
-  await expect(page.getByText('Saldo consultado:', { exact: false })).toContainText('54 un')
+  await expect(page.getByText('Saldo previsto', { exact: false })).toContainText('54 un')
   await page.getByRole('button', { name: 'Salvar movimentação', exact: true }).click()
   await expect(page).toHaveURL(/#\/movimentacoes$/)
   expect(calls.find(c => c.path === '/movimentacoes-estoque' && c.method === 'POST').body).toMatchObject({ quantidade: 2, emFardo: true })
@@ -2697,7 +2697,7 @@ test('alterar senha com sessão expirada exige novo login sem reenviar a atualiz
  await page.getByLabel('Nova senha',{exact:true}).fill('TesteSenha123')
  await page.getByLabel('Confirmar nova senha',{exact:true}).fill('TesteSenha123')
  await page.getByRole('button',{name:'Atualizar senha',exact:true}).click()
- await expect(page.getByRole('alert')).toContainText('Sua sessão expirou')
+ await expect(page.getByRole('article',{name:'Alterar senha'}).getByRole('alert')).toContainText('Sua sessão expirou')
  await expect(page.getByLabel('Senha atual',{exact:true})).toBeDisabled()
  await expect(page.getByLabel('Nova senha',{exact:true})).toBeDisabled()
  await expect(page.getByRole('button',{name:'Cancelar',exact:true})).toHaveCount(0)
@@ -2910,7 +2910,7 @@ test('início mantém unidade-base explícita quando não consegue confirmar fra
  await page.goto('/#/dashboard')
  const alerts=page.getByRole('article',{name:'Alertas prioritários de estoque',exact:true})
  await expect(alerts).toContainText('200 (unidade-base)')
- await expect(alerts).toContainText('Algumas unidades não puderam ser confirmadas')
+ await expect(alerts).toContainText('As quantidades sem unidade confirmada estão em unidade-base.')
  await expect(alerts.getByText(/200 garrafa/)).toHaveCount(0)
  await expect(page.getByText('63%',{exact:true})).toBeVisible()
 })
@@ -3470,7 +3470,7 @@ test('conciliação manual em ACAO_NECESSARIA exige autorizador ao confirmar e o
     autorizadorEmail: 'gerente@adega.com',
     autorizadorSenha: 'SenhaGerente1',
   }])
-  await expect(page.getByText('Concluído', { exact: true }).first()).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'Detalhes', exact: true })).toContainText(/Situação do pedido\s*Concluído/)
 })
 
 test('estorno individual reabre pedido parcial para edição e permite retomar estorno em andamento', async ({ page }) => {
@@ -3524,6 +3524,6 @@ test('estorno individual reabre pedido parcial para edição e permite retomar e
     { pagamentoId: 'pag-point-retry', body: { motivo: 'Tentativa anterior' } },
     { pagamentoId: 'pag-ok', body: { motivo: 'Cliente desistiu' } },
   ])
-  await expect(page.getByText('Em atendimento', { exact: true }).first()).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'Detalhes', exact: true })).toContainText(/Situação do pedido\s*Em atendimento/)
   await expect(page.getByRole('button', { name: 'Remover', exact: true })).toBeVisible()
 })

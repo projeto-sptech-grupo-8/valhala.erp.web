@@ -35,7 +35,7 @@ O **Valhalla ERP — Frontend Web** concentra a operação diária do estabeleci
 - **Controle de acesso e configurações**: gestão de usuários, perfis e sobrescritas individuais (`GRANT`/`REVOKE`), dados cadastrais da adega (edição restrita ao perfil `Gerente`), tema claro/escuro e histórico dos últimos acessos.
 - **Rotas públicas**: landing institucional (`/#/`) e demonstração interativa com dados ilustrativos (`/#/demo`).
 
-Limites operacionais atuais: a recuperação de senha por e-mail permanece indisponível (`/forgot` orienta procurar o responsável); o emissor de NFC-e opera em ambiente `HOMOLOGACAO`; o módulo Financeiro contempla apenas contas `PAGAR` (sem busca textual por descrição na listagem da API); vínculos/notas da importação XML e preferências de etiquetas são persistidos localmente no navegador; e a opção **Lembrar de mim** na tela de login ainda não altera o ciclo da sessão.
+Limites operacionais atuais: a recuperação de senha por e-mail permanece indisponível (`/forgot` orienta procurar o responsável); o emissor de NFC-e opera em ambiente `HOMOLOGACAO`; o módulo Financeiro contempla apenas contas `PAGAR` (sem busca textual por descrição na listagem da API); e vínculos/notas da importação XML e preferências de etiquetas são persistidos localmente no navegador com escopo por usuário.
 
 ## Stack
 
@@ -65,7 +65,7 @@ O frontend segue uma adaptação pragmática de **Feature-Sliced Design (FSD)**,
 │   ├── features/                       # Fluxos e ações (access-management, account, catalog, preferences, printing, sales)
 │   ├── entities/                       # Regras, modelos e APIs de domínio (access, inventory, invoices, preferences, reports, sales, store)
 │   └── shared/                         # Cliente HTTP/CSRF (api/), config/, hooks/helpers (lib/), styles/ e UI genérica (ui/)
-├── tests/                              # 15 arquivos de testes unitários com Node Test Runner
+├── tests/                              # 17 arquivos de testes unitários com Node Test Runner
 ├── e2e/                                # Suíte interceptada (catalog-remote.spec.js) e specs integradas à API real
 ├── scripts/                            # gate.ps1 e smoke tests PowerShell em scripts/smoke/
 ├── docs/                               # Arquitetura, fluxos, planos e contratos de integração
@@ -92,7 +92,7 @@ HashRouter (AppRouter) → RequireSession (GET /usuario/me)
 
 - **`useQueryResource` e `useListParams`** (`src/shared/lib/hooks/usePagedQuery.js`): padronizam carregamento, erro, cancelamento via `AbortController` e sincronização de filtros, ordenação e paginação na URL; telas de Controle de acesso ainda utilizam o hook legado `useResource` (`src/shared/lib/hooks/useResource.js`).
 - **Camada de API distribuída**: o cliente central e os normalizadores ficam em `src/shared/api/api.js` (e `csrf.js`), enquanto domínios recentes encapsulam chamadas com `authenticatedRequest` em módulos próprios (`cashApi.js`, `fiscalApi.js`, `financeApi.js`, `reportApi.js` e `changePassword.js`).
-- **Adaptações conhecidas de FSD**: o contexto e componentes fiscais em `pages/sales/invoices` são consumidos por `features/sales/payments` e `pages/panel`; `MoneyInput` e CSS Modules de `ProductsPage` e `SalesRemote` são reutilizados por outras fatias; e `StoreProvider` preserva um cache legado voltado ao fluxo de importação XML.
+- **Adaptações conhecidas de FSD**: o contexto e componentes fiscais em `pages/sales/invoices` são consumidos por `features/sales/payments` e `pages/panel`; `MoneyInput` e CSS Modules de `ProductsPage` e `SalesRemote` são reutilizados por outras fatias; e `StoreProvider` mantém apenas os vínculos e histórico local da importação XML por usuário (`valhalla:xml-import:v1:<userId|local>`), com leitura fallback da chave legada `valhalla:store:v2`. O plano de refatoração estrutural desses acoplamentos está em [docs/PENDENCIAS_TECNICAS_FRONTEND.md](docs/PENDENCIAS_TECNICAS_FRONTEND.md).
 - **Interface e atalhos**: o atalho `Ctrl+B` (`⌘+B` no macOS) alterna o menu lateral ou sai do modo tela cheia do caixa, e o script inicial em [index.html](index.html) aplica o tema salvo antes da montagem do React.
 
 ## Começando
@@ -155,7 +155,7 @@ Notas de ambiente e rede:
 
 - **CORS**: o backend deve responder com `Access-Control-Allow-Credentials: true`, `Access-Control-Allow-Origin` explícito (nunca `*`) e `Access-Control-Allow-Headers` liberando `Content-Type` e `X-XSRF-TOKEN`.
 - **Origem consistente e cookies `SameSite=Strict`**: em desenvolvimento, não misture `localhost` e `127.0.0.1` entre frontend e backend; em produção, sirva frontend e API no mesmo site (por exemplo, via proxy reverso).
-- **Versionamento**: o [.gitignore](.gitignore) ignora `*.local` (cobrindo `.env.local`), mas não `.env` genérico — prefira `.env.local` para ajustes locais.
+- **Versionamento**: o [.gitignore](.gitignore) ignora `.env`, `.env.*` e `*.local` (mantendo apenas `.env.example` versionado); ainda assim, prefira `.env.local` para ajustes locais.
 
 ## Comandos
 
@@ -196,10 +196,10 @@ As verificações definidas em `src/entities/access/model/pages.js` controlam ap
 
 O transporte HTTP centralizado em `src/shared/api/api.js` e `src/shared/api/csrf.js` implementa os contratos de sessão e resiliência com o backend:
 
-1. **Cookies e CSRF**: todas as chamadas enviam `credentials: 'include'`; mutações autenticadas (`POST`, `PUT`, `PATCH`, `DELETE`) anexam `X-XSRF-TOKEN` lido do cookie `XSRF-TOKEN` ou obtido sob demanda via `GET /auth/csrf`, com nova tentativa automática única caso o servidor retorne `403` por CSRF.
-2. **Renovação de sessão única (`refreshSession`)**: requisições concorrentes que recebam `401` compartilham a mesma chamada `POST /auth/refresh`, evitando revogação causada pela rotação de refresh token.
-3. **Otimização e cancelamento**: leituras simultâneas de catálogo/dashboard são deduplicadas por `catalogRead` com suporte a `AbortController`, além de tratamento padronizado de respostas `204`, downloads `blob` e mapeamento de `fieldErrors`.
-4. **Resiliência em falhas incertas**: pagamentos preservam chaves de idempotência (`crypto.randomUUID()`), a emissão fiscal consulta o vínculo do pedido antes de reenviar, operações críticas bloqueiam reenvios duplicados durante erro incerto e a importação XML tenta estornar movimentações em falhas parciais.
+1. **Cookies e CSRF**: todas as chamadas enviam `credentials: 'include'`; mutações autenticadas (`POST`, `PUT`, `PATCH`, `DELETE`) anexam `X-XSRF-TOKEN` lido do cookie `XSRF-TOKEN` ou obtido sob demanda em chamada single-flight via `GET /auth/csrf` (timeout de `10s`), com nova tentativa automática única caso o servidor retorne `403` por CSRF.
+2. **Renovação de sessão única (`refreshSession`)**: requisições concorrentes que recebam `401` compartilham a mesma chamada `POST /auth/refresh` (timeout de `10s`, lendo token CSRF sem disparo recursivo de `/auth/csrf`), evitando revogação causada pela rotação de refresh token e diferenciando erro de rede (`status: 0`) de expiração real (`401`).
+3. **Timeouts, paginação limitada e cancelamento**: requisições padrão aplicam timeout de `30s` com `AbortController`, paginações completas respeitam teto de segurança (`maxPages = 50`) e leituras simultâneas de catálogo/dashboard são deduplicadas por `catalogRead`, além do tratamento padronizado de respostas `204`, downloads `blob` e mapeamento de `fieldErrors`.
+4. **Resiliência e sanitização**: pagamentos preservam chaves de idempotência (`crypto.randomUUID()`), a emissão fiscal consulta o vínculo do pedido antes de reenviar, operações críticas e confirmação de NF-e bloqueiam reenvios duplicados (`confirmLock` / erro incerto), caminhos dinâmicos escapam IDs com `encodeURIComponent`, exportações CSV neutralizam fórmulas e o parser XML de NF-e rejeita `<!DOCTYPE`/`<!ENTITY`, valores inválidos e excedentes ao limite de itens (`990`).
 
 ## Armazenamento local
 
@@ -208,11 +208,11 @@ O transporte HTTP centralizado em `src/shared/api/api.js` e `src/shared/api/csrf
 | `localStorage` | `valhalla:tema` | Tema claro ou escuro do painel (lido antes da montagem em [index.html](index.html)) |
 | `localStorage` | `valhalla:menu-recolhido` | Estado recolhido ou expandido do menu lateral no desktop |
 | `localStorage` | `valhalla:labels:v1:<userId\|local>` | Preferências visuais de etiquetas por usuário |
-| `localStorage` | `valhalla:store:v2` | Cache legado de catálogo, vínculos emitente→produto e histórico local de NF-e importadas |
+| `localStorage` | `valhalla:xml-import:v1:<userId\|local>` | Vínculos emitente→produto e histórico local de NF-e importadas por usuário (migra dados somente leitura de `valhalla:store:v2`) |
 | `sessionStorage` | `cash-visual-slots:<sessionId>` | Mapeamento das 5 posições visuais de atendimento no caixa |
 | `sessionStorage` | `cash-payment-plan:<userId>:<orderId>` | Plano de pagamento dividido e chaves de idempotência (limpa também a chave legada `cash-payment-<orderId>`) |
 
-> **Atenção em terminais compartilhados:** a chave `valhalla:store:v2` não é escopada por usuário nem removida automaticamente no logout; considere esse comportamento ao operar estações de caixa compartilhadas.
+> **Limpeza de sessão e terminais compartilhados:** ao encerrar sessão no logout, após alteração de senha ou ao receber `401` na verificação de acesso, o frontend remove a chave legada `valhalla:store:v2` e limpa os prefixos operacionais no `sessionStorage` (`cash-payment-plan:*`, `cash-payment-*` e `cash-visual-slots:*`). Os metadados locais de importação XML permanecem isolados por usuário em `valhalla:xml-import:v1:<userId|local>`.
 
 ## Testes
 
@@ -224,8 +224,7 @@ node --test tests/*.test.js
 ```
 
 - O Oxlint segue as regras definidas em [.oxlintrc.json](.oxlintrc.json).
-- Os 15 arquivos em `tests/` cobrem proteção CSRF, auditoria, taxas/políticas e pagamentos de caixa, posições visuais de comanda, métricas de catálogo, apresentação do dashboard, seleção/configuração de etiquetas, máscara monetária, regras de senha, validação de perfis, lotes remotos e métricas de reposição.
-- **Pendência conhecida:** `tests/restockAlerts.test.js` ainda importa `filterRestockAlerts` (removida após a migração dos filtros de reposição para `/dashboard/reposicao`), falhando até a remoção desse caso legado.
+- Os 17 arquivos em `tests/` cobrem proteção CSRF e cliente HTTP (`apiCsrf.test.js`), sanitização CSV e parser XML de NF-e (`csvAndNfe.test.js`), transformações e fuso horário de relatórios (`reportApi.test.js`), auditoria, taxas/políticas e pagamentos de caixa, posições visuais de comanda, métricas de catálogo, apresentação do dashboard, seleção/configuração de etiquetas, máscara monetária, regras de senha, validação de perfis, lotes remotos e métricas de reposição.
 
 ### E2E com API interceptada (contrato e UI)
 
@@ -242,10 +241,10 @@ npm run e2e -- e2e/produtos.spec.js
 npm run gate
 ```
 
-- [playwright.config.js](playwright.config.js) executa contra a API em `:8080` e o frontend em `:5173` (`workers: 1`). Informe sempre o arquivo específico desejado, pois a configuração não exclui `catalog-remote.spec.js`.
+- [playwright.config.js](playwright.config.js) executa contra a API em `:8080` e o frontend em `:5173` (`workers: 1`) e já exclui `catalog-remote.spec.js` via `testIgnore`.
 - Utilize um banco de testes isolado: os fluxos reais criam e alteram registros usando credenciais locais de seed definidas em `e2e/fixtures.js` e `scripts/smoke/` (`admin@valhalla.local`), que nunca devem coincidir com ambientes de homologação ou produção.
-- O [scripts/gate.ps1](scripts/gate.ps1) encadeia `build`, `lint`, `RESET_DB` opcional, smoke tests de API (`scripts/smoke/*.ps1`) e Playwright real; ele não executa `node --test` nem `playwright.catalog.config.js`.
-- O workflow [.github/workflows/template.yml](.github/workflows/template.yml) ainda é um modelo inicial sem pipeline automatizada configurada.
+- O [scripts/gate.ps1](scripts/gate.ps1) encadeia `build`, `lint`, testes unitários (`node --test tests/*.test.js`), `RESET_DB` opcional, smoke tests de API (`scripts/smoke/*.ps1`) e Playwright real (`playwright.config.js`); ele não executa `playwright.catalog.config.js`.
+- O workflow [.github/workflows/template.yml](.github/workflows/template.yml) ainda é um modelo inicial sem pipeline automatizada configurada (acompanhado em [docs/PENDENCIAS_TECNICAS_FRONTEND.md](docs/PENDENCIAS_TECNICAS_FRONTEND.md)).
 
 ## Build e publicação
 
@@ -268,8 +267,7 @@ npm run preview
 | `403` em requisições de escrita (CSRF) | Cookie `XSRF-TOKEN` indisponível ou CORS sem liberar `X-XSRF-TOKEN` | Libere `X-XSRF-TOKEN` em `Access-Control-Allow-Headers` no backend e mantenha frontend e API no mesmo site. |
 | Alteração em `VITE_API_URL` não surte efeito | Vite não foi reiniciado ou build não foi regerado | Reinicie `npm run dev` (ou execute `npm run build` novamente para produção). |
 | `npm` bloqueado no Windows PowerShell (`UnauthorizedAccess`) | Política de execução bloqueando `npm.ps1` | Execute os comandos usando `npm.cmd` (ex.: `npm.cmd run dev`, `npm.cmd run lint`). |
-| `npm run e2e` executa testes de API interceptada na porta errada | `playwright.config.js` não exclui `catalog-remote.spec.js` | Execute informando o arquivo desejado (`npm run e2e -- e2e/produtos.spec.js`) ou use `--config playwright.catalog.config.js`. |
-| `node --test tests/*.test.js` falha em `tests/restockAlerts.test.js` | Importação da função removida `filterRestockAlerts` | Atualize o arquivo para testar apenas `minimumMetrics` (filtros migraram para `/dashboard/reposicao`). |
+| `npm run e2e` executa contra a API real (`:8080`) quando você queria a suíte mockada (`:5184`) | O padrão usa [playwright.config.js](playwright.config.js) (que ignora `catalog-remote.spec.js`) | Execute `npm run e2e -- --config playwright.catalog.config.js` para a suíte interceptada sem backend. |
 
 ## Documentação complementar
 
@@ -292,6 +290,7 @@ npm run preview
 | [docs/integracao/README.md](docs/integracao/README.md) | Índice dos documentos de integração por módulo |
 | [docs/integracao/dashboard.md](docs/integracao/dashboard.md) | Integração dos indicadores da visão geral |
 | [docs/integracao/achados-backend.md](docs/integracao/achados-backend.md) | Achados registrados no backend durante a integração |
+| [docs/PENDENCIAS_TECNICAS_FRONTEND.md](docs/PENDENCIAS_TECNICAS_FRONTEND.md) | Registro da Etapa 3 (refatorações estruturais, FSD, CI e melhorias pendentes de backend) |
 
 > Documentos históricos como [SPEC_GAP_ANALYSIS.md](SPEC_GAP_ANALYSIS.md), [docs/ARQUITETURA_FSD.md](docs/ARQUITETURA_FSD.md) e [docs/CONTEXTO_CONTINUIDADE_CHAT.md](docs/CONTEXTO_CONTINUIDADE_CHAT.md) registram etapas anteriores do projeto; confira sempre o código atual antes de seguir referências antigas.
 

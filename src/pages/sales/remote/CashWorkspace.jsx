@@ -18,7 +18,7 @@ function isOutOfStock(product) {
  return product?.tipo === 'padrao' && Number.isFinite(product.quantidadeEstoqueBase) && product.quantidadeEstoqueBase <= 0
 }
 
-export function CashWorkspace({sessionId,selectedId,onSelect,creationRevision,canOperate,onChanged,openOrders,OrderView,StatusView}) {
+export function CashWorkspace({sessionId,selectedId,onSelect,creationRevision,canOperate,onChanged,OrderView,StatusView}) {
  const { can } = useStore()
  const stockAccess = can('VISUALIZAR_ESTOQUE')
  const products = stockAccess ? api.produtos : api.produtosVenda
@@ -40,23 +40,27 @@ export function CashWorkspace({sessionId,selectedId,onSelect,creationRevision,ca
   }
  }, [catalogLoading, reloadCatalog])
  const queue=useQueryResource(async signal=>{
-  const [pages,selected]=await Promise.all([Promise.all(OPEN_CASH_ORDER_STATES.map(status=>readCash('pedidos',{sessaoCaixaId:sessionId,status,pagina:0,tamanho:5,ordenarPor:'criadoEm',direcao:'ASC'},signal))),selectedId?readCash('pedidos/'+selectedId,{},signal).catch(error=>{if(error.status===404)return null;throw error}):null])
+  const pages=await Promise.all(OPEN_CASH_ORDER_STATES.map(status=>readCash('pedidos',{sessaoCaixaId:sessionId,status,pagina:0,tamanho:5,ordenarPor:'criadoEm',direcao:'ASC'},signal)))
   signal.throwIfAborted()
   if(pages.some(page=>!Array.isArray(page?.itens)))throw new Error('Não foi possível consultar os pedidos abertos.')
   const orders=[...new Map(pages.flatMap(page=>page.itens).filter(order=>OPEN_CASH_ORDER_STATES.includes(order.status)).map(order=>[order.id,order])).values()]
+  const openCount=pages.every(page=>Number.isInteger(page?.totalItens)&&page.totalItens>=0)?pages.reduce((sum,page)=>sum+page.totalItens,0):null
   const storageKey='cash-visual-slots:'+sessionId
   let previous=[]
   try{previous=JSON.parse(sessionStorage.getItem(storageKey)||'[]')}catch{ /* invalid preference */ }
   const activeCount=orders.length
   // Keep the finalized selection visible until the operator leaves it.
-  if(selected&&selected.sessaoCaixaId===sessionId&&['CONCLUIDO','CANCELADO','ESTORNADO'].includes(selected.status)&&Array.isArray(previous)&&previous.includes(selected.id))orders.push(selected)
+  if(selectedId&&!orders.some(order=>order.id===selectedId)&&Array.isArray(previous)&&previous.includes(selectedId)){
+   const selected=await readCash('pedidos/'+encodeURIComponent(selectedId),{},signal).catch(error=>{if(error.status===404)return null;throw error})
+   if(selected&&selected.sessaoCaixaId===sessionId&&['CONCLUIDO','CANCELADO','ESTORNADO'].includes(selected.status))orders.push(selected)
+  }
   const slots=reconcileComandaSlots(Array.isArray(previous)?previous:[],orders)
   try{sessionStorage.setItem(storageKey,JSON.stringify(slots))}catch{ /* visual positions still work without storage */ }
-  return {slots:slots.map(id=>orders.find(order=>order.id===id)||null),overflow:activeCount>5||pages.some(page=>page.ultima===false)}
+  return {slots:slots.map(id=>orders.find(order=>order.id===id)||null),overflow:activeCount>5||pages.some(page=>page.ultima===false),openCount}
  },[sessionId,selectedId,creationRevision])
  const query=useQueryResource(async signal=>{
   if(!selectedId)return null
-  const selected=await readCash('pedidos/'+selectedId,{},signal)
+  const selected=await readCash('pedidos/'+encodeURIComponent(selectedId),{},signal)
   return selected?.sessaoCaixaId===sessionId?selected:null
  },[sessionId,selectedId])
  const order=snapshot?.order?.sessaoCaixaId===sessionId&&snapshot?.order?.id===selectedId&&snapshot.source===query.data?snapshot.order:query.data?.id===selectedId&&!query.loading&&!query.error?query.data:null
@@ -67,9 +71,10 @@ export function CashWorkspace({sessionId,selectedId,onSelect,creationRevision,ca
   return()=>clearTimeout(timer)
  },[finalizedOrderId,sessionId,onSelect])
  const slots=queue.data?.slots||Array(5).fill(null)
- const capacityLabel = openOrders.loading ? 'Conferindo pedidos…' : openOrders.error
-  ? 'Contagem indisponível' : `${openOrders.data} de ${MAX_OPEN_CASH_ORDERS} pedidos abertos`
- const atCapacity = !openOrders.loading && !openOrders.error && openOrders.data >= MAX_OPEN_CASH_ORDERS
+ const openCount=queue.data?.openCount
+ const capacityLabel = queue.loading ? 'Conferindo pedidos…' : (queue.error || openCount == null)
+  ? 'Contagem indisponível' : `${openCount} de ${MAX_OPEN_CASH_ORDERS} pedidos abertos`
+ const atCapacity = !queue.loading && !queue.error && openCount != null && openCount >= MAX_OPEN_CASH_ORDERS
  const queueHint = canOperate && !queue.loading && !queue.error && (atCapacity
   ? 'Conclua ou cancele um pedido para liberar uma posição.'
   : !selectedId && !draft && !queue.data?.overflow && slots.some(slot => !slot) ? 'Selecione uma posição livre.' : null)
@@ -91,7 +96,7 @@ export function CashWorkspace({sessionId,selectedId,onSelect,creationRevision,ca
    const created=await createCashOrder({sessaoCaixaId:sessionId,canal:draft.canal,identificadorAtendimento:draft.identificadorAtendimento.trim()||null})
    const key='cash-visual-slots:'+sessionId
    try{const saved=JSON.parse(sessionStorage.getItem(key)||'[]');const mapping=Array.from({length:5},(_,i)=>saved[i]||null);const position=mapping[draft.position]?mapping.indexOf(null):draft.position;if(position>=0){mapping[position]=created.id;sessionStorage.setItem(key,JSON.stringify(mapping))}}catch{ /* positions are recovered from the server */ }
-   setDraft(null);onSelect(created.id);setSnapshot({order:created,source:query.data});queue.reload();onChanged?.()
+   setDraft(null);onSelect(created.id);setSnapshot({order:created,source:query.data});queue.reload()
   }catch(ex){setError(ex);if(ex.status===0&&!ex.mutationNotStarted)setUncertain(true)}finally{lock.current=false;setBusy(false)}
  }
  async function update(product,quantity,absolute=false){
@@ -107,8 +112,9 @@ export function CashWorkspace({sessionId,selectedId,onSelect,creationRevision,ca
    const current=items.find(i=>i.produtoId===product.id)
    if(current)current.quantidade=absolute?quantity:current.quantidade+quantity
    else items.push({produtoId:product.id,quantidade:quantity})
-   const updated=await writeCash('pedidos/'+order.id,{itens:items.filter(i=>i.quantidade>0)},'PUT')
-   setSnapshot({order:updated,source:query.data});queue.reload();onChanged?.()
+   const updated=await writeCash('pedidos/'+encodeURIComponent(order.id),{itens:items.filter(i=>i.quantidade>0)},'PUT')
+   setSnapshot({order:updated,source:query.data})
+   if(updated?.status!==order.status){queue.reload();onChanged?.()}
   }catch(ex){setError(ex);if(ex.status===409)reloadCatalog();if(ex.status===0&&!ex.mutationNotStarted)setUncertain(true)}finally{lock.current=false;setBusy(false)}
  }
  function searchKey(event){if(event.key!=='Enter')return;event.preventDefault();if(catalog.loading||search!==debounced)return;const exact=rows.find(p=>p.sku?.toLowerCase()===search.trim().toLowerCase());if(exact||rows.length===1)update(exact||rows[0],1)}

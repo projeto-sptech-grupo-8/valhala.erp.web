@@ -1,11 +1,14 @@
-import { useRef } from 'react'
 import { api } from '@/shared/api/api.js'
+import { useStore } from '@/entities/store'
 import { useQueryResource } from '@/shared/lib/hooks/usePagedQuery.js'
 import { loadProduct, recipeSummary } from './catalogModel.js'
 import { loadTurnover, marginMetric, turnoverPeriod } from './catalogMetrics.js'
 
+const metricsCache = new Map()
+
 export function useCatalogMetrics(rows, { giro, margem, enabled, revision }) {
-  const cache = useRef(new Map())
+  const { user } = useStore()
+  const userId = user?.id ?? 'anon'
   const period = turnoverPeriod()
   const products = rows.map(p => ({ id: p.id, tipo: p.tipo, unit: p.unit, fracionado: p.fracionado, quantidadeEstoqueBase: p.quantidadeEstoqueBase, price: p.price, cost: p.cost, atualizadoEm: p.atualizadoEm }))
   const query = useQueryResource(async signal => {
@@ -15,8 +18,8 @@ export function useCatalogMetrics(rows, { giro, margem, enabled, revision }) {
     async function worker() {
       while (cursor < products.length) {
         const p = products[cursor++]
-        const key = JSON.stringify([p, giro, margem, period, revision])
-        const cached = cache.current.get(key)
+        const key = JSON.stringify([userId, p, giro, margem, period, revision])
+        const cached = metricsCache.get(key)
         if (cached && Date.now() - cached.at < 60000) { result[p.id] = cached.value; continue }
         const value = {}
         if (margem) {
@@ -37,13 +40,13 @@ export function useCatalogMetrics(rows, { giro, margem, enabled, revision }) {
         signal.throwIfAborted()
         result[p.id] = value
         if (!value.marginError && !value.turnover?.unavailable) {
-          cache.current.set(key, { at: Date.now(), value })
-          if (cache.current.size > 100) cache.current.delete(cache.current.keys().next().value)
+          metricsCache.set(key, { at: Date.now(), value })
+          if (metricsCache.size > 100) metricsCache.delete(metricsCache.keys().next().value)
         }
       }
     }
     await Promise.all([worker(), worker()])
     return result
-  }, [products, giro, margem, enabled, period, revision])
+  }, [userId, products, giro, margem, enabled, period, revision])
   return { ...query, period }
 }

@@ -77,7 +77,7 @@ function Blocked({ icon: Icon, title, text, action, onAction }) {
 }
 
 function Shell({ exit }) {
-  const { user, role, can, products, drinks } = useStore()
+  const { user, role, can } = useStore()
   const home = 'dashboard'
   const { pathname } = useLocation()
   const [searchParams] = useSearchParams()
@@ -90,9 +90,6 @@ function Shell({ exit }) {
   const allowed = known && canAccess(page, can)
   const isCashPage = allowed && page === 'caixa'
   const cashFullscreen = useCashFullscreen(isCashPage)
-
-  // título do breadcrumb com o nome do registro em edição
-  const editName = page === 'editar' ? [...products, ...drinks].find(p => p.id === params.id)?.name : null
 
   // títulos definidos pela própria página (ex.: nome do usuário no detalhe), por rota
   const routeKey = page + JSON.stringify(params)
@@ -111,7 +108,9 @@ function Shell({ exit }) {
 
   /* ─── Menu lateral: recolhido (desktop) / gaveta (mobile) ─── */
   const mobile = useMediaQuery('(max-width: 900px)')
-  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(MENU_KEY) === '1')
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem(MENU_KEY) === '1' } catch { return false }
+  })
   const toggleCollapsed = () => {
     const next = !collapsed
     setCollapsed(next)
@@ -192,7 +191,7 @@ function Shell({ exit }) {
         )}
         {allowed && (
           <>
-            <PageHeader onActionsMount={setHeaderActionsElement} page={page} activeTab={params.aba} navigate={navigate} extra={editName || titles[routeKey]} onBack={handleBack} help={headerHelp?.page === page ? headerHelp.text : null} action={cashViewAction} />
+            <PageHeader onActionsMount={setHeaderActionsElement} page={page} activeTab={params.aba} navigate={navigate} extra={titles[routeKey]} onBack={handleBack} help={headerHelp?.page === page ? headerHelp.text : null} action={cashViewAction} />
             {(page==='caixa'||page==='pedidos') && <FiscalReceipts />}
             <Outlet context={{ setTitle, setBackAction, setHeaderHelp, headerActionsElement }} />
           </>
