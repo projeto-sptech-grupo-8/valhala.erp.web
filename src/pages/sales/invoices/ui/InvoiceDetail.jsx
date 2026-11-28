@@ -28,7 +28,8 @@ function printDanfe(content) {
 }
 
 export function InvoiceDetail({id,canCancel,canOperate,close,refresh}) {
-  const query=useQueryResource(signal=>readCash(invoices+'/'+id,{},signal),[id])
+  const notePath=invoices+'/'+encodeURIComponent(id)
+  const query=useQueryResource(signal=>readCash(notePath,{},signal),[notePath])
   const n=query.data, receipt=useRef(null),lock=useRef(false)
   const [cancel,setCancel]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(''),[copied,setCopied]=useState(false)
   async function submit(event){
@@ -38,7 +39,7 @@ export function InvoiceDetail({id,canCancel,canOperate,close,refresh}) {
     body.motivo=body.motivo.trim()
     if(body.motivo.length<15){setError('Descreva o motivo em pelo menos 15 caracteres.');return}
     lock.current=true;setBusy(true);setError('')
-    try{await writeCash(invoices+'/'+id+'/cancelamento',body);setCancel(false);refresh();query.reload()}
+    try{await writeCash(notePath+'/cancelamento',body);setCancel(false);refresh();query.reload()}
     catch(e){setError(e.message);query.reload()}
     finally{lock.current=false;setBusy(false)}
   }

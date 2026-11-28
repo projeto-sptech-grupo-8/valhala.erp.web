@@ -12,13 +12,25 @@ function text(el, name) {
   const n = first(el, name)
   return n ? n.textContent.trim() : ''
 }
-const num = (v) => (v === '' ? 0 : Number(String(v).replace(',', '.')))
+const num = (v, label = 'valor numérico') => {
+  if (v === '') return 0
+  const parsed = Number(String(v).replace(',', '.'))
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new NFeError(`NF-e inválida: ${label} fora do intervalo esperado.`)
+  }
+  return parsed
+}
 
 export class NFeError extends Error {}
 
-export function parseNFe(xml) {
+const MAX_NFE_ITEMS = 990
+
+export function parseNFe(xml, Parser = globalThis.DOMParser) {
   if (!xml || !xml.trim()) throw new NFeError('Arquivo vazio.')
-  const doc = new DOMParser().parseFromString(xml, 'application/xml')
+  if (/<!(?:DOCTYPE|ENTITY)\b/i.test(xml)) {
+    throw new NFeError('XML com declarações DTD ou entidades externas não é permitido.')
+  }
+  const doc = new Parser().parseFromString(xml, 'application/xml')
   if (doc.getElementsByTagName('parsererror').length) throw new NFeError('O arquivo não é um XML válido.')
   const inf = first(doc, 'infNFe')
   if (!inf) throw new NFeError('O XML não é uma NF-e (não tem o grupo infNFe).')
@@ -29,8 +41,10 @@ export function parseNFe(xml) {
   if (mod && mod !== '55') throw new NFeError(`Modelo ${mod} não suportado. A entrada de mercadoria usa NF-e modelo 55.`)
 
   const chave = onlyDigits(inf.getAttribute('Id') || text(doc, 'chNFe'))
+  if (!/^\d{44}$/.test(chave)) throw new NFeError('Chave de acesso da NF-e ausente ou inválida.')
   const dets = [...inf.getElementsByTagNameNS('*', 'det')]
   if (!dets.length) throw new NFeError('A NF-e não tem itens.')
+  if (dets.length > MAX_NFE_ITEMS) throw new NFeError(`A NF-e excede o limite máximo de ${MAX_NFE_ITEMS} itens.`)
 
   const itens = dets.map((det, i) => {
     const prod = first(det, 'prod')
@@ -44,9 +58,9 @@ export function parseNFe(xml) {
       NCM: text(prod, 'NCM'),
       CFOP: text(prod, 'CFOP'),
       uCom: text(prod, 'uCom').toUpperCase(),
-      qCom: num(text(prod, 'qCom')),
-      vUnCom: num(text(prod, 'vUnCom')),
-      vProd: num(text(prod, 'vProd')),
+      qCom: num(text(prod, 'qCom'), 'quantidade (qCom)'),
+      vUnCom: num(text(prod, 'vUnCom'), 'valor unitário (vUnCom)'),
+      vProd: num(text(prod, 'vProd'), 'valor do item (vProd)'),
       lote: rastro ? text(rastro, 'nLote') : '',
       validade: rastro ? text(rastro, 'dVal').slice(0, 10) : '',
     }
@@ -62,7 +76,7 @@ export function parseNFe(xml) {
       emitente: text(emit, 'xFant') || text(emit, 'xNome'),
       razao: text(emit, 'xNome'),
       cnpj: onlyDigits(text(emit, 'CNPJ') || text(emit, 'CPF')),
-      valor: num(text(first(inf, 'ICMSTot'), 'vNF')),
+      valor: num(text(first(inf, 'ICMSTot'), 'vNF'), 'valor total (vNF)'),
     },
     itens,
   }

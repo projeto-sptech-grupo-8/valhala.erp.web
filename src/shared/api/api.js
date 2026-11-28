@@ -1,62 +1,83 @@
 import { moduloDoCodigo, rotuloDoCodigo } from '@/shared/config/funcionalidades.js'
+import { createCsrfManager, isCsrfRejection, requiresCsrf } from './csrf.js'
 
 const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
+const DEFAULT_TIMEOUT_MS = 30_000
+const AUTH_TIMEOUT_MS = 10_000
+const seg = value => encodeURIComponent(String(value))
 
-/* ─── CSRF: o backend exige X-XSRF-TOKEN em POST/PUT/PATCH/DELETE (exceto /auth/login) ─── */
-const MUTATIONS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
-let csrfToken = null
-
-const readCsrfCookie = () => document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]+)/)?.[1] ?? null
-
-// cookie (mesmo host do front) ou GET /auth/csrf (API em outro domínio)
-async function csrfHeader({ cookieOnly = false } = {}) {
-  const fromCookie = readCsrfCookie()
-  if (fromCookie) return { 'X-XSRF-TOKEN': decodeURIComponent(fromCookie) }
-  if (cookieOnly) return {}
-  if (!csrfToken) {
-    const res = await fetch(BASE + '/auth/csrf', { credentials: 'include' }).catch(() => null)
-    const body = res?.ok ? await res.json().catch(() => null) : null
-    csrfToken = body?.token ?? body?.tokenCsrf ?? null
-  }
-  return csrfToken ? { 'X-XSRF-TOKEN': csrfToken } : {}
+function withTimeoutSignal(signal, timeoutMs) {
+  if (!(timeoutMs > 0) || typeof AbortSignal?.timeout !== 'function') return signal
+  const timeoutSignal = AbortSignal.timeout(timeoutMs)
+  if (!signal) return timeoutSignal
+  if (typeof AbortSignal.any === 'function') return AbortSignal.any([signal, timeoutSignal])
+  return signal
 }
+
+/* ─── CSRF: o backend exige X-XSRF-TOKEN em POST/PUT/PATCH/DELETE autenticados ─── */
+const csrfManager = createCsrfManager({ baseUrl: BASE, timeoutMs: AUTH_TIMEOUT_MS })
 
 // um único refresh por vez: o backend rotaciona o refresh token, então chamadas paralelas derrubariam a sessão
 let refreshing = null
 function refreshSession() {
-  refreshing ??= csrfHeader({ cookieOnly: true }) // /auth/csrf exige o access token, que é o que expirou
-    .then(headers => fetch(BASE + '/auth/refresh', { method: 'POST', credentials: 'include', headers }))
-    .then(res => res.ok, () => false)
-    .finally(() => { csrfToken = null; refreshing = null })
+  refreshing ??= csrfManager.header({ allowFetch: false }) // /auth/csrf exige o access token, que é o que expirou
+    .then(headers => fetch(BASE + '/auth/refresh', {
+      method: 'POST',
+      credentials: 'include',
+      headers,
+      signal: withTimeoutSignal(undefined, AUTH_TIMEOUT_MS),
+    }))
+    .then(res => (res.ok ? 'ok' : 'unauthorized'), () => 'network')
+    .finally(() => { csrfManager.clear(); refreshing = null })
   return refreshing
 }
 
-async function request(path, options = {}, isRetry = false) {
+async function request(path, options = {}, retryState = {}) {
+  const state = typeof retryState === 'boolean' ? { authRetry: retryState } : retryState
   const method = (options.method ?? 'GET').toUpperCase()
-  const csrf = MUTATIONS.has(method) && path !== '/auth/login' ? await csrfHeader() : {}
+  const needsCsrf = requiresCsrf(method, path)
+  const csrf = needsCsrf ? await csrfManager.header({ overrideToken: state.csrfOverride }) : {}
   let res
   try {
     res = await fetch(BASE + path, {
       ...options,
+      signal: withTimeoutSignal(options.signal, DEFAULT_TIMEOUT_MS),
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', ...csrf, ...options.headers },
     })
   } catch (error) {
-    if (error.name === 'AbortError') throw error
+    if (options.signal?.aborted) throw error
+    if (error.name === 'TimeoutError' || error.name === 'AbortError') {
+      throw Object.assign(
+        new Error('O servidor demorou para responder. Tente novamente.'),
+        { status: 0 }
+      )
+    }
     throw Object.assign(
       new Error('Não foi possível conectar ao servidor. Verifique sua conexão.'),
       { status: 0 }
     )
   }
-  if (path === '/auth/login' || path === '/auth/logout') csrfToken = null
+  if (path === '/auth/login' || path === '/auth/logout') csrfManager.clear()
 
-  if (res.status === 401 && !isRetry && !path.startsWith('/auth')) {
-    if (await refreshSession()) return request(path, options, true)
+  if (res.status === 401 && !state.authRetry && !path.startsWith('/auth')) {
+    const refreshed = await refreshSession()
+    if (refreshed === 'ok') return request(path, options, { ...state, authRetry: true, csrfOverride: null })
+    if (refreshed === 'network') {
+      throw Object.assign(new Error('Não foi possível confirmar sua sessão. Verifique sua conexão.'), { status: 0 })
+    }
     throw Object.assign(new Error('Sessão expirada'), { status: 401 })
   }
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
+    if (isCsrfRejection(res.status, body) && needsCsrf && !state.csrfRetry && path !== '/auth/refresh') {
+      csrfManager.clear()
+      const refreshed = await csrfManager.refresh()
+      if (refreshed) {
+        return request(path, options, { ...state, csrfRetry: true, csrfOverride: refreshed })
+      }
+    }
     const fallback = res.status === 403 ? 'Você não tem permissão para esta ação.' : 'Erro inesperado'
     throw Object.assign(new Error(body.message ?? fallback), {
       status: res.status,
@@ -202,13 +223,14 @@ export const toCategoria = (c) => ({
 })
 
 // percorre todas as páginas de um endpoint paginado (RespostaPaginadaDto)
-async function todasAsPaginas(path, params = {}) {
+async function todasAsPaginas(path, params = {}, { signal, maxPages = 50 } = {}) {
   const itens = []
-  for (let pagina = 0; ; pagina++) {
-    const r = await request(`${path}?${new URLSearchParams({ ...params, pagina, tamanho: 100 })}`)
+  for (let pagina = 0; pagina < maxPages; pagina++) {
+    const r = await request(`${path}?${new URLSearchParams({ ...params, pagina, tamanho: 100 })}`, { signal })
     itens.push(...list(r))
     if (!r || Array.isArray(r) || r.ultima !== false) return itens
   }
+  throw new Error('A consulta excedeu o limite máximo de páginas permitido.')
 }
 
 /*
@@ -390,11 +412,11 @@ const realApi = {
   usuarios: {
     meusAcessos: (signal) => request('/usuario/me/acessos', { signal }),
     listar:    (signal) => catalogRead('/usuario', signal).then(r => list(r).map(toUsuario)),
-    obter:     (id) => request(`/usuario/${id}`).then(toUsuario),
+    obter:     (id) => request(`/usuario/${seg(id)}`).then(toUsuario),
     criar:     async (data) => request('/usuario', send('POST', await comNomePerfil(data))).then(toUsuario).catch(camposDoUsuario),
-    atualizar: async (id, patch) => request(`/usuario/${id}`, send('PATCH', await comNomePerfil(patch)))
+    atualizar: async (id, patch) => request(`/usuario/${seg(id)}`, send('PATCH', await comNomePerfil(patch)))
       .then(r => (r ? toUsuario(r) : realApi.usuarios.obter(id))).catch(camposDoUsuario),
-    excluir:   (id) => request(`/usuario/${id}`, { method: 'DELETE' }),
+    excluir:   (id) => request(`/usuario/${seg(id)}`, { method: 'DELETE' }),
   },
 
   funcionalidades: {
@@ -404,19 +426,19 @@ const realApi = {
   perfis: {
     atribuiveis: () => request('/autorizacoes/perfis/atribuiveis').then(r => list(r).map(toPerfil)),
     listar:    () => request('/autorizacoes/perfis').then(r => list(r).map(toPerfil)),
-    obter:     (id) => request(`/autorizacoes/perfis/${id}`).then(toPerfil),
+    obter:     (id) => request(`/autorizacoes/perfis/${seg(id)}`).then(toPerfil),
     criar:     ({ nome, descricao, codigos }) =>
       request('/autorizacoes/perfis', send('POST', { nome, descricao, codigosFuncionalidades: codigos })).then(toPerfil),
     atualizar: (id, patch) =>
-      request(`/autorizacoes/perfis/${id}`, send('PATCH', patch)).then(r => (r ? toPerfil(r) : realApi.perfis.obter(id))),
-    excluir:   (id) => request(`/autorizacoes/perfis/${id}`, { method: 'DELETE' }),
+      request(`/autorizacoes/perfis/${seg(id)}`, send('PATCH', patch)).then(r => (r ? toPerfil(r) : realApi.perfis.obter(id))),
+    excluir:   (id) => request(`/autorizacoes/perfis/${seg(id)}`, { method: 'DELETE' }),
     substituirFuncionalidades: (id, codigos) =>
-      request(`/autorizacoes/perfis/${id}/funcionalidades/codigos`, send('PUT', codigos)),
+      request(`/autorizacoes/perfis/${seg(id)}/funcionalidades/codigos`, send('PUT', codigos)),
   },
 
   categoriasVenda: {
     pagina: (params, signal) => paginaDe('/categorias/venda', params, signal, toCategoria),
-    obter: (id, signal) => catalogRead(`/categorias/venda/${id}`, signal).then(toCategoria),
+    obter: (id, signal) => catalogRead(`/categorias/venda/${seg(id)}`, signal).then(toCategoria),
   },
 
   produtosVenda: {
@@ -427,11 +449,11 @@ const realApi = {
 
   categorias: {
     pagina: (params, signal) => paginaDe('/categorias', params, signal, toCategoria),
-    obter: (id, signal) => catalogRead(`/categorias/${id}`, signal).then(toCategoria),
+    obter: (id, signal) => catalogRead(`/categorias/${seg(id)}`, signal).then(toCategoria),
     listar:    () => todasAsPaginas('/categorias').then(r => r.map(toCategoria)),
     criar:     ({ nome, descricao }) => request('/categorias', send('POST', { nome, descricao })).then(toCategoria),
-    atualizar: (id, patch) => request(`/categorias/${id}`, send('PATCH', patch)).then(toCategoria),
-    excluir:   (id) => request(`/categorias/${id}`, { method: 'DELETE' }),
+    atualizar: (id, patch) => request(`/categorias/${seg(id)}`, send('PATCH', patch)).then(toCategoria),
+    excluir:   (id) => request(`/categorias/${seg(id)}`, { method: 'DELETE' }),
   },
 
   produtos: {
@@ -443,10 +465,10 @@ const realApi = {
     },
     pagina: (params, signal) => paginaDe('/produtos', params, signal, toProduto),
     listar:    (params) => todasAsPaginas('/produtos', params).then(r => r.map(toProduto)),
-    obter:     (id, signal) => catalogRead(`/produtos/${id}`, signal).then(toProduto),
+    obter:     (id, signal) => catalogRead(`/produtos/${seg(id)}`, signal).then(toProduto),
     criar:     (p) => request('/produtos', send('POST', fromProduto(p, { criar: true }))).then(toProduto).catch(camposDoProduto),
-    atualizar: (id, patch) => request(`/produtos/${id}`, send('PATCH', patch)).then(toProduto).catch(camposDoProduto),
-    excluir:   (id) => request(`/produtos/${id}`, { method: 'DELETE' }),
+    atualizar: (id, patch) => request(`/produtos/${seg(id)}`, send('PATCH', patch)).then(toProduto).catch(camposDoProduto),
+    excluir:   (id) => request(`/produtos/${seg(id)}`, { method: 'DELETE' }),
   },
 
   // série mensal = quantidade de movimentações (entradas/saídas) por mês, já com os meses sem movimento
@@ -484,15 +506,15 @@ const realApi = {
 
   // ingredientes no formato do back; a conversão ml ↔ UN é feita por toReceita/fromReceita
   receitas: {
-    obter:      (drinkId, signal) => catalogRead(`/drinks/${drinkId}/receita`, signal),
+    obter:      (drinkId, signal) => catalogRead(`/drinks/${seg(drinkId)}/receita`, signal),
     substituir: (drinkId, ingredientes) =>
-      request(`/drinks/${drinkId}/receita`, send('PUT', { ingredientes })).catch(camposDoProduto),
+      request(`/drinks/${seg(drinkId)}/receita`, send('PUT', { ingredientes })).catch(camposDoProduto),
   },
 
   permissoes: {
-    doUsuario: (userId) => request(`/autorizacoes/usuarios/${userId}/permissoes`).then(toPermissoesUsuario),
+    doUsuario: (userId) => request(`/autorizacoes/usuarios/${seg(userId)}/permissoes`).then(toPermissoesUsuario),
     substituirSobrescritas: (userId, sobrescritas) =>
-      request(`/autorizacoes/usuarios/${userId}/sobrescritas-permissao`, send('PUT', { sobrescritas })),
+      request(`/autorizacoes/usuarios/${seg(userId)}/sobrescritas-permissao`, send('PUT', { sobrescritas })),
   },
 }
 

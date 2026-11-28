@@ -72,6 +72,7 @@ function LocalEntradaNF({ navigate, onStateChange }) {
   const [resultado, setResultado] = useState(null)
   const [sair, setSair] = useState(false)
   const fileRef = useRef(null)
+  const confirmLock = useRef(false)
   useEffect(() => { onStateChange?.({ etapa, busy }) }, [etapa, busy, onStateChange])
 
   function carregar(xml, nome) {
@@ -106,11 +107,12 @@ function LocalEntradaNF({ navigate, onStateChange }) {
 
   function baixarExemplo() {
     const blob = new Blob([sampleNFe()], { type: 'application/xml' })
+    const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
+    a.href = url
     a.download = 'nfe-exemplo-distribuidora-norte.xml'
     a.click()
-    URL.revokeObjectURL(a.href)
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
   const upd = (i, patch) => setItens(list => list.map((it, j) => (j === i ? { ...it, ...patch } : it)))
@@ -145,6 +147,8 @@ function LocalEntradaNF({ navigate, onStateChange }) {
   const confere = nf && Math.abs(somaItens - nf.valor) < 0.05
 
   async function confirmar() {
+    if (confirmLock.current || busy) return
+    confirmLock.current = true
     setBusy(true)
     try {
       const reg = await importarNF({
@@ -160,6 +164,7 @@ function LocalEntradaNF({ navigate, onStateChange }) {
     } catch (e) {
       toast(e.message, { type: 'error', title: 'Entrada não concluída' })
     } finally {
+      confirmLock.current = false
       setBusy(false)
     }
   }

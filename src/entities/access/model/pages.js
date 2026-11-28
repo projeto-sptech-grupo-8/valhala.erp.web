@@ -3,6 +3,7 @@ import {
   CreditCard, Receipt, TrendingUp,
   Users, Shield, Bell, Settings, KeyRound, CalendarClock, FileUp, ShieldCheck, BarChart3,
 } from 'lucide-react'
+import { isManagerProfile } from '../lib/format.js'
 
 /*
  * Registro único de páginas do painel.
@@ -75,13 +76,6 @@ export function visibleDomains(can, list = domains) {
   return list
     .map(d => ({ ...d, groups: d.groups.map(g => ({ ...g, items: g.items.filter(visibleItem) })).filter(g => g.items.length) }))
     .filter(d => d.groups.length)
-}
-
-// Mesma normalização usada pelo backend para identificar o perfil reservado.
-export function isManagerProfile(name) {
-  const role = String(name ?? '').normalize('NFD').replace(/\p{M}/gu, '')
-    .toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '')
-  return role === 'GERENTE'
 }
 
 export function makeCan(user) {

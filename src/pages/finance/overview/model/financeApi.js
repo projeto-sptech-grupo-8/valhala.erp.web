@@ -13,9 +13,9 @@ export const financeApi = {
   resumo: signal => financeiro('resumo', { signal }),
   resultado: (inicio, fim, signal) => financeiro('resultado', { params: { inicio, fim }, signal }),
   contas: (params, signal) => financeiro('contas', { params, signal }),
-  conta: (id, signal) => financeiro(`contas/${id}`, { signal }),
+  conta: (id, signal) => financeiro(`contas/${encodeURIComponent(id)}`, { signal }),
   criar: body => financeiro('contas', { method: 'POST', body }),
-  atualizar: (id, body) => financeiro(`contas/${id}`, { method: 'PUT', body }),
-  baixar: (id, body) => financeiro(`contas/${id}/baixa`, { method: 'POST', body }),
-  cancelar: id => financeiro(`contas/${id}/inativacao`, { method: 'PATCH' }),
+  atualizar: (id, body) => financeiro(`contas/${encodeURIComponent(id)}`, { method: 'PUT', body }),
+  baixar: (id, body) => financeiro(`contas/${encodeURIComponent(id)}/baixa`, { method: 'POST', body }),
+  cancelar: id => financeiro(`contas/${encodeURIComponent(id)}/inativacao`, { method: 'PATCH' }),
 }

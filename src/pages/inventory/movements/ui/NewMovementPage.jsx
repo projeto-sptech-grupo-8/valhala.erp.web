@@ -14,15 +14,23 @@ import layout from '@/features/catalog/product-editor/ui/ProductFormLayout.modul
 import ui from './MovementsPage.module.css'
 const TYPES = { ENTRADA: 'Entrada', SAIDA: 'Saída', SAIDA_DRINK: 'Saída de drink', PERDA: 'Perda', AJUSTE_POSITIVO: 'Ajuste positivo', AJUSTE_NEGATIVO: 'Ajuste negativo' }
 const POSITIVE = ['ENTRADA', 'AJUSTE_POSITIVO']
+
+function parseReturnFilters(raw) {
+  try {
+    const parsed = JSON.parse(raw || '{}')
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
 export function NewMovementPage({ navigate, pageParams, setBackAction }) {
   const initialId = pageParams?.produto || ''
   const { can } = useStore()
   const [discard, setDiscard] = useState(false)
   const [dirty, setDirty] = useState(false)
   function back() {
-    let filters = {}
-    try { filters = JSON.parse(pageParams?.retorno || '{}') } catch { /* default history */ }
-    navigate('movimentacoes', filters)
+    navigate('movimentacoes', parseReturnFilters(pageParams?.retorno))
   }
   function cancel() { if (dirty) setDiscard(true); else back() }
   function onSaved() { setDirty(false); navigate('movimentacoes') }
@@ -42,9 +50,7 @@ export function NewMovementPage({ navigate, pageParams, setBackAction }) {
     setBackAction?.(() => {
       if (busy) return
       if (dirty) { setDiscard(true); return }
-      let filters = {}
-      try { filters = JSON.parse(pageParams?.retorno || '{}') } catch { /* default history */ }
-      navigate('movimentacoes', filters)
+      navigate('movimentacoes', parseReturnFilters(pageParams?.retorno))
     })
     return () => setBackAction?.(null)
   }, [setBackAction, busy, dirty, navigate, pageParams?.retorno])

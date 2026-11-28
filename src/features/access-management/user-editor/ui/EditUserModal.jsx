@@ -58,8 +58,12 @@ function Editor({ initial, onClose, onSaved }) {
       if (u.id === me?.id) session.updateSelf({ name: u.name, email: u.email, phone: u.phone })
       toast('Dados de ' + u.name + ' atualizados.', { title: 'Alterações salvas' })
       onSaved(u)
-    } catch (ex) { setError(ex.message); setErrors(ex.fieldErrors || {}) }
-    finally { sending.current = false; setBusy(false) }
+    } catch (ex) {
+      setError(ex.message)
+      const fe = { ...(ex.fieldErrors || {}) }
+      if (ex.status === 400 && !fe.senhaAtual && /senha atual/i.test(ex.message || '')) fe.senhaAtual = ex.message
+      setErrors(fe)
+    } finally { sending.current = false; setBusy(false) }
   }
   return <>
     <Modal title="Editar usuário" subtitle="Atualize os dados da conta. Perfil e status são alterados no menu de ações." busy={busy} onClose={close} width={520} footer={<><button type="button" onClick={close} disabled={busy}>Cancelar</button><button type="submit" form={id} className="gold" disabled={busy || !dirty}>{busy ? 'Salvando…' : 'Salvar alterações'}</button></>}>
@@ -71,7 +75,12 @@ function Editor({ initial, onClose, onSaved }) {
           {needsPassword && <label>
             <span>Senha atual<RequiredMark /></span>
             <input type="password" autoComplete="current-password" required value={currentPassword}
-              onChange={event => setCurrentPassword(event.target.value)} aria-invalid={!!errors.senhaAtual}
+              onChange={event => {
+                setCurrentPassword(event.target.value)
+                setErrors(current => ({ ...current, senhaAtual: undefined }))
+                setError('')
+              }}
+              aria-invalid={!!errors.senhaAtual}
               aria-describedby={errors.senhaAtual ? id + '-senha-atual' : undefined} />
             {errors.senhaAtual && <small id={id + '-senha-atual'} role="alert">{errors.senhaAtual}</small>}
           </label>}

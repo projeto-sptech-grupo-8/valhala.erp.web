@@ -60,7 +60,7 @@ export default function Site({ go }) {
       {/* ── Nav ── */}
       <header className={s.nav + (open ? ' ' + s.navOpen : '')}>
         <button className={s.logo} onClick={() => scroll('inicio')} aria-label="Ir ao início">
-          <img src="/valhalla-logo.png" alt="Valhalla" />
+          <img src="/valhalla-logo.png" alt="Valhalla" width="72" height="48" />
         </button>
         <button
           className={s.toggle + (open ? ' ' + s.toggleOpen : '')}
@@ -240,7 +240,7 @@ export default function Site({ go }) {
       {/* ── Footer ── */}
       <footer className={s.footer}>
         <div>
-          <img src="/valhalla-logo.png" alt="Valhalla" />
+          <img src="/valhalla-logo.png" alt="Valhalla" width="96" height="64" />
           <p>Gestão completa para adegas e negócios que querem crescer com controle.</p>
         </div>
         <nav>

@@ -41,9 +41,9 @@ export function SalePaymentModal({order,onClose}) {
  const [partCount,setPartCount]=useState(()=>Math.max(2,restore(storageKey,order)?.entries?.length||2))
  const [drafts,setDrafts]=useState(()=>restore(storageKey,order)?.entries||[emptyEntry('DINHEIRO',order.saldoRestante),emptyEntry('PIX',0)])
  const [snapshot,setSnapshot]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState(null),[fields,setFields]=useState({})
- const query=useQueryResource(signal=>readCash('pedidos/'+order.id,{},signal),[order.id])
+ const query=useQueryResource(signal=>readCash('pedidos/'+encodeURIComponent(order.id),{},signal),[order.id])
  const config=useQueryResource(signal=>readCash('configuracao',{},signal),[])
- const equipment=useQueryResource(signal=>config.data?.pointHabilitado&&order.sessaoCaixaId?readCash('sessoes/'+order.sessaoCaixaId,{},signal).then(session=>readCash('caixas/'+session.caixaId,{},signal)):null,[order.sessaoCaixaId,config.data?.pointHabilitado])
+ const equipment=useQueryResource(signal=>config.data?.pointHabilitado&&order.sessaoCaixaId?readCash('sessoes/'+encodeURIComponent(order.sessaoCaixaId),{},signal).then(session=>readCash('caixas/'+encodeURIComponent(session.caixaId),{},signal)):null,[order.sessaoCaixaId,config.data?.pointHabilitado])
  const current=snapshot?.source===query.data?snapshot.order:query.data
  useEffect(()=>{fiscal.confirmWatched(current)},[current,fiscal])
  const cfg=config.data,terminals=equipment.data?.terminais?.filter(t=>t.ativo)||[]
@@ -94,7 +94,7 @@ export function SalePaymentModal({order,onClose}) {
   try {
    if(customer.documentoCliente?.trim() && ![11,14].includes(customer.documentoCliente.replace(/\D/g,'').length))throw new Error('Confira o CPF ou CNPJ do consumidor antes de continuar.')
    // Re-read immediately before charging; do not trust the displayed balance.
-   const fresh=await readCash('pedidos/'+order.id)
+   const fresh=await readCash('pedidos/'+encodeURIComponent(order.id))
    setSnapshot({order:fresh,source:query.data})
    if(fresh.statusDesconto==='PENDENTE_AUTORIZACAO')throw new Error('Decida ou remova o desconto pendente antes de receber.')
    if(['CONCLUIDO','CANCELADO','ESTORNADO'].includes(fresh.status))throw new Error('O estado atual deste pedido não permite outro pagamento.')
@@ -116,7 +116,7 @@ export function SalePaymentModal({order,onClose}) {
    next.attempts[index]=payload
    try{persist(next)}catch{throw new Error('Não foi possível preservar a chave desta cobrança. Nenhum pagamento novo foi enviado.')}
    try {
-    const updated=await writeCash('pedidos/'+order.id+'/pagamentos',payload)
+    const updated=await writeCash('pedidos/'+encodeURIComponent(order.id)+'/pagamentos',payload)
     fiscal.observe(updated);setSnapshot({order:updated,source:query.data});invalidateCatalog?.()
     if(updated.status==='CONCLUIDO'&&!hasCardConfirmation(updated,payload)){
      try{sessionStorage.removeItem(storageKey);sessionStorage.removeItem('cash-payment-'+order.id)}catch{ /* receipt confirmed */ }
@@ -124,8 +124,8 @@ export function SalePaymentModal({order,onClose}) {
     }
    }catch(ex){
     // Reconcile a rejected/uncertain request before allowing any change of payload.
-    try {const checked=await readCash('pedidos/'+order.id);setSnapshot({order:checked,source:query.data})
-     if(checked.pagamentos?.some(p=>p.chaveIdempotencia===payload.chaveIdempotencia)){fiscal.observe(checked);invalidateCatalog?.();if(checked.status==='CONCLUIDO'&&!hasCardConfirmation(checked,payload)){sessionStorage.removeItem(storageKey);onClose()}return}
+    try {const checked=await readCash('pedidos/'+encodeURIComponent(order.id));setSnapshot({order:checked,source:query.data})
+     if(checked.pagamentos?.some(p=>p.chaveIdempotencia===payload.chaveIdempotencia)){fiscal.observe(checked);invalidateCatalog?.();if(checked.status==='CONCLUIDO'&&!hasCardConfirmation(checked,payload)){try{sessionStorage.removeItem(storageKey)}catch{ /* storage restricted */ }onClose()}return}
      if(ex.status>=400&&ex.status<500){
       const retry={...next,attempts:[...next.attempts]};retry.attempts[index]=null;persist(retry)
      }
@@ -156,7 +156,7 @@ export function SalePaymentModal({order,onClose}) {
   {ready&&!cardStatus&&<form id={formId} onSubmit={submit} noValidate className={s.form}>
    <fieldset disabled={busy||!!plan} className={s.mode}><legend>Dividir o pagamento?</legend><div className={s.modeRow}><div className={s.modeButtons}>{[[false,'Não'],[true,'Sim']].map(([value,text])=><button type="button" key={text} aria-pressed={split===value} onClick={()=>configure(value)}>{text}</button>)}</div>{split&&<label className={s.partCount}><span>Quantidade de partes</span><select aria-label="Quantidade de partes do pagamento" value={partCount} onChange={e=>configure(true,Number(e.target.value))}>{[2,3,4].map(count=><option key={count} value={count}>{count} partes</option>)}</select></label>}</div><small>{plan?'As partes confirmadas ficam protegidas. Continue somente com o valor que ainda falta receber.':split?'Os valores começam divididos igualmente. Ao ajustar uma parte, a última acompanha o restante. Se editar a última, a penúltima é ajustada.':'Informe a forma para receber o saldo, ou um valor menor para um pagamento parcial.'}</small></fieldset>
    {entries.map((entry,index)=><PaymentPart key={index} entry={entry} index={index} split={split} config={cfg} terminals={terminals} equipmentLoading={equipment.loading} error={fields[index]||((stage===index&&error?.fieldErrors)||{})} result={results[index]} locked={busy||!!plan&&(index!==stage||!!plan.attempts[index])||allDone||!!finalOrder} onChange={(key,value)=>change(index,key,value)}/>)}
-   {plan&&!plan.attempts.some(Boolean)&&<button type="button" disabled={busy} onClick={()=>{sessionStorage.removeItem(storageKey);setDrafts(plan.entries);setPlan(null);setError(null)}}>Revisar divisão do pagamento</button>}
+   {plan&&!plan.attempts.some(Boolean)&&<button type="button" disabled={busy} onClick={()=>{try{sessionStorage.removeItem(storageKey)}catch{ /* storage restricted */ }setDrafts(plan.entries);setPlan(null);setError(null)}}>Revisar divisão do pagamento</button>}
   </form>}
  </Modal>, document.body)
 }

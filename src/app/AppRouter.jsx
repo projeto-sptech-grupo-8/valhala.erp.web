@@ -42,9 +42,23 @@ function RequireSession({ user, status, restoreSession }) {
   return <Outlet />
 }
 
+function clearClientSessionStorage() {
+  try {
+    localStorage.removeItem('valhalla:store:v2')
+  } catch { /* storage indisponível */ }
+  try {
+    for (let i = sessionStorage.length - 1; i >= 0; i--) {
+      const key = sessionStorage.key(i)
+      if (key && (key.startsWith('cash-payment-plan:') || key.startsWith('cash-payment-') || key.startsWith('cash-visual-slots:'))) {
+        sessionStorage.removeItem(key)
+      }
+    }
+  } catch { /* storage indisponível */ }
+}
+
 function PanelStoreProvider({ user, onUserChange, onLogout }) {
   return (
-    <StoreProvider user={user} onUserChange={onUserChange} onLogout={onLogout}>
+    <StoreProvider key={user?.id || 'anon'} user={user} onUserChange={onUserChange} onLogout={onLogout}>
       <Outlet />
     </StoreProvider>
   )
@@ -93,6 +107,7 @@ function AppRoutes() {
         if (active) setUser(current => current?.id === userId ? account : current)
       } catch (error) {
         if (active && error.status === 401) {
+          clearClientSessionStorage()
           setSessionStatus('anonymous')
           setUser(null)
         }
@@ -119,19 +134,20 @@ function AppRoutes() {
     navigate(destination?.pathname ? `${destination.pathname}${destination.search || ''}` : '/dashboard', { replace: true })
   }, [location.state, navigate])
 
-  const handleLogout = useCallback(async () => {
+  const handleLogout = useCallback(async ({ force = false, redirectTo = '/' } = {}) => {
     try {
       await api.logout()
     } catch (error) {
-      if (error.status !== 401) {
+      if (error.status !== 401 && !force) {
         toast(error.message, { title: 'Não foi possível confirmar a saída', type: 'error' })
         return false
       }
     }
+    clearClientSessionStorage()
     restorePromise.current = null
     setUser(null)
     setSessionStatus('anonymous')
-    navigate('/', { replace: true })
+    navigate(redirectTo, { replace: true })
     return true
   }, [navigate, toast])
 

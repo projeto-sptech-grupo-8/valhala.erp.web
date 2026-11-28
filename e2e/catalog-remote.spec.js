@@ -129,7 +129,7 @@ test('movimentação envia unidade-base e tipo exato sem inferir perda pelo moti
   await page.goto('/#/movimentacoes?novo=1&produto=' + vodka.id)
   await expect(page).toHaveURL(/novamovimentacao/)
   await expect(page.getByRole('heading', { name: 'Nova movimentação', exact: true })).toBeVisible()
-  await expect(page.getByText('Saldo consultado:', { exact: false })).toContainText('2.000 ml')
+  await expect(page.getByText('Saldo atual', { exact: false })).toContainText('2.000 ml')
   await page.getByRole('spinbutton', { name: 'Quantidade', exact: true }).fill('50')
   await page.getByLabel('Justificativa').fill('Reposição após perda anterior')
   await page.getByRole('button', { name: 'Salvar movimentação' }).click()
@@ -293,7 +293,7 @@ test('validade usa consulta remota sem hidratar catálogo local', async ({ page 
   await expect(tooltip).toBeHidden()
   await help.hover()
   await expect(tooltip).toContainText('referência 15/11/2026 · 1 lote(s) sem validade')
-  await expect(tooltip).toContainText('As saídas usam FEFO no servidor')
+  await expect(tooltip).toContainText('Nas saídas, o sistema usa primeiro os lotes de validade mais próxima')
   await page.mouse.move(0, 0)
   await expect(tooltip).toBeHidden()
   expect(calls.some(c => c.path === '/lotes/resumo')).toBe(true)
@@ -1275,7 +1275,7 @@ test('movimentação em fardos deixa a conversão do payload para o servidor', a
   await page.goto('/#/novamovimentacao?produto=' + strawberry.id)
   await page.getByLabel('Quantidade informada em', { exact: true }).selectOption('true')
   await page.getByRole('spinbutton', { name: 'Quantidade', exact: true }).fill('2')
-  await expect(page.getByText('Saldo consultado:', { exact: false })).toContainText('54 un')
+  await expect(page.getByText('Saldo previsto', { exact: false })).toContainText('54 un')
   await page.getByRole('button', { name: 'Salvar movimentação', exact: true }).click()
   await expect(page).toHaveURL(/#\/movimentacoes$/)
   expect(calls.find(c => c.path === '/movimentacoes-estoque' && c.method === 'POST').body).toMatchObject({ quantidade: 2, emFardo: true })
@@ -2541,9 +2541,12 @@ test('nova taxa valida repasse e parcelas e explica duplicidade sem perder o for
  await expect(modal.getByLabel('Parcelas da taxa',{exact:true})).toHaveValue('1')
  await modal.getByLabel('Forma de pagamento da taxa',{exact:true}).selectOption('CREDITO')
  await modal.getByLabel('Parcelas da taxa',{exact:true}).selectOption('3')
- await modal.getByLabel('Quem absorve a taxa',{exact:true}).selectOption('CLIENTE')
+ await modal.getByLabel('Quem absorve a taxa',{exact:true}).selectOption('LOJA')
  await modal.getByLabel('Taxa percentual (%)',{exact:true}).fill('100')
  await modal.getByLabel('Taxa fixa (R$)',{exact:true}).fill('0,50')
+ await modal.getByRole('button',{name:'Salvar taxa',exact:true}).click()
+ await expect(modal.getByLabel('Taxa percentual (%)',{exact:true})).toHaveAttribute('aria-invalid','true')
+ await modal.getByLabel('Quem absorve a taxa',{exact:true}).selectOption('CLIENTE')
  await modal.getByRole('button',{name:'Salvar taxa',exact:true}).click()
  await expect(modal.getByLabel('Taxa percentual (%)',{exact:true})).toHaveAttribute('aria-invalid','true')
  expect(writes).toHaveLength(0)
@@ -2601,7 +2604,7 @@ test('taxas permite consulta sem exibir edição para usuário sem permissão de
 })
 
 
-test('alterar senha valida confirmação e envia somente a senha da própria conta antes de voltar ao login', async ({page})=>{
+test('alterar senha valida confirmação e envia senha atual e nova da própria conta antes de voltar ao login', async ({page})=>{
  const calls=await setup(page,{readOnly:true})
  const writes=[]
  await page.route('http://localhost:8080/usuario/user-test',route=>{
@@ -2614,8 +2617,13 @@ test('alterar senha valida confirmação e envia somente a senha da própria con
  await page.route('http://localhost:8080/auth/logout',route=>route.fulfill({status:204,headers:feedbackHeaders}))
  await page.goto('/#/geral?aba=seguranca')
  const card=page.getByRole('article').filter({has:page.getByRole('heading',{name:'Alterar senha',exact:true})})
- await expect(card.getByLabel('Senha atual',{exact:true})).toHaveCount(0)
+ await expect(card.getByLabel('Senha atual',{exact:true})).toBeVisible()
  await card.getByLabel('Nova senha',{exact:true}).fill('abcdefgh')
+ await card.getByLabel('Confirmar nova senha',{exact:true}).fill('abcdefgh')
+ await card.getByRole('button',{name:'Atualizar senha',exact:true}).click()
+ await expect(card.getByLabel('Senha atual',{exact:true})).toHaveAttribute('aria-invalid','true')
+ expect(writes).toHaveLength(0)
+ await card.getByLabel('Senha atual',{exact:true}).fill('SenhaAtual1')
  await card.getByLabel('Confirmar nova senha',{exact:true}).fill('abcdefgi')
  await card.getByRole('button',{name:'Atualizar senha',exact:true}).click()
  await expect(card.getByLabel('Confirmar nova senha',{exact:true})).toHaveAttribute('aria-invalid','true')
@@ -2626,10 +2634,10 @@ test('alterar senha valida confirmação e envia somente a senha da própria con
  await card.getByRole('button',{name:'Ocultar nova senha',exact:true}).click()
  await card.getByRole('button',{name:'Atualizar senha',exact:true}).click()
  await expect(page).toHaveURL(/#\/login$/)
- expect(writes).toEqual([{body:{senha:'abcdefgh'},csrf:'test-csrf'}])
+ expect(writes).toEqual([{body:{senhaAtual:'SenhaAtual1',senha:'abcdefgh'},csrf:'test-csrf'}])
  await expect(page.getByText('Senha atualizada',{exact:true})).toBeVisible()
  expect(calls.some(c=>c.path==='/auth/login')).toBe(false)
- expect(await page.evaluate(()=>Object.values(localStorage).some(value=>value.includes('abcdefgh')))).toBe(false)
+ expect(await page.evaluate(()=>Object.values(localStorage).some(value=>value.includes('abcdefgh')||value.includes('SenhaAtual1')))).toBe(false)
 })
 
 test('alterar senha preserva erros de campo do servidor e cancelar limpa as credenciais', async ({page})=>{
@@ -2637,6 +2645,7 @@ test('alterar senha preserva erros de campo do servidor e cancelar limpa as cred
  let writes=0
  await page.route('http://localhost:8080/usuario/user-test',route=>{writes++;return route.fulfill({status:400,headers:feedbackHeaders,json:{message:'Senha inválida',fieldErrors:{senha:'A senha deve ter entre 8 e 72 caracteres'}}})})
  await page.goto('/#/geral?aba=seguranca')
+ await page.getByLabel('Senha atual',{exact:true}).fill('SenhaAtual1')
  await page.getByLabel('Nova senha',{exact:true}).fill('TesteSenha123')
  await page.getByLabel('Confirmar nova senha',{exact:true}).fill('TesteSenha123')
  await page.getByRole('button',{name:'Atualizar senha',exact:true}).click()
@@ -2644,6 +2653,7 @@ test('alterar senha preserva erros de campo do servidor e cancelar limpa as cred
  await expect(page.getByText('A senha deve ter entre 8 e 72 caracteres',{exact:true})).toBeVisible()
  expect(writes).toBe(1)
  await page.getByRole('button',{name:'Cancelar',exact:true}).click()
+ await expect(page.getByLabel('Senha atual',{exact:true})).toHaveValue('')
  await expect(page.getByLabel('Nova senha',{exact:true})).toHaveValue('')
  await expect(page.getByLabel('Confirmar nova senha',{exact:true})).toHaveValue('')
  await expect(page.getByRole('button',{name:'Atualizar senha',exact:true})).toBeDisabled()
@@ -2659,10 +2669,13 @@ test('alterar senha bloqueia reenvio após resposta incerta e orienta novo login
  await page.route('http://localhost:8080/usuario/user-test',route=>{writes++;return route.abort('failed')})
  await page.route('http://localhost:8080/auth/logout',route=>route.fulfill({status:204,headers:feedbackHeaders}))
  await page.goto('/#/geral?aba=seguranca')
+ await page.getByLabel('Senha atual',{exact:true}).fill('SenhaAtual1')
  await page.getByLabel('Nova senha',{exact:true}).fill('TesteSenha123')
  await page.getByLabel('Confirmar nova senha',{exact:true}).fill('TesteSenha123')
  await page.getByRole('button',{name:'Atualizar senha',exact:true}).click()
  await expect(page.getByText('Confira sua senha antes de repetir',{exact:true})).toBeVisible()
+ await expect(page.getByLabel('Senha atual',{exact:true})).toHaveValue('')
+ await expect(page.getByLabel('Senha atual',{exact:true})).toBeDisabled()
  await expect(page.getByLabel('Nova senha',{exact:true})).toHaveValue('')
  await expect(page.getByLabel('Nova senha',{exact:true})).toBeDisabled()
  await expect(page.getByRole('button',{name:'Atualizar senha',exact:true})).toBeDisabled()
@@ -2680,10 +2693,12 @@ test('alterar senha com sessão expirada exige novo login sem reenviar a atualiz
  await page.route('http://localhost:8080/auth/refresh',route=>route.fulfill({status:401,headers:feedbackHeaders,json:{message:'Refresh expirado'}}))
  await page.route('http://localhost:8080/auth/logout',route=>route.fulfill({status:204,headers:feedbackHeaders}))
  await page.goto('/#/geral?aba=seguranca')
+ await page.getByLabel('Senha atual',{exact:true}).fill('SenhaAtual1')
  await page.getByLabel('Nova senha',{exact:true}).fill('TesteSenha123')
  await page.getByLabel('Confirmar nova senha',{exact:true}).fill('TesteSenha123')
  await page.getByRole('button',{name:'Atualizar senha',exact:true}).click()
- await expect(page.getByRole('alert')).toContainText('Sua sessão expirou')
+ await expect(page.getByRole('article',{name:'Alterar senha'}).getByRole('alert')).toContainText('Sua sessão expirou')
+ await expect(page.getByLabel('Senha atual',{exact:true})).toBeDisabled()
  await expect(page.getByLabel('Nova senha',{exact:true})).toBeDisabled()
  await expect(page.getByRole('button',{name:'Cancelar',exact:true})).toHaveCount(0)
  await page.getByRole('button',{name:'Ir para o login',exact:true}).click()
@@ -2895,7 +2910,7 @@ test('início mantém unidade-base explícita quando não consegue confirmar fra
  await page.goto('/#/dashboard')
  const alerts=page.getByRole('article',{name:'Alertas prioritários de estoque',exact:true})
  await expect(alerts).toContainText('200 (unidade-base)')
- await expect(alerts).toContainText('Algumas unidades não puderam ser confirmadas')
+ await expect(alerts).toContainText('As quantidades sem unidade confirmada estão em unidade-base.')
  await expect(alerts.getByText(/200 garrafa/)).toHaveCount(0)
  await expect(page.getByText('63%',{exact:true})).toBeVisible()
 })
@@ -3404,4 +3419,111 @@ test('financeiro cancela conta pelo contrato da API e exibe o status correto', a
   await expect.poll(() => requests.some(request => request.status === 'INATIVA')).toBe(true)
   await actions.press('Enter')
   await expect(page.getByRole('menuitem', { name: 'Cancelar conta', exact: true })).toHaveCount(0)
+})
+
+test('conciliação manual em ACAO_NECESSARIA exige autorizador ao confirmar e omite ao rejeitar', async ({ page }) => {
+  await setup(page)
+  const conciliacoes = []
+  let order = {
+    id: 'ped-conc', numero: 501, sessaoCaixaId: 'sess-conc', status: 'AGUARDANDO_PAGAMENTO',
+    total: 50, totalPago: 0, saldoRestante: 50, desconto: 0,
+    itens: [{ id: 1, produtoId: strawberry.id, descricaoProduto: 'Morango', quantidade: 25, precoUnitario: 2, subtotal: 50 }],
+    pagamentos: [{ id: 'pag-acao', forma: 'PIX', provedor: 'MERCADO_PAGO', orderExternaId: null, status: 'ACAO_NECESSARIA', valor: 50, comprovanteReferencia: 'NSU-01' }],
+  }
+  await page.route('http://localhost:8080/usuario/me', route => route.fulfill({
+    headers: feedbackHeaders,
+    json: { id: 'op-1', name: 'Operador', profileName: 'Operador', permissoes: ['CAIXA_VISUALIZAR', 'CAIXA_OPERAR'] },
+  }))
+  await page.route('http://localhost:8080/caixa/**', route => {
+    const req = route.request(), url = new URL(req.url()), ok = json => route.fulfill({ headers: feedbackHeaders, json })
+    if (url.pathname === '/caixa/configuracao') return ok({ dinheiroHabilitado: true, pixHabilitado: true })
+    if (url.pathname === '/caixa/pedidos/' + order.id + '/pagamentos/pag-acao/conciliacao' && req.method() === 'POST') {
+      const body = req.postDataJSON()
+      conciliacoes.push(body)
+      order = {
+        ...order,
+        status: body.aprovado ? 'CONCLUIDO' : 'EM_ATENDIMENTO',
+        totalPago: body.aprovado ? 50 : 0,
+        saldoRestante: body.aprovado ? 0 : 50,
+        pagamentos: [{ ...order.pagamentos[0], status: body.aprovado ? 'APROVADO' : 'CANCELADO' }],
+      }
+      return ok(order)
+    }
+    if (url.pathname === '/caixa/pedidos/' + order.id) return ok(order)
+    if (url.pathname === '/caixa/pedidos') return ok(envelope([order]))
+    return ok(envelope([]))
+  })
+
+  await page.goto('/#/pedidos')
+  await page.getByRole('button', { name: 'Ver detalhes', exact: true }).click()
+  await page.getByRole('button', { name: 'Conciliar recebimento', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Conferir recebimento externo' })
+  await expect(dialog.getByLabel('E-mail do autorizador', { exact: false })).toHaveCount(0)
+  await dialog.getByLabel('Recebimento confirmado', { exact: true }).check()
+  await expect(dialog.getByLabel('E-mail do autorizador', { exact: false })).toBeVisible()
+  await dialog.getByLabel('E-mail do autorizador', { exact: false }).fill('gerente@adega.com')
+  await dialog.getByLabel('Senha do autorizador', { exact: false }).fill('SenhaGerente1')
+  await dialog.getByRole('button', { name: 'Confirmar', exact: true }).click()
+  await expect.poll(() => conciliacoes).toEqual([{
+    aprovado: true,
+    comprovanteReferencia: 'NSU-01',
+    autorizadorEmail: 'gerente@adega.com',
+    autorizadorSenha: 'SenhaGerente1',
+  }])
+  await expect(page.getByRole('dialog', { name: 'Detalhes', exact: true })).toContainText(/Situação do pedido\s*Concluído/)
+})
+
+test('estorno individual reabre pedido parcial para edição e permite retomar estorno em andamento', async ({ page }) => {
+  await setup(page)
+  const calls = []
+  let order = {
+    id: 'ped-parcial', numero: 502, sessaoCaixaId: 'sess-parcial', status: 'PAGAMENTO_PARCIAL',
+    total: 50, totalPago: 20, saldoRestante: 30, desconto: 0,
+    itens: [{ id: 1, produtoId: strawberry.id, descricaoProduto: 'Morango', quantidade: 25, precoUnitario: 2, subtotal: 50 }],
+    pagamentos: [
+      { id: 'pag-ok', forma: 'DINHEIRO', provedor: 'INTERNO', status: 'APROVADO', valor: 20 },
+      { id: 'pag-point-retry', forma: 'CREDITO', provedor: 'MERCADO_PAGO', orderExternaId: 'ord-9', status: 'ESTORNO_EM_ANDAMENTO', valor: 10, motivoEstorno: 'Tentativa anterior' },
+    ],
+  }
+  await page.route('http://localhost:8080/caixa/**', route => {
+    const req = route.request(), url = new URL(req.url()), ok = json => route.fulfill({ headers: feedbackHeaders, json })
+    if (url.pathname === '/caixa/configuracao') return ok({ dinheiroHabilitado: true, creditoHabilitado: true })
+    if (url.pathname === '/caixa/pedidos/' + order.id + '/pagamentos/pag-point-retry/estorno' && req.method() === 'POST') {
+      calls.push({ pagamentoId: 'pag-point-retry', body: req.postDataJSON() })
+      order = { ...order, pagamentos: [order.pagamentos[0], { ...order.pagamentos[1], status: 'ESTORNADO' }] }
+      return ok(order)
+    }
+    if (url.pathname === '/caixa/pedidos/' + order.id + '/pagamentos/pag-ok/estorno' && req.method() === 'POST') {
+      calls.push({ pagamentoId: 'pag-ok', body: req.postDataJSON() })
+      order = {
+        ...order,
+        status: 'EM_ATENDIMENTO',
+        totalPago: 0,
+        saldoRestante: 50,
+        pagamentos: order.pagamentos.map(p => ({ ...p, status: 'ESTORNADO' })),
+      }
+      return ok(order)
+    }
+    if (url.pathname === '/caixa/pedidos/' + order.id) return ok(order)
+    if (url.pathname === '/caixa/pedidos') return ok(envelope([order]))
+    return ok(envelope([]))
+  })
+
+  await page.goto('/#/pedidos')
+  await page.getByRole('button', { name: 'Ver detalhes', exact: true }).click()
+  await expect(page.getByText('Estorno em andamento', { exact: true }).first()).toBeVisible()
+  await page.getByRole('button', { name: 'Retomar estorno', exact: true }).click()
+  const retryDialog = page.getByRole('dialog', { name: 'Retomar estorno do pagamento?' })
+  await expect(retryDialog.getByLabel('Motivo', { exact: false })).toHaveValue('Tentativa anterior')
+  await retryDialog.getByRole('button', { name: 'Retomar estorno', exact: true }).click()
+  await page.getByRole('button', { name: 'Estornar pagamento', exact: true }).click()
+  const refundDialog = page.getByRole('dialog', { name: 'Estornar pagamento aprovado?' })
+  await refundDialog.getByLabel('Motivo', { exact: false }).fill('Cliente desistiu')
+  await refundDialog.getByRole('button', { name: 'Confirmar estorno', exact: true }).click()
+  await expect.poll(() => calls).toEqual([
+    { pagamentoId: 'pag-point-retry', body: { motivo: 'Tentativa anterior' } },
+    { pagamentoId: 'pag-ok', body: { motivo: 'Cliente desistiu' } },
+  ])
+  await expect(page.getByRole('dialog', { name: 'Detalhes', exact: true })).toContainText(/Situação do pedido\s*Em atendimento/)
+  await expect(page.getByRole('button', { name: 'Remover', exact: true })).toBeVisible()
 })

@@ -1,9 +1,49 @@
 export const PAYMENT_NAMES = { DINHEIRO:'Dinheiro', PIX:'Pix', DEBITO:'Cartão de débito', CREDITO:'Cartão de crédito' }
+export const OPEN_ORDER_STATES = ['EM_ATENDIMENTO','AGUARDANDO_MAQUINA','AGUARDANDO_PAGAMENTO','PAGAMENTO_PARCIAL']
 export const PENDING_PAYMENT_STATES = ['PENDENTE','PENDENTE_NA_POINT','EM_TERMINAL','PENDENTE_CONCILIACAO','CANCELAMENTO_SOLICITADO','ACAO_NECESSARIA','ESTORNO_EM_ANDAMENTO']
-const COMMITTED = ['APROVADO','PENDENTE','PENDENTE_NA_POINT','EM_TERMINAL','PENDENTE_CONCILIACAO']
+export const COMMITTED_PAYMENT_STATES = ['APROVADO',...PENDING_PAYMENT_STATES]
+export const CONCILIABLE_PAYMENT_STATES = ['PENDENTE_CONCILIACAO','ACAO_NECESSARIA','PENDENTE']
+export const POINT_SYNCABLE_PAYMENT_STATES = ['PENDENTE','PENDENTE_NA_POINT','EM_TERMINAL','ACAO_NECESSARIA','CANCELAMENTO_SOLICITADO','PENDENTE_CONCILIACAO']
+export const POINT_CANCELABLE_PAYMENT_STATES = ['PENDENTE','PENDENTE_NA_POINT','EM_TERMINAL','CANCELAMENTO_SOLICITADO','ACAO_NECESSARIA','PENDENTE_CONCILIACAO']
+export const REFUNDABLE_PAYMENT_STATES = ['APROVADO','ESTORNO_EM_ANDAMENTO']
 export const cents = value => Math.round(Number(value) * 100)
+export const isCommittedPayment = payment => COMMITTED_PAYMENT_STATES.includes(payment?.status)
+export const isPointPayment = payment => payment?.provedor==='MERCADO_PAGO' || (payment?.provedor==null && ['PENDENTE_NA_POINT','EM_TERMINAL','CANCELAMENTO_SOLICITADO'].includes(payment?.status))
+export function canSyncPointPayment(payment, order) {
+ return OPEN_ORDER_STATES.includes(order?.status)
+  && isPointPayment(payment)
+  && POINT_SYNCABLE_PAYMENT_STATES.includes(payment?.status)
+  && (payment?.provedor!=='MERCADO_PAGO' || Boolean(payment?.orderExternaId))
+}
+export function canCancelPointPayment(payment, order) {
+ return OPEN_ORDER_STATES.includes(order?.status)
+  && isPointPayment(payment)
+  && POINT_CANCELABLE_PAYMENT_STATES.includes(payment?.status)
+}
+export function canConciliatePayment(payment, order, canOperate, canResolve) {
+ return OPEN_ORDER_STATES.includes(order?.status)
+  && Boolean(canOperate || canResolve)
+  && CONCILIABLE_PAYMENT_STATES.includes(payment?.status)
+}
+export function canRefundPayment(payment, order, canOperate, canRefund) {
+ return OPEN_ORDER_STATES.includes(order?.status)
+  && Boolean(canOperate || canRefund)
+  && REFUNDABLE_PAYMENT_STATES.includes(payment?.status)
+}
+export function canApplyOrderDiscount(order, canOperate) {
+ return Boolean(canOperate) && ['EM_ATENDIMENTO','PAGAMENTO_PARCIAL'].includes(order?.status)
+}
+export function canCancelOrder(order, canOperate) {
+ return Boolean(canOperate) && OPEN_ORDER_STATES.includes(order?.status) && !(order?.pagamentos||[]).some(isCommittedPayment)
+}
+export function canEditOrderItems(order) {
+ return order?.status==='EM_ATENDIMENTO' && !(order?.pagamentos||[]).some(isCommittedPayment)
+}
+export function hasRefundInProgress(order) {
+ return (order?.pagamentos||[]).some(payment=>payment?.status==='ESTORNO_EM_ANDAMENTO')
+}
 export function availablePaymentCents(order) {
- return Math.max(0,cents(order.total)-(order.pagamentos||[]).filter(p=>COMMITTED.includes(p.status)).reduce((total,p)=>total+cents(p.valor),0))
+ return Math.max(0,cents(order.total)-(order.pagamentos||[]).filter(isCommittedPayment).reduce((total,p)=>total+cents(p.valor),0))
 }
 export function enabledPaymentForms(config) {
  return Object.keys(PAYMENT_NAMES).filter(forma=>config[{DINHEIRO:'dinheiroHabilitado',PIX:'pixHabilitado',DEBITO:'debitoHabilitado',CREDITO:'creditoHabilitado'}[forma]])
